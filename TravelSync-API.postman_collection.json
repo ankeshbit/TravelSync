@@ -1,0 +1,458 @@
+{
+  "info": {
+    "name": "TravelSync API",
+    "description": "Complete API collection for TravelSync - Group Trip Planner",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.environment.set('token', pm.response.json().token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('token', pm.response.json().token);",
+                  "    pm.environment.set('token', pm.response.json().token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trips",
+      "item": [
+        {
+          "name": "Create Trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"European Summer 2026\",\n  \"destination\": \"Paris, France\",\n  \"startDate\": \"2026-06-01\",\n  \"endDate\": \"2026-06-15\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trips",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips"]
+            }
+          }
+        },
+        {
+          "name": "Get All Trips",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips"]
+            }
+          }
+        },
+        {
+          "name": "Get Trip By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID"]
+            }
+          }
+        },
+        {
+          "name": "Update Trip",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"European Summer 2026 - Updated\",\n  \"destination\": \"Paris & Rome\",\n  \"startDate\": \"2026-06-01\",\n  \"endDate\": \"2026-06-20\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID"]
+            }
+          }
+        },
+        {
+          "name": "Delete Trip",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Members",
+      "item": [
+        {
+          "name": "Get Trip Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "members"]
+            }
+          }
+        },
+        {
+          "name": "Add Member to Trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jane@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "members"]
+            }
+          }
+        },
+        {
+          "name": "Remove Member from Trip",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/members/USER_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "members", "USER_ID"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Places",
+      "item": [
+        {
+          "name": "Get All Places",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/places",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "places"]
+            }
+          }
+        },
+        {
+          "name": "Add Place",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Eiffel Tower\",\n  \"address\": \"5 Avenue Anatole France, 75007 Paris, France\",\n  \"lat\": 48.8584,\n  \"lng\": 2.2945,\n  \"dayNumber\": 1,\n  \"orderIndex\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/places",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "places"]
+            }
+          }
+        },
+        {
+          "name": "Update Place Note",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Book tickets in advance! Closed Mondays.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/places/PLACE_ID/note",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "places", "PLACE_ID", "note"]
+            }
+          }
+        },
+        {
+          "name": "Reorder Places",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"placeId\": \"PLACE_ID_1\",\n    \"dayNumber\": 1,\n    \"orderIndex\": 2\n  },\n  {\n    \"placeId\": \"PLACE_ID_2\",\n    \"dayNumber\": 1,\n    \"orderIndex\": 1\n  }\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/places/reorder",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "places", "reorder"]
+            }
+          }
+        },
+        {
+          "name": "Delete Place",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/places/PLACE_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "places", "PLACE_ID"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Expenses",
+      "item": [
+        {
+          "name": "Get All Expenses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/expenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "expenses"]
+            }
+          }
+        },
+        {
+          "name": "Add Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Hotel booking\",\n  \"amount\": 250.00,\n  \"currency\": \"INR\",\n  \"paidBy\": \"USER_ID_1\",\n  \"splitAmong\": [\"USER_ID_1\", \"USER_ID_2\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/expenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "expenses"]
+            }
+          }
+        },
+        {
+          "name": "Get Expense Balances",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/expenses/balances",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "expenses", "balances"]
+            }
+          }
+        },
+        {
+          "name": "Delete Expense",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trips/TRIP_ID/expenses/EXPENSE_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "TRIP_ID", "expenses", "EXPENSE_ID"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
