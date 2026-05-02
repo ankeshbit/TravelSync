@@ -241,7 +241,7 @@ VITE_GOOGLE_MAPS_API_KEY=your-google-maps-key
 3. Set environment variables:
    - `MONGO_URI`
    - `JWT_SECRET`
-   - `ALLOWED_ORIGIN=https://your-frontend.com`
+   - `ALLOWED_ORIGIN=https://travelsync.vercel.app`
    - `NODE_ENV=production`
 4. Deploy (auto-builds from `server/Dockerfile`)
 
@@ -250,15 +250,15 @@ VITE_GOOGLE_MAPS_API_KEY=your-google-maps-key
 1. Push to GitHub  
 2. Create new project, select `client/` directory
 3. Set environment variables:
-   - `VITE_API_BASE_URL=https://your-api.com/api`
-   - `VITE_GOOGLE_MAPS_API_KEY`
+   - `VITE_API_BASE_URL=https://travelsync-backend-2pm1.onrender.com/api`
+   - `VITE_GOOGLE_MAPS_KEY`
 4. Deploy (auto-runs `npm run build`)
 
 ### Google Maps API Restrictions
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Edit your API key
-3. **Application Restrictions**: HTTP referrers → `https://your-domain.com/*`
+3. **Application Restrictions**: HTTP referrers → `https://travelsync.vercel.app/*`
 4. **API Restrictions**: Maps JavaScript API + Places API only
 
 ## 🔒 Security Features
@@ -343,7 +343,7 @@ npm test              # Run tests (if setup)
 
 ### Google Maps Not Showing
 ```
-✗ Verify VITE_GOOGLE_MAPS_API_KEY is set
+✗ Verify VITE_GOOGLE_MAPS_KEY is set
 ✗ Enable Maps JavaScript API in Cloud Console
 ✗ Restrict key to your domain
 ✗ Ensure Places API is enabled

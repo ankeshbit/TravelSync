@@ -10,10 +10,10 @@
           <h1 class="font-h1 text-h1 text-on-background">My Trips</h1>
           <p class="font-body-md text-body-md text-on-surface-variant mt-1">Manage and plan your upcoming adventures together.</p>
         </div>
-        <router-link to="/trips/create" class="bg-primary-container text-on-secondary px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-md">
+        <button @click="showCreateModal = true" class="bg-primary-container text-on-secondary px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-md">
           <span class="material-symbols-outlined">add</span>
           Create Trip
-        </router-link>
+        </button>
       </header>
 
       <!-- Loading State -->
@@ -38,13 +38,13 @@
           />
           
           <!-- Add New Placeholder Card -->
-          <router-link to="/trips/create" class="border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center p-10 bg-gray-50/50 hover:bg-gray-50 transition-colors group cursor-pointer">
+          <button @click="showCreateModal = true" class="border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center p-10 bg-gray-50/50 hover:bg-gray-50 transition-colors group cursor-pointer w-full h-full min-h-[240px]">
           <div class="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <span class="material-symbols-outlined text-blue-900 text-3xl">add_location_alt</span>
           </div>
           <h3 class="font-h3 text-h3 text-blue-900 mb-2">New Adventure?</h3>
           <p class="font-body-md text-body-md text-gray-500 text-center max-w-[200px]">Start planning your next destination with friends.</p>
-        </router-link>
+        </button>
         </section>
 
         <!-- Empty State -->
@@ -57,13 +57,18 @@
             <p class="font-body-lg text-body-lg text-on-surface-variant max-w-3xl mb-8">
               Your journey begins here. Create your first trip itinerary and invite your travel companions to collaborate in real-time.
             </p>
-            <router-link to="/trips/create" class="bg-primary-container text-on-secondary px-8 py-3 rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all">
+            <button @click="showCreateModal = true" class="bg-primary-container text-on-secondary px-8 py-3 rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all">
               Start Planning
-            </router-link>
+            </button>
           </div>
         </section>
       </template>
     </main>
+
+    <CreateTripModal 
+      v-model:isOpen="showCreateModal" 
+      @trip-created="onTripCreated" 
+    />
   </div>
 </template>
 
@@ -74,11 +79,17 @@ import api from '../api';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
 import TripCard from '../components/TripCard.vue';
+import CreateTripModal from '../components/CreateTripModal.vue';
 
 const router = useRouter();
 const trips = ref([]);
 const loading = ref(true);
 const error = ref('');
+const showCreateModal = ref(false);
+
+const onTripCreated = () => {
+  fetchTrips();
+};
 
 const fetchTrips = async () => {
   try {

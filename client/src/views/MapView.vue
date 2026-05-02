@@ -68,7 +68,12 @@
           </div>
 
           <!-- MapContainer -->
-          <div class="flex-1 bg-surface-variant/30 rounded-xl border border-outline-variant overflow-hidden relative shadow-sm">
+          <div class="flex-1 bg-surface-variant/30 rounded-xl border border-outline-variant overflow-hidden relative shadow-sm min-h-[400px]">
+            <div v-if="!apiKey" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+              <span class="material-symbols-outlined text-4xl text-error mb-2">map</span>
+              <h3 class="text-lg font-bold text-primary">Map API Key Missing</h3>
+              <p class="text-sm text-outline max-w-xs">Please ensure VITE_GOOGLE_MAPS_KEY is set in your .env file and restart the development server.</p>
+            </div>
             <div ref="mapContainer" class="w-full h-full"></div>
             
             <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg border border-outline-variant flex items-center gap-3">
@@ -214,7 +219,9 @@ const pendingPlace = ref(null);
 const selectedDay = ref(1);
 
 const noteText = ref('');
+const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 let map = null;
+let loader = null;
 let markers = [];
 
 const tripDaysCount = computed(() => {
@@ -234,92 +241,108 @@ const formatDate = (dateString) => {
 
 // Map & Autocomplete initialization
 const initMap = async () => {
-  const loader = new Loader({
-    apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    version: "weekly",
-    libraries: ["places"]
-  });
+  if (!apiKey) {
+    console.error("Google Maps API Key is missing. Check your .env file.");
+    return;
+  }
 
-  const { Map } = await loader.importLibrary("maps");
-  const { Autocomplete } = await loader.importLibrary("places");
+  try {
+    loader = new Loader({
+      apiKey: apiKey,
+      version: "weekly",
+      libraries: ["places"]
+    });
 
-  // Default center
-  const defaultCenter = { lat: 15.2993, lng: 74.1240 }; // Goa
-  
-  map = new Map(mapContainer.value, {
-    center: defaultCenter,
-    zoom: 10,
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false
-  });
+    const [{ Map }, { Autocomplete }] = await Promise.all([
+      loader.importLibrary("maps"),
+      loader.importLibrary("places")
+    ]);
 
-  // Init autocomplete
-  const autocomplete = new Autocomplete(searchInput.value, {
-    fields: ["name", "formatted_address", "geometry"]
-  });
-
-  autocomplete.bindTo("bounds", map);
-
-  autocomplete.addListener("place_changed", () => {
-    const place = autocomplete.getPlace();
-    if (!place.geometry || !place.geometry.location) {
-      alert("No details available for input: '" + place.name + "'");
-      return;
-    }
-
-    pendingPlace.value = {
-      name: place.name,
-      address: place.formatted_address || place.name,
-      lat: place.geometry.location.lat(),
-      lng: place.geometry.location.lng()
-    };
+    // Default center
+    const defaultCenter = { lat: 15.2993, lng: 74.1240 }; // Goa
     
-    selectedDay.value = 1;
-    showDayModal.value = true;
-    searchInput.value.value = ''; // clear input
-  });
+    map = new Map(mapContainer.value, {
+      center: defaultCenter,
+      zoom: 10,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      mapId: 'TRAVEL_SYNC_MAP' // Optional: needed for advanced markers
+    });
+
+    // Init autocomplete
+    const autocomplete = new Autocomplete(searchInput.value, {
+      fields: ["name", "formatted_address", "geometry"]
+    });
+
+    autocomplete.bindTo("bounds", map);
+
+    autocomplete.addListener("place_changed", () => {
+      const place = autocomplete.getPlace();
+      if (!place.geometry || !place.geometry.location) {
+        alert("No details available for input: '" + place.name + "'");
+        return;
+      }
+
+      pendingPlace.value = {
+        name: place.name,
+        address: place.formatted_address || place.name,
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng()
+      };
+      
+      selectedDay.value = 1;
+      showDayModal.value = true;
+      searchInput.value.value = ''; // clear input
+    });
+  } catch (error) {
+    console.error("Failed to initialize Google Maps:", error);
+  }
 };
 
 const updateMarkers = async () => {
-  if (!map) return;
+  if (!map || !loader) return;
   
-  const { Marker } = await window.google.maps.importLibrary("marker");
-  
-  // Clear old markers
-  markers.forEach(m => m.setMap(null));
-  markers = [];
-  
-  const bounds = new window.google.maps.LatLngBounds();
-  let hasPlaces = false;
-
-  placesStore.places.forEach((place, index) => {
-    const marker = new Marker({
-      position: { lat: place.lat, lng: place.lng },
-      map,
-      title: place.name,
-      label: {
-        text: String(index + 1),
-        color: "white"
-      }
-    });
+  try {
+    const { Marker } = await loader.importLibrary("marker");
     
-    marker.addListener("click", () => {
-      placesStore.selectPlace(place);
+    // Clear old markers
+    markers.forEach(m => m.setMap(null));
+    markers = [];
+    
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasPlaces = false;
+
+    placesStore.places.forEach((place, index) => {
+      const marker = new Marker({
+        position: { lat: place.lat, lng: place.lng },
+        map,
+        title: place.name,
+        label: {
+          text: String(index + 1),
+          color: "white"
+        }
+      });
+      
+      marker.addListener("click", () => {
+        placesStore.selectPlace(place);
+      });
+
+      markers.push(marker);
+      bounds.extend({ lat: place.lat, lng: place.lng });
+      hasPlaces = true;
     });
 
-    markers.push(marker);
-    bounds.extend({ lat: place.lat, lng: place.lng });
-    hasPlaces = true;
-  });
-
-  if (hasPlaces) {
-    map.fitBounds(bounds);
-    // Adjust zoom if too close
-    const listener = window.google.maps.event.addListener(map, "idle", function() { 
-      if (map.getZoom() > 15) map.setZoom(15); 
-      window.google.maps.event.removeListener(listener); 
-    });
+    if (hasPlaces) {
+      map.fitBounds(bounds);
+      // Adjust zoom if too close
+      const listener = window.google.maps.event.addListener(map, "idle", function() { 
+        if (map.getZoom() > 15) map.setZoom(15); 
+        window.google.maps.event.removeListener(listener); 
+      });
+    }
+  } catch (error) {
+    console.error("Failed to update markers:", error);
   }
 };
 

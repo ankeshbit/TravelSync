@@ -12,11 +12,10 @@ const app = express();
 app.use(helmet());
 
 // ─── CORS Configuration ──────────────────────────────────────────────────────
-const corsOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? corsOrigin
-    : [/^http:\/\/localhost:\d+$/, corsOrigin],
+    ? process.env.ALLOWED_ORIGIN
+    : 'http://localhost:5173',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   credentials: true,
 };
@@ -69,7 +68,22 @@ app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
-  console.log(`✓ CORS origin: ${corsOrigin}`);
+  console.log(`✓ CORS origin: ${corsOptions.origin}`);
 });
+
+// ─── Graceful Shutdown ───────────────────────────────────────────────────────
+const gracefulShutdown = () => {
+  console.log('Shutting down gracefully...');
+  server.close(() => {
+    console.log('Closed out remaining connections');
+    mongoose.connection.close(false).then(() => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

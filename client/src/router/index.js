@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import DashboardView from '../views/DashboardView.vue'
-import CreateTripView from '../views/CreateTripView.vue'
 import TripDetailView from '../views/TripDetailView.vue'
 import EditTripView from '../views/EditTripView.vue'
 import ExploreView from '../views/ExploreView.vue'
@@ -26,11 +25,6 @@ const routes = [
   {
     path: '/settings',
     component: SettingsView,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/trips/create',
-    component: CreateTripView,
     meta: { requiresAuth: true }
   },
   {
