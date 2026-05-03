@@ -3,7 +3,7 @@
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-64 pt-24 pb-20 px-6 md:px-10 max-w-7xl mx-auto">
+    <main class="md:ml-64 pt-24 pb-20 px-6 md:px-10 w-full">
       <!-- Header -->
       <header class="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
         <div>
@@ -67,6 +67,7 @@
 
     <CreateTripModal 
       v-model:isOpen="showCreateModal" 
+      :initialDestination="initialDestination"
       @trip-created="onTripCreated" 
     />
   </div>
@@ -74,7 +75,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import api from '../api';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
@@ -82,6 +83,8 @@ import TripCard from '../components/TripCard.vue';
 import CreateTripModal from '../components/CreateTripModal.vue';
 
 const router = useRouter();
+const route = useRoute();
+const initialDestination = ref('');
 const trips = ref([]);
 const loading = ref(true);
 const error = ref('');
@@ -110,5 +113,12 @@ const goToTrip = (id) => {
 
 onMounted(() => {
   fetchTrips();
+  // If navigated with ?create=1, open the Create Trip modal and prefill destination
+  if (route.query.create) {
+    initialDestination.value = route.query.dest || '';
+    showCreateModal.value = true;
+    // remove the query param so reopening doesn't auto-open again
+    router.replace({ path: route.path, query: {} }).catch(() => {});
+  }
 });
 </script>

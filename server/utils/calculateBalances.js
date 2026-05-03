@@ -13,20 +13,27 @@ function calculateBalances(expenses, members) {
 
   // Process each expense
   expenses.forEach(expense => {
-    const paidByUserId = expense.paidBy._id.toString();
-    const amount = expense.amount;
-    const splitCount = expense.splitAmong.length;
+    const amount = Number(expense.amount) || 0;
 
-    if (splitCount === 0) return; // Skip if no one to split with
+    // Normalize payer id (handle populated object or raw id)
+    const paidByUserId = expense.paidBy && expense.paidBy._id ? expense.paidBy._id.toString() : (expense.paidBy ? expense.paidBy.toString() : null);
+
+    // Normalize splitAmong to an array of ids (handle populated objects)
+    const splitIds = Array.isArray(expense.splitAmong)
+      ? expense.splitAmong.map(u => (u && u._id) ? u._id.toString() : (u ? u.toString() : null)).filter(Boolean)
+      : [];
+
+    const splitCount = splitIds.length;
+
+    if (splitCount === 0 || !paidByUserId) return; // Skip if invalid
 
     const sharePerPerson = amount / splitCount;
 
-    // Payer's balance increases (they are owed this amount)
+    // Payer's balance increases (they are owed the total amount)
     balanceMap[paidByUserId] = (balanceMap[paidByUserId] || 0) + amount;
 
-    // Each split member's balance decreases (they owe this share)
-    expense.splitAmong.forEach(userId => {
-      const userIdStr = userId.toString();
+    // Each split member's balance decreases (they owe their share)
+    splitIds.forEach(userIdStr => {
       balanceMap[userIdStr] = (balanceMap[userIdStr] || 0) - sharePerPerson;
     });
   });

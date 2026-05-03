@@ -6,7 +6,7 @@
       <Sidebar />
 
       <!-- Main Content Canvas -->
-      <main class="flex-1 md:ml-64 p-gutter pb-32">
+      <main class="flex-1 md:ml-64 p-4 md:p-6 pb-20 w-full">
         <!-- Hero Header Section -->
         <section v-if="!loading && trip" class="relative rounded-xl overflow-hidden mb-lg border border-gray-100 bg-white">
           <div class="h-48 md:h-64 w-full relative">

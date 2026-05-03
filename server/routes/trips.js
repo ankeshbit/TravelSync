@@ -238,6 +238,7 @@ const { calculateBalances } = require('../utils/calculateBalances');
 // GET /api/trips/:tripId/expenses - Fetch all expenses for the trip
 router.get('/:tripId/expenses', verifyToken, checkTripMembership, async (req, res) => {
   try {
+
     const trip = await Trip.findById(req.params.tripId).populate({
       path: 'expenses.paidBy',
       select: 'name email'
@@ -256,7 +257,6 @@ router.get('/:tripId/expenses', verifyToken, checkTripMembership, async (req, re
 // POST /api/trips/:tripId/expenses - Add new expense
 router.post('/:tripId/expenses', verifyToken, checkTripMembership, async (req, res) => {
   try {
-    const { title, amount, currency, paidBy, splitAmong } = req.body;
 
     // Validate required fields
     if (!title || !amount || !paidBy || !splitAmong || splitAmong.length === 0) {
@@ -301,6 +301,7 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership, async (req, r
 // DELETE /api/trips/:tripId/expenses/:expenseId - Delete expense
 router.delete('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership, async (req, res) => {
   try {
+
     const expenseIndex = req.trip.expenses.findIndex(e => e._id.toString() === req.params.expenseId);
     if (expenseIndex === -1) return res.status(404).json({ message: 'Expense not found' });
 

@@ -3,7 +3,7 @@
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-64 pt-24 pb-20 px-4 md:px-margin min-h-[calc(100vh-64px)]">
+    <main class="md:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] w-full">
       <!-- Header -->
       <section class="mb-lg">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -209,6 +209,7 @@ const viewDestination = (destination) => {
 };
 
 const createTripToDestination = () => {
-  router.push('/trips/create');
+  // Navigate to dashboard and request opening the Create Trip modal with destination
+  router.push({ path: '/dashboard', query: { create: '1', dest: selectedDestination.value?.name || '' } });
 };
 </script>

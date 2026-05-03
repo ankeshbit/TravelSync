@@ -6,7 +6,7 @@
       <Sidebar />
 
       <!-- Main Content Canvas -->
-      <main class="flex-1 md:ml-64 p-gutter pb-20">
+      <main class="flex-1 md:ml-64 p-4 md:p-6 pb-20 w-full">
         <!-- Page Header -->
         <section v-if="!loading && trip" class="mb-lg">
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -324,7 +324,7 @@ const handleAddExpense = async (expenseData) => {
     // Refresh balances after adding expense
     await expensesStore.fetchBalances(route.params.tripId)
   } catch (err) {
-    error.value = err.message || 'Failed to add expense'
+    error.value = err.response?.data?.message || err.message || 'Failed to add expense'
     // Keep modal open on error so user can see the error and try again
   }
 }
@@ -352,8 +352,9 @@ const canDeleteExpense = (expense) => {
 
   try {
     const user = JSON.parse(userStr)
-    const isTripOwner = trip.value && trip.value.ownerId._id === user.id
-    const isExpensePayer = expense.paidBy._id === user.id
+    const isTripOwner = trip.value && ((trip.value.ownerId && trip.value.ownerId._id && trip.value.ownerId._id.toString()) === user.id || (trip.value.ownerId && trip.value.ownerId.toString && trip.value.ownerId.toString() === user.id))
+    const payerId = expense.paidBy && expense.paidBy._id ? expense.paidBy._id.toString() : (expense.paidBy ? expense.paidBy.toString() : null)
+    const isExpensePayer = payerId === user.id
     return isTripOwner || isExpensePayer
   } catch (e) {
     return false

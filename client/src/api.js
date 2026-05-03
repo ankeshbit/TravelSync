@@ -1,6 +1,4 @@
 import axios from 'axios';
-import router from './router';
-
 const api = axios.create({
   // Use Vite environment variable, fallback to localhost for development
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api',
@@ -24,9 +22,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Clear token and redirect to login
       localStorage.removeItem('token');
-      if (router.currentRoute.value.path !== '/login') {
-        router.push('/login');
-      }
+      // Use a full-page redirect to avoid importing the router here and creating a circular dependency
+      if (typeof window !== 'undefined') window.location.href = '/login';
     }
     return Promise.reject(error);
   }
@@ -44,7 +41,7 @@ export const setupApiInterceptors = (toastStore) => {
         
         if (status === 401) {
           localStorage.removeItem('token');
-          router.push('/login');
+          if (typeof window !== 'undefined') window.location.href = '/login';
         } else if (status === 403) {
           toastStore.showToast("You don't have permission to do that", 'error');
         } else if (status === 404) {

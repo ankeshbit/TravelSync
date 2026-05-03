@@ -6,6 +6,14 @@ const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 const { errorHandler } = require('./middleware/errorHandler');
 
+const isProduction = process.env.NODE_ENV === 'production';
+const mongoUri = process.env.MONGO_URI?.trim();
+
+// Provide safe local defaults in development so the server can boot even when
+// a fresh .env file has not been filled in yet.
+process.env.JWT_SECRET = process.env.JWT_SECRET || (!isProduction ? 'travelsync-dev-secret-change-me' : '');
+process.env.ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+
 const app = express();
 
 // ─── Security Middleware ─────────────────────────────────────────────────────
@@ -13,9 +21,16 @@ app.use(helmet());
 
 // ─── CORS Configuration ──────────────────────────────────────────────────────
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.ALLOWED_ORIGIN
-    : 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // Allow any localhost origin (for development with dynamic ports)
+    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+      callback(null, true);
+    } else if (process.env.ALLOWED_ORIGIN && origin === process.env.ALLOWED_ORIGIN) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   credentials: true,
 };
@@ -33,13 +48,23 @@ const authLimiter = rateLimit({
 app.use('/api/auth/', authLimiter);
 
 // ─── MongoDB Connection ──────────────────────────────────────────────────────
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log('✓ MongoDB connected successfully'))
-  .catch((err) => {
-    console.error('✗ MongoDB connection error:', err.message);
-    process.exit(1);
-  });
+if (mongoUri) {
+  mongoose
+    .connect(mongoUri)
+    .then(() => console.log('✓ MongoDB connected successfully'))
+    .catch((err) => {
+      console.error('✗ MongoDB connection error:', err.message);
+
+      if (isProduction) {
+        process.exit(1);
+        return;
+      }
+
+      console.warn('⚠ Starting without a database connection. API routes that need MongoDB will fail until MONGO_URI is configured.');
+    });
+} else {
+  console.warn('⚠ MONGO_URI is not configured. Starting the API without a database connection.');
+}
 
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

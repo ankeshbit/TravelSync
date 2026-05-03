@@ -2,7 +2,7 @@
   <div class="bg-surface text-on-surface min-h-screen">
     <Navbar />
 
-    <main class="pt-24 pb-20 px-4 md:px-margin min-h-screen flex items-center justify-center">
+    <main class="pt-24 pb-20 px-4 md:px-8 min-h-screen flex items-center justify-center w-full">
       <div class="w-full max-w-2xl bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0_12px_24px_rgba(0,0,0,0.05)] overflow-hidden">
         <div class="relative h-48 w-full">
           <img class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&q=80&w=1000"/>

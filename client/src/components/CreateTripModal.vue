@@ -9,7 +9,7 @@
 
       <!-- Modal Content -->
       <div 
-        class="relative bg-surface-container-lowest w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-fade-in-up"
+        class="relative bg-surface-container-lowest w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up"
         role="dialog"
         aria-modal="true"
       >
@@ -137,6 +137,10 @@ const props = defineProps({
   isOpen: {
     type: Boolean,
     required: true
+  },
+  initialDestination: {
+    type: String,
+    default: ''
   }
 });
 
@@ -157,7 +161,8 @@ const form = reactive({
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
     form.name = '';
-    form.destination = '';
+    // Prefill destination if provided from parent
+    form.destination = props.initialDestination || '';
     form.startDate = '';
     form.endDate = '';
     error.value = '';
