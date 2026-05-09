@@ -135,18 +135,30 @@
       </div>
     </footer>
   </div>
+
+  <!-- OTP Verification Modal -->
+  <OtpModal
+    :visible="showOtp"
+    :email="form.email"
+    purpose="register"
+    @verified="handleOtpVerified"
+    @cancel="showOtp = false; loading = false"
+  />
 </template>
 
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api.js'
+import OtpModal from '../components/OtpModal.vue'
 
-const router = useRouter()
-const form = ref({ name: '', email: '', password: '', confirmPassword: '', terms: false })
+const router  = useRouter()
+const form    = ref({ name: '', email: '', password: '', confirmPassword: '', terms: false })
 const loading = ref(false)
-const error = ref('')
+const error   = ref('')
+const showOtp = ref(false)
 
+// Step 1: Validate form, send OTP, show modal
 const handleRegister = async () => {
   error.value = ''
   if (!form.value.name || !form.value.email || !form.value.password || !form.value.confirmPassword) {
@@ -163,8 +175,23 @@ const handleRegister = async () => {
   }
   loading.value = true
   try {
+    await api.post('/auth/send-otp', { email: form.value.email, purpose: 'register' })
+    showOtp.value = true
+  } catch (err) {
+    error.value = err.response?.data?.message || 'Failed to send verification code. Try again.'
+    loading.value = false
+  }
+}
+
+// Step 2: OTP verified — now actually create the account
+const handleOtpVerified = async () => {
+  showOtp.value = false
+  try {
     const res = await api.post('/auth/register', {
-      name: form.value.name, email: form.value.email, password: form.value.password,
+      name: form.value.name,
+      email: form.value.email,
+      password: form.value.password,
+      otpVerified: true,
     })
     localStorage.setItem('token', res.data.token)
     localStorage.setItem('user', JSON.stringify(res.data.user))
@@ -197,6 +224,12 @@ const handleRegister = async () => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+:global(.dark) .page {
+  background: #020617;
+  color: #f1f5f9;
 }
 
 /* ── Header ── */
@@ -209,6 +242,12 @@ const handleRegister = async () => {
   position: fixed;
   top: 0; left: 0; right: 0;
   z-index: 50;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+:global(.dark) .header {
+  background: rgba(15, 23, 42, 0.8);
+  border-bottom-color: rgba(30, 41, 59, 0.5);
 }
 .header-inner {
   display: flex;
@@ -236,6 +275,9 @@ const handleRegister = async () => {
   color: #00355f;
   letter-spacing: -0.02em;
 }
+:global(.dark) .brand-text {
+  color: #38bdf8;
+}
 .header-nav { display: flex; gap: 1rem; align-items: center; }
 .nav-link {
   font-size: 0.875rem;
@@ -247,7 +289,10 @@ const handleRegister = async () => {
   transition: background 0.2s ease;
 }
 .nav-link:hover { background: rgba(219, 234, 254, 0.5); }
+:global(.dark) .nav-link { color: #94a3b8; }
+:global(.dark) .nav-link:hover { background: rgba(30, 41, 59, 0.8); color: #f1f5f9; }
 .nav-cta { background: #00355f; color: #fff; }
+:global(.dark) .nav-cta { background: #0369a1; }
 .nav-cta:hover { opacity: 0.9; }
 
 /* ── Main ── */
@@ -258,7 +303,9 @@ const handleRegister = async () => {
   justify-content: center;
   padding: 6rem 1rem 2rem;
   background: #f9f9ff;
+  transition: background-color 0.2s;
 }
+:global(.dark) .main { background: #020617; }
 
 /* ── Card ── */
 .card {
@@ -274,6 +321,12 @@ const handleRegister = async () => {
   overflow: hidden;
   box-shadow: 0 25px 50px -12px rgba(0, 53, 95, 0.12);
   margin-bottom: 2rem;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+:global(.dark) .card {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(30, 41, 59, 0.5);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 @media (min-width: 768px) {
   .card { flex-direction: row; }
@@ -340,6 +393,10 @@ const handleRegister = async () => {
   width: 100%;
   background: rgba(255, 255, 255, 0.4);
   padding: 2.5rem;
+  transition: background-color 0.2s;
+}
+:global(.dark) .panel-right {
+  background: transparent;
 }
 @media (min-width: 768px) { .panel-right { width: 50%; padding: 3.5rem; } }
 @media (min-width: 1024px) { .panel-right { padding: 4rem; } }
@@ -356,7 +413,9 @@ const handleRegister = async () => {
   letter-spacing: -0.02em;
   margin-bottom: 0.5rem;
 }
+:global(.dark) .form-title { color: #f1f5f9; }
 .form-sub { font-size: 1rem; color: #42474f; }
+:global(.dark) .form-sub { color: #94a3b8; }
 
 /* ── Form ── */
 .form { display: flex; flex-direction: column; gap: 1.25rem; }
@@ -370,6 +429,7 @@ const handleRegister = async () => {
   color: #42474f;
   letter-spacing: 0.01em;
 }
+:global(.dark) .field-label { color: #e2e8f0; }
 
 .input-wrap { position: relative; }
 .input-icon {
@@ -382,25 +442,40 @@ const handleRegister = async () => {
   transition: color 0.2s;
 }
 .input-wrap:focus-within .input-icon { color: #00355f; }
+:global(.dark) .input-wrap:focus-within .input-icon { color: #38bdf8; }
 
 .input {
   width: 100%;
   padding: 0.75rem 1rem 0.75rem 2.75rem;
   font-size: 1rem;
   font-family: inherit;
-  background: #F7FAFC;
+  background: #F7FAFC !important;
   border: 2px solid transparent;
   border-radius: 0.75rem;
-  color: #161c27;
+  color: #000000 !important;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
-.input::placeholder { color: #b0b8bc; }
+:global(.dark) .input {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+.input::placeholder { color: #b0b8bc !important; }
+:global(.dark) .input::placeholder { color: #94a3b8 !important; }
 .input:focus {
-  background: #fff;
+  background: #fff !important;
   border-color: #a0c9ff;
   box-shadow: 0 0 0 4px rgba(160, 201, 255, 0.2);
+  color: #000000 !important;
 }
+:global(.dark) .input:focus {
+  background: #0f172a !important;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
+  color: #ffffff !important;
+}
+
+
 
 /* ── Terms ── */
 .terms { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.5rem 0; }
@@ -412,7 +487,9 @@ const handleRegister = async () => {
   flex-shrink: 0;
 }
 .terms label { font-size: 0.875rem; color: #42474f; line-height: 1.5; cursor: pointer; }
+:global(.dark) .terms label { color: #94a3b8; }
 .terms a { color: #00355f; font-weight: 600; text-decoration: none; }
+:global(.dark) .terms a { color: #38bdf8; }
 .terms a:hover { text-decoration: underline; }
 
 /* ── Error ── */
@@ -424,6 +501,11 @@ const handleRegister = async () => {
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
+}
+:global(.dark) .error-msg {
+  background: #450a0a;
+  border-color: #7f1d1d;
+  color: #fca5a5;
 }
 
 /* ── Submit Button ── */
@@ -440,7 +522,10 @@ const handleRegister = async () => {
   cursor: pointer;
   box-shadow: 0 4px 20px rgba(0, 53, 95, 0.25);
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: opacity 0.2s, transform 0.15s, background 0.2s;
+}
+:global(.dark) .btn-submit {
+  background: linear-gradient(135deg, #0369a1 0%, #0891b2 100%);
 }
 .btn-submit:hover:not(:disabled) { opacity: 0.95; transform: translateY(-1px); }
 .btn-submit:active:not(:disabled) { transform: scale(0.98); }
@@ -471,6 +556,8 @@ const handleRegister = async () => {
   color: #42474f;
   white-space: nowrap;
 }
+:global(.dark) .divider-text { color: #64748b; }
+:global(.dark) .divider-line { background: rgba(51, 65, 85, 0.4); }
 
 /* ── Social ── */
 .social-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -485,9 +572,15 @@ const handleRegister = async () => {
   font-family: inherit;
   color: #161c27;
   cursor: pointer;
-  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s, color 0.2s, border-color 0.2s;
+}
+:global(.dark) .social-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
 }
 .social-btn:hover { background: #f1f3ff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+:global(.dark) .social-btn:hover { background: #334155; }
 .social-logo { width: 20px; height: 20px; object-fit: contain; }
 
 /* ── Sign In Link ── */
@@ -497,19 +590,23 @@ const handleRegister = async () => {
   font-size: 1rem;
   color: #42474f;
 }
+:global(.dark) .signin-link { color: #94a3b8; }
 .signin-link a {
   color: #00355f;
   font-weight: 700;
   text-decoration: none;
   margin-left: 4px;
 }
+:global(.dark) .signin-link a { color: #38bdf8; }
 .signin-link a:hover { text-decoration: underline; }
 
 /* ── Footer ── */
 .footer {
   background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(8px);
+  transition: background-color 0.2s;
 }
+:global(.dark) .footer { background: rgba(15, 23, 42, 0.8); }
 .footer-inner {
   max-width: 1280px;
   margin: 0 auto;
@@ -521,12 +618,15 @@ const handleRegister = async () => {
   font-size: 0.875rem;
   color: #42474f;
 }
+:global(.dark) .footer-inner { color: #94a3b8; }
 @media (min-width: 768px) {
   .footer-inner { flex-direction: row; justify-content: space-between; }
 }
 .footer-links { display: flex; gap: 1.5rem; }
 .footer-links a { color: #42474f; text-decoration: none; font-weight: 600; font-size: 0.875rem; transition: color 0.2s; }
+:global(.dark) .footer-links a { color: #94a3b8; }
 .footer-links a:hover { color: #00355f; }
+:global(.dark) .footer-links a:hover { color: #38bdf8; }
 
 /* ── Transitions ── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }

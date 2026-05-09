@@ -1,7 +1,7 @@
 <template>
-  <div class="bg-surface text-on-surface min-h-screen flex flex-col">
+  <div class="bg-surface dark:bg-slate-950 text-on-surface dark:text-slate-100 min-h-screen flex flex-col">
     <!-- TopAppBar -->
-    <header class="fixed top-0 left-0 w-full h-16 flex items-center justify-between px-6 bg-white/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 z-50">
+    <header class="fixed top-0 left-0 w-full h-16 flex items-center justify-between px-6 bg-white/80 dark:bg-slate-950/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 z-50">
       <div class="flex items-center gap-8">
         <span class="text-xl font-bold tracking-tight text-sky-900 dark:text-sky-100">TravelSync</span>
         <nav class="hidden md:flex items-center gap-6">
@@ -19,14 +19,14 @@
     <!-- SideNavBar -->
     <aside class="fixed left-0 top-0 h-full w-64 pt-16 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-slate-900 z-40 hidden md:block">
       <div class="flex flex-col gap-1 p-4 h-full">
-        <div class="mb-6 px-2 py-4 rounded-xl bg-surface-container-low" v-if="trip">
+        <div class="mb-6 px-2 py-4 rounded-xl bg-surface-container-low dark:bg-slate-800 transition-colors duration-200" v-if="trip">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-primary-container overflow-hidden flex-shrink-0 flex items-center justify-center text-white">
               <span class="material-symbols-outlined">map</span>
             </div>
             <div>
               <h4 class="text-sm font-bold text-sky-900 dark:text-sky-100">{{ trip.name }}</h4>
-              <p class="text-[11px] text-gray-500">{{ formatDate(trip.startDate) }} - {{ formatDate(trip.endDate) }}</p>
+              <p class="text-[11px] text-gray-500 dark:text-slate-400">{{ formatDate(trip.startDate) }} - {{ formatDate(trip.endDate) }}</p>
             </div>
           </div>
         </div>
@@ -61,7 +61,7 @@
             <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
             <input 
               ref="searchInput"
-              class="w-full pl-12 pr-4 py-3 bg-white border border-outline-variant rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all font-body-md text-body-md" 
+              class="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-outline-variant dark:border-slate-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all font-body-md text-body-md" 
               placeholder="Search places (e.g., cafes, beaches, landmarks)" 
               type="text"
             />
@@ -76,7 +76,7 @@
             </div>
             <div ref="mapContainer" class="w-full h-full"></div>
             
-            <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg border border-outline-variant flex items-center gap-3">
+            <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-lg border border-outline-variant dark:border-slate-700 flex items-center gap-3 transition-colors duration-200">
               <div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
               <span class="text-xs font-semibold text-primary uppercase tracking-wider">Viewing {{ placesStore.places.length }} locations</span>
             </div>
@@ -84,7 +84,7 @@
             <!-- Slide-in Place Detail Panel -->
             <div 
               v-show="placesStore.isDetailPanelOpen && placesStore.selectedPlace"
-              class="absolute bottom-4 left-4 right-4 bg-white rounded-2xl shadow-xl border border-outline-variant p-5 transition-transform duration-300 z-10 flex flex-col md:flex-row gap-6"
+              class="absolute bottom-4 left-4 right-4 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-outline-variant dark:border-slate-700 p-5 transition-all duration-300 z-10 flex flex-col md:flex-row gap-6"
             >
               <button @click="placesStore.closeDetailPanel" class="absolute top-4 right-4 text-outline hover:text-primary">
                 <span class="material-symbols-outlined">close</span>
@@ -92,7 +92,7 @@
               <div class="flex-1 space-y-2" v-if="placesStore.selectedPlace">
                 <div class="flex items-center gap-2">
                   <h3 class="text-h3 text-primary">{{ placesStore.selectedPlace.name }}</h3>
-                  <div class="bg-surface-container px-2 py-0.5 rounded text-[10px] font-bold text-primary uppercase tracking-wider">
+                  <div class="bg-surface-container dark:bg-slate-800 px-2 py-0.5 rounded text-[10px] font-bold text-primary dark:text-blue-400 uppercase tracking-wider">
                     Day {{ placesStore.selectedPlace.dayNumber }}
                   </div>
                 </div>
@@ -104,7 +104,7 @@
                   <label class="block text-[11px] font-bold text-outline-variant uppercase mb-1">Notes</label>
                   <textarea 
                     v-model="noteText"
-                    class="w-full p-3 rounded-lg border border-outline-variant bg-surface-container-low text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none h-20 resize-none" 
+                    class="w-full p-3 rounded-lg border border-outline-variant dark:border-slate-700 bg-surface-container-low dark:bg-slate-800 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none h-20 resize-none transition-colors duration-200" 
                     placeholder="Add a note for this place..."
                   ></textarea>
                   <div class="flex justify-end mt-2 gap-2">
@@ -118,12 +118,16 @@
         </section>
 
         <!-- Right Column: ItineraryPanel -->
-        <aside class="w-full md:w-[360px] bg-white border-l border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden">
-          <div class="p-6 border-b border-gray-100 flex items-center justify-between">
+        <aside class="w-full md:w-[360px] bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-800 flex flex-col overflow-hidden transition-colors duration-200">
+          <div class="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
             <h2 class="font-h2 text-h2 text-primary">Itinerary</h2>
+            <div class="flex items-center gap-1.5" v-if="syncActive" title="Live sync enabled">
+              <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              <span class="text-[11px] font-bold text-green-600 uppercase tracking-wider">Live</span>
+            </div>
           </div>
           <div class="flex-1 overflow-y-auto p-4 space-y-8 relative">
-            <div v-if="placesStore.loading" class="absolute inset-0 bg-white/50 flex justify-center pt-8 z-10">
+            <div v-if="placesStore.loading" class="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex justify-center pt-8 z-10">
               <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
             
@@ -149,14 +153,14 @@
                 <template #item="{ element, index }">
                   <div 
                     @click="placesStore.selectPlace(element)"
-                    class="group flex items-center gap-2 p-3 mb-3 bg-white border border-outline-variant rounded-xl hover:shadow-md hover:border-primary-container transition-all cursor-pointer relative"
-                    :class="{ 'border-primary shadow-md': placesStore.selectedPlace?._id === element._id }"
+                    class="group flex items-center gap-2 p-3 mb-3 bg-white dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl hover:shadow-md hover:border-primary-container dark:hover:border-blue-800 transition-all cursor-pointer relative"
+                    :class="{ 'border-primary dark:border-blue-400 shadow-md': placesStore.selectedPlace?._id === element._id }"
                   >
-                    <div class="drag-handle p-1 text-outline-variant hover:text-primary">
+                    <div class="drag-handle p-1 text-outline-variant dark:text-slate-500 hover:text-primary dark:hover:text-blue-400">
                       <span class="material-symbols-outlined text-xl">drag_indicator</span>
                     </div>
                     <div class="relative flex-shrink-0">
-                      <div class="w-12 h-12 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+                      <div class="w-12 h-12 rounded-lg bg-surface-container-low dark:bg-slate-700 flex items-center justify-center text-primary dark:text-blue-400 transition-colors duration-200">
                         <span class="material-symbols-outlined">location_on</span>
                       </div>
                       <div class="absolute -top-1.5 -left-1.5 w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-[10px] font-bold border-2 border-white">{{ index + 1 }}</div>
@@ -182,7 +186,7 @@
 
     <!-- Day Selection Modal -->
     <div v-if="showDayModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100]">
-      <div class="bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm">
+      <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-xl w-full max-w-sm transition-colors duration-200">
         <h3 class="text-h3 text-primary mb-4">Add to Itinerary</h3>
         <p class="text-sm text-outline mb-4">Which day do you want to add <strong>{{ pendingPlace?.name }}</strong> to?</p>
         <select v-model="selectedDay" class="w-full p-3 border border-outline-variant rounded-xl mb-6 focus:outline-none focus:ring-2 focus:ring-primary/20">
@@ -198,12 +202,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { usePlacesStore } from '../stores/places';
 import api from '../api';
 import draggable from 'vuedraggable';
 import { Loader } from '@googlemaps/js-api-loader';
+import { socket } from '../services/socket';
+import { useDarkMode } from '../composables/useDarkMode';
 
 const route = useRoute();
 const tripId = route.params.tripId;
@@ -212,6 +218,8 @@ const placesStore = usePlacesStore();
 const trip = ref(null);
 const searchInput = ref(null);
 const mapContainer = ref(null);
+const syncActive = ref(false);
+const { isDarkMode } = useDarkMode();
 
 // Modal state
 const showDayModal = ref(false);
@@ -261,13 +269,41 @@ const initMap = async () => {
     // Default center
     const defaultCenter = { lat: 15.2993, lng: 74.1240 }; // Goa
     
+    const darkMapStyle = [
+      { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+      { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+      { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+      { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+      { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+      { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+      { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+      { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+      { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+      { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+      { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+      { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+      { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+      { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+      { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+      { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+      { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+      { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] },
+    ];
+
     map = new Map(mapContainer.value, {
       center: defaultCenter,
       zoom: 10,
+      styles: isDarkMode.value ? darkMapStyle : [],
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
       mapId: 'TRAVEL_SYNC_MAP' // Optional: needed for advanced markers
+    });
+
+    watch(isDarkMode, (newVal) => {
+      if (map) {
+        map.setOptions({ styles: newVal ? darkMapStyle : [] });
+      }
     });
 
     // Init autocomplete
@@ -435,6 +471,32 @@ onMounted(async () => {
   
   // Set initial markers
   updateMarkers();
+
+  // Socket.IO Setup for real-time sync
+  socket.connect();
+  socket.emit('join_trip', tripId);
+  syncActive.value = true;
+
+  socket.on('itinerary_updated', (data) => {
+    if (data.tripId === tripId) {
+      placesStore.places = data.itinerary;
+      // Re-selection logic if selected place is modified/deleted
+      if (placesStore.selectedPlace) {
+        const stillExists = placesStore.places.find(p => p._id === placesStore.selectedPlace._id);
+        if (!stillExists) {
+          placesStore.closeDetailPanel();
+        } else {
+          placesStore.selectedPlace = stillExists;
+        }
+      }
+    }
+  });
+});
+
+onUnmounted(() => {
+  socket.off('itinerary_updated');
+  socket.disconnect();
+  syncActive.value = false;
 });
 
 </script>

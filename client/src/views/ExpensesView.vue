@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-background text-on-surface min-h-screen flex flex-col">
+  <div class="bg-background dark:bg-slate-950 text-on-surface dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
     <Navbar />
 
     <div class="flex flex-1 mt-[64px]">
@@ -11,8 +11,8 @@
         <section v-if="!loading && trip" class="mb-lg">
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 class="text-3xl font-bold text-on-surface">{{ trip.name }} - Expenses</h1>
-              <p class="text-outline-variant mt-1">Track and split expenses for this trip</p>
+              <h1 class="text-3xl font-bold text-on-surface dark:text-slate-100">{{ trip.name }} - Expenses</h1>
+              <p class="text-outline-variant dark:text-slate-400 mt-1">Track and split expenses for this trip</p>
             </div>
             <button
               @click="() => { error = ''; showAddExpenseModal = true }"
@@ -41,8 +41,8 @@
             <div class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 overflow-hidden">
               <!-- Section Header -->
               <div class="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
-                <h2 class="text-xl font-bold text-on-surface">Expenses</h2>
-                <span class="text-2xl font-bold text-primary">
+                <h2 class="text-xl font-bold text-on-surface dark:text-slate-100">Expenses</h2>
+                <span class="text-2xl font-bold text-primary dark:text-blue-400">
                   {{ getCurrencySymbol(expensesStore.expenses[0]?.currency || 'INR') }}{{ expensesStore.totalExpenses.toFixed(2) }}
                 </span>
               </div>
@@ -58,8 +58,8 @@
                   <div class="flex-1 min-w-0">
                     <div class="flex items-start justify-between mb-2">
                       <div>
-                        <h3 class="font-semibold text-on-surface truncate">{{ expense.title }}</h3>
-                        <p class="text-xs text-outline-variant mt-1">
+                        <h3 class="font-semibold text-on-surface dark:text-slate-100 truncate">{{ expense.title }}</h3>
+                        <p class="text-xs text-outline-variant dark:text-slate-400 mt-1">
                           {{ formatDate(expense.createdAt) }}
                         </p>
                       </div>
@@ -69,10 +69,10 @@
                     <div class="flex items-center gap-2 mb-3">
                       <span class="text-xs font-medium text-outline-variant">Paid by:</span>
                       <div class="flex items-center gap-1">
-                        <div class="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-[10px] font-bold text-blue-900 dark:text-blue-100">
+                        <div class="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-[10px] font-bold text-blue-900 dark:text-blue-300">
                           {{ expense.paidBy.name.substring(0, 1).toUpperCase() }}
                         </div>
-                        <span class="text-xs font-medium text-on-surface">{{ expense.paidBy.name }}</span>
+                        <span class="text-xs font-medium text-on-surface dark:text-slate-200">{{ expense.paidBy.name }}</span>
                       </div>
                     </div>
 
@@ -95,10 +95,10 @@
                   <!-- Amount & Delete -->
                   <div class="flex flex-col items-end justify-between md:items-center md:gap-4">
                     <div class="text-right">
-                      <p class="text-2xl font-bold text-primary">
+                      <p class="text-2xl font-bold text-primary dark:text-blue-400">
                         {{ getCurrencySymbol(expense.currency) }}{{ expense.amount.toFixed(2) }}
                       </p>
-                      <p class="text-xs text-outline-variant mt-1">{{ expense.currency }}</p>
+                      <p class="text-xs text-outline-variant dark:text-slate-400 mt-1">{{ expense.currency }}</p>
                     </div>
 
                     <!-- Delete Button -->
@@ -132,7 +132,7 @@
             <div class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 overflow-hidden mb-6">
               <!-- Header -->
               <div class="p-6 border-b border-gray-100 dark:border-slate-800">
-                <h2 class="text-xl font-bold text-on-surface mb-2">Who Owes What</h2>
+                <h2 class="text-xl font-bold text-on-surface dark:text-slate-100 mb-2">Who Owes What</h2>
                 <button
                   @click="refreshBalances"
                   :disabled="balancesLoading"
@@ -152,12 +152,12 @@
                 >
                   <div class="flex items-center justify-between gap-3">
                     <div class="flex items-center gap-3 flex-1 min-w-0">
-                      <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-sm font-bold text-blue-900 dark:text-blue-100 flex-shrink-0">
+                      <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-sm font-bold text-blue-900 dark:text-blue-300 flex-shrink-0">
                         {{ member.name.substring(0, 1).toUpperCase() }}
                       </div>
                       <div class="min-w-0 flex-1">
-                        <p class="text-sm font-semibold text-on-surface truncate">{{ member.name }}</p>
-                        <p class="text-xs text-outline-variant truncate">{{ member.email }}</p>
+                        <p class="text-sm font-semibold text-on-surface dark:text-slate-100 truncate">{{ member.name }}</p>
+                        <p class="text-xs text-outline-variant dark:text-slate-400 truncate">{{ member.email }}</p>
                       </div>
                     </div>
                     <div class="text-right flex-shrink-0">
@@ -178,7 +178,7 @@
                       <p class="text-xs text-outline-variant mt-1">
                         <span v-if="member.balance > 0.01">is owed</span>
                         <span v-else-if="member.balance < -0.01">owes</span>
-                        <span v-else>all set</span>
+                        <span v-else class="dark:text-slate-500">all set</span>
                       </p>
                     </div>
                   </div>
@@ -195,7 +195,7 @@
             <div class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 overflow-hidden">
               <!-- Header -->
               <div class="p-6 border-b border-gray-100 dark:border-slate-800">
-                <h2 class="text-lg font-bold text-on-surface">Settlements</h2>
+                <h2 class="text-lg font-bold text-on-surface dark:text-slate-100">Settlements</h2>
               </div>
 
               <!-- Settlements List -->
@@ -207,15 +207,15 @@
                 >
                   <div class="flex items-center justify-between gap-2 mb-2">
                     <div class="flex items-center gap-2 flex-1 min-w-0">
-                      <span class="text-xs font-semibold text-on-surface truncate">{{ settlement.fromName }}</span>
+                      <span class="text-xs font-semibold text-on-surface dark:text-slate-200 truncate">{{ settlement.fromName }}</span>
                     </div>
-                    <span class="text-xs text-outline-variant flex-shrink-0">→</span>
+                    <span class="text-xs text-outline-variant dark:text-slate-500 flex-shrink-0">→</span>
                     <div class="flex items-center gap-2 flex-1 min-w-0">
-                      <span class="text-xs font-semibold text-on-surface truncate">{{ settlement.toName }}</span>
+                      <span class="text-xs font-semibold text-on-surface dark:text-slate-200 truncate">{{ settlement.toName }}</span>
                     </div>
                   </div>
                   <div class="text-right">
-                    <p class="text-sm font-bold text-primary">₹{{ settlement.amount.toFixed(2) }}</p>
+                    <p class="text-sm font-bold text-primary dark:text-blue-400">₹{{ settlement.amount.toFixed(2) }}</p>
                   </div>
                 </div>
               </div>

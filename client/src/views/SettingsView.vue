@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-surface">
+  <div class="min-h-screen bg-surface dark:bg-slate-950 transition-colors duration-200">
     <Navbar />
     <Sidebar />
 
@@ -45,18 +45,40 @@
             <!-- Avatar -->
             <div class="flex flex-col md:flex-row gap-6 mb-8 pb-8 border-b border-gray-200 dark:border-slate-800">
               <div>
-                <div class="w-24 h-24 rounded-full bg-primary-container flex items-center justify-center text-white text-4xl font-bold">
+                <!-- Show uploaded photo or initials fallback -->
+                <img
+                  v-if="profilePicture"
+                  :src="profilePicture"
+                  alt="Profile photo"
+                  class="w-24 h-24 rounded-full object-cover"
+                />
+                <div v-else class="w-24 h-24 rounded-full bg-primary-container flex items-center justify-center text-white text-4xl font-bold">
                   {{ userInitials }}
                 </div>
               </div>
               <div class="flex-1">
                 <h3 class="font-semibold text-on-surface mb-2">Profile Photo</h3>
-                <p class="text-outline-variant text-sm mb-4">Upload a profile picture to personalize your account</p>
-                <button class="px-4 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity text-sm disabled:opacity-50" disabled>
-                  <span class="material-symbols-outlined text-sm">upload</span>
-                  Upload Photo
+                <p class="text-outline-variant text-sm mb-4">Upload a profile picture to personalize your account (PNG or JPEG, max 5 MB)</p>
+
+                <!-- Hidden file input —— opacity:0/position:absolute so programmatic .click() still works -->
+                <input
+                  ref="photoInput"
+                  type="file"
+                  accept="image/png, image/jpeg, image/gif, image/webp"
+                  style="opacity:0; position:absolute; pointer-events:none;"
+                  @change="handlePhotoUpload"
+                />
+
+                <button
+                  type="button"
+                  :disabled="loadingPhoto"
+                  class="px-4 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity text-sm disabled:opacity-50 flex items-center gap-2"
+                  @click="photoInput.click()"
+                >
+                  <span v-if="!loadingPhoto" class="material-symbols-outlined text-sm">upload</span>
+                  <span v-else class="material-symbols-outlined text-sm animate-spin">hourglass_bottom</span>
+                  {{ loadingPhoto ? 'Uploading...' : 'Upload Photo' }}
                 </button>
-                <p class="text-outline-variant text-xs mt-2">Feature coming soon</p>
               </div>
             </div>
 
@@ -68,7 +90,7 @@
                   <input
                     v-model="profileForm.name"
                     type="text"
-                    class="w-full px-4 py-2 border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                    class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                     placeholder="Your full name"
                   />
                 </div>
@@ -78,7 +100,7 @@
                     :value="profileForm.email"
                     type="email"
                     disabled
-                    class="w-full px-4 py-2 border border-outline-variant rounded-lg bg-surface-container text-on-surface-variant cursor-not-allowed"
+                    class="w-full px-4 py-2 border border-outline-variant dark:border-slate-700 rounded-lg bg-surface-container dark:bg-slate-800 text-on-surface-variant cursor-not-allowed"
                   />
                   <p class="text-outline-variant text-xs mt-1">Email cannot be changed</p>
                 </div>
@@ -120,7 +142,7 @@
                 <input
                   v-model="passwordForm.currentPassword"
                   type="password"
-                  class="w-full px-4 py-2 border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="Enter your current password"
                 />
               </div>
@@ -130,7 +152,7 @@
                 <input
                   v-model="passwordForm.newPassword"
                   type="password"
-                  class="w-full px-4 py-2 border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="Enter new password (min. 8 characters)"
                 />
                 <p class="text-outline-variant text-xs mt-2">
@@ -143,7 +165,7 @@
                 <input
                   v-model="passwordForm.confirmPassword"
                   type="password"
-                  class="w-full px-4 py-2 border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="Confirm your new password"
                 />
               </div>
@@ -168,7 +190,7 @@
             <!-- Sessions -->
             <div class="mt-8 pt-8 border-t border-gray-200 dark:border-slate-800">
               <h3 class="font-semibold text-on-surface mb-4">Active Sessions</h3>
-              <div class="bg-surface-container rounded-lg p-4 flex items-center justify-between">
+              <div class="bg-surface-container dark:bg-slate-800 rounded-lg p-4 flex items-center justify-between transition-colors duration-200">
                 <div>
                   <p class="font-medium text-on-surface">Current Device</p>
                   <p class="text-sm text-on-surface-variant">This browser</p>
@@ -191,7 +213,7 @@
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="isDarkMode" class="sr-only peer" />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary"></div>
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                 </label>
               </div>
 
@@ -203,7 +225,7 @@
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="preferences.emailNotifications" class="sr-only peer" />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary"></div>
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                 </label>
               </div>
 
@@ -215,7 +237,7 @@
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="preferences.tripReminders" class="sr-only peer" />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary"></div>
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                 </label>
               </div>
 
@@ -227,7 +249,7 @@
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="preferences.profileVisible" class="sr-only peer" />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary"></div>
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                 </label>
               </div>
 
@@ -260,27 +282,147 @@
               <h3 class="font-semibold text-error mb-2">Delete Account</h3>
               <p class="text-outline-variant text-sm mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
               <button
-                disabled
-                class="px-6 py-2 bg-error text-on-error rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                @click="showDeleteConfirm = true"
+                class="px-6 py-2 bg-error text-on-error rounded-lg font-semibold hover:opacity-90 transition-opacity"
               >
                 Delete Account
               </button>
-              <p class="text-outline-variant text-xs mt-2">Feature available in premium tier</p>
             </div>
           </section>
+
         </div>
       </div>
     </main>
   </div>
+
+  <!-- Delete Confirmation Modal — Teleported to body, inline styles to guarantee centering -->
+  <Teleport to="body">
+    <div
+      v-if="showDeleteConfirm"
+      style="
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,0.65);
+        padding: 16px;
+      "
+      @click.self="showDeleteConfirm = false; deleteError = ''"
+    >
+      <div
+        style="
+          background: var(--color-surface-container, #1e293b);
+          border-radius: 16px;
+          width: 100%;
+          max-width: 440px;
+          padding: 28px;
+          box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+          border: 1px solid rgba(255,255,255,0.12);
+          color: #f1f5f9;
+          position: relative;
+        "
+      >
+        <!-- Title row -->
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+          <span class="material-symbols-outlined" style="color:#ef4444; font-size:32px;">warning</span>
+          <h3 style="font-size:1.25rem; font-weight:700; margin:0;">Delete Account?</h3>
+        </div>
+
+        <!-- Body text -->
+        <p style="font-size:0.875rem; line-height:1.6; margin-bottom:20px; color:#cbd5e1;">
+          This will permanently delete your account and
+          <strong style="color:#f1f5f9;">all your trips and data</strong>.
+          This action <strong style="color:#f1f5f9;">cannot be undone</strong>.
+        </p>
+
+        <!-- Error message -->
+        <div
+          v-if="deleteError"
+          style="background:#fee2e2; color:#991b1b; border-radius:8px; padding:12px; font-size:0.875rem; margin-bottom:16px;"
+        >
+          {{ deleteError }}
+        </div>
+
+        <!-- Action buttons -->
+        <div style="display:flex; gap:12px; justify-content:flex-end; flex-wrap:wrap;">
+          <button
+            @click="showDeleteConfirm = false; deleteError = ''"
+            style="
+              padding: 10px 20px;
+              border: 1px solid rgba(255,255,255,0.2);
+              border-radius: 8px;
+              background: transparent;
+              color: #cbd5e1;
+              font-weight: 600;
+              cursor: pointer;
+              font-size: 0.9rem;
+            "
+          >
+            Cancel
+          </button>
+          <button
+            @click="handleDeleteRequest"
+            :disabled="loadingDelete"
+            style="
+              padding: 10px 20px;
+              border: none;
+              border-radius: 8px;
+              background: #dc2626;
+              color: #fff;
+              font-weight: 600;
+              cursor: pointer;
+              font-size: 0.9rem;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              opacity: 1;
+            "
+            :style="loadingDelete ? 'opacity:0.6; cursor:not-allowed;' : ''"
+          >
+            <span v-if="loadingDelete" class="material-symbols-outlined" style="font-size:16px; animation: spin 1s linear infinite;">hourglass_bottom</span>
+            {{ loadingDelete ? 'Sending Code...' : 'Yes, Delete My Account' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- OTP Modal for Account Deletion -->
+  <OtpModal
+    :visible="showDeleteOtp"
+    :email="userEmail"
+    purpose="delete"
+    @verified="handleOtpVerifiedDelete"
+    @cancel="showDeleteOtp = false"
+  />
+
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useToastStore } from '../stores/toast';
 import { useDarkMode } from '../composables/useDarkMode';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
+import OtpModal from '../components/OtpModal.vue';
+import api from '../api';
+
+// Template ref for the hidden file input
+const photoInput = ref(null);
+const loadingPhoto = ref(false);
+
+// Seed profilePicture immediately from localStorage so avatar shows on first render
+const _base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
+const _storedPicture = (() => {
+  try {
+    const u = JSON.parse(localStorage.getItem('user') || '{}');
+    return u.picture ? `${_base}${u.picture}` : '';
+  } catch { return ''; }
+})();
+const profilePicture = ref(_storedPicture);
 
 const router = useRouter();
 const toastStore = useToastStore();
@@ -297,21 +439,25 @@ const settingsTabs = [
 
 // Profile data
 const originalProfile = ref({
-  name: 'John Doe',
-  email: 'john@example.com',
-  joinDate: new Date('2024-01-15')
+  name: '',
+  email: '',
+  joinDate: new Date()
 });
 
 const profileForm = ref({
-  name: originalProfile.value.name,
-  email: originalProfile.value.email
+  name: '',
+  email: ''
 });
 
-const userJoinDate = ref(new Date('2024-01-15'));
+const userJoinDate = ref(new Date());
 
 const loadingProfile = ref(false);
 const loadingPassword = ref(false);
 const passwordError = ref('');
+const showDeleteConfirm = ref(false);
+const showDeleteOtp = ref(false);   // NEW: show OTP modal for delete
+const loadingDelete = ref(false);
+const deleteError = ref('');
 
 // Password form
 const passwordForm = ref({
@@ -329,13 +475,18 @@ const preferences = ref({
 
 // Computed properties
 const userInitials = computed(() => {
+  if (!profileForm.value.name) return 'U';
   return profileForm.value.name
     .split(' ')
+    .filter(word => word.length > 0)
     .map(word => word[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
 });
+
+// Email for OTP — read from form (populated by fetchProfile)
+const userEmail = computed(() => profileForm.value.email || '');
 
 const isProfileDirty = computed(() => {
   return profileForm.value.name !== originalProfile.value.name;
@@ -352,12 +503,91 @@ const isPasswordFormValid = computed(() => {
 });
 
 // Methods
+const fetchProfile = async () => {
+  try {
+    const res = await api.get('/auth/me');
+    originalProfile.value.name = res.data.name;
+    originalProfile.value.email = res.data.email;
+    profileForm.value.name = res.data.name;
+    profileForm.value.email = res.data.email;
+
+    // Load existing profile picture if any — API is the source of truth
+    if (res.data.picture) {
+      const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
+      profilePicture.value = `${base}${res.data.picture}`;
+      // Keep localStorage in sync with DB
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}');
+        u.picture = res.data.picture;
+        localStorage.setItem('user', JSON.stringify(u));
+      } catch {}
+    }
+
+    if (res.data.createdAt) {
+      userJoinDate.value = new Date(res.data.createdAt);
+    } else if (res.data._id) {
+      // Fallback: extract timestamp from MongoDB ObjectId
+      const timestamp = new Date(parseInt(res.data._id.substring(0, 8), 16) * 1000);
+      userJoinDate.value = timestamp;
+    }
+  } catch (err) {
+    toastStore.showToast('Failed to load profile', 'error');
+  }
+};
+
+const handlePhotoUpload = async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  loadingPhoto.value = true;
+  try {
+    const formData = new FormData();
+    formData.append('photo', file);
+
+    const res = await api.post('/auth/upload-photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+
+    // Build absolute URL from the relative path returned by the server
+    const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
+    profilePicture.value = `${baseUrl}${res.data.pictureUrl}`;
+
+    // Keep localStorage user in sync
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      user.picture = res.data.pictureUrl;
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+
+    toastStore.showToast('Profile photo updated!', 'success');
+  } catch (err) {
+    toastStore.showToast(err.response?.data?.message || 'Failed to upload photo', 'error');
+  } finally {
+    loadingPhoto.value = false;
+    // Reset so the same file can be re-selected if needed
+    if (photoInput.value) photoInput.value.value = '';
+  }
+};
+
 const handleProfileUpdate = async () => {
   loadingProfile.value = true;
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  originalProfile.value.name = profileForm.value.name;
-  toastStore.showToast('Profile updated successfully', 'success');
+  try {
+    const res = await api.put('/auth/me', { name: profileForm.value.name });
+    originalProfile.value.name = res.data.name;
+    
+    // Update local storage so other components using it stay in sync
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      user.name = res.data.name;
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+    
+    toastStore.showToast('Profile updated successfully', 'success');
+  } catch (err) {
+    toastStore.showToast(err.response?.data?.message || 'Failed to update profile', 'error');
+  }
   loadingProfile.value = false;
 };
 
@@ -374,15 +604,20 @@ const handlePasswordChange = async () => {
   }
 
   loadingPassword.value = true;
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  toastStore.showToast('Password changed successfully', 'success');
-  passwordForm.value = {
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  };
+  try {
+    await api.put('/auth/me/password', {
+      currentPassword: passwordForm.value.currentPassword,
+      newPassword: passwordForm.value.newPassword
+    });
+    toastStore.showToast('Password changed successfully', 'success');
+    passwordForm.value = {
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    };
+  } catch (err) {
+    passwordError.value = err.response?.data?.message || 'Failed to update password';
+  }
   loadingPassword.value = false;
 };
 
@@ -392,8 +627,46 @@ const savePreferences = () => {
 
 const handleLogout = () => {
   localStorage.removeItem('token');
+  localStorage.removeItem('user');
   router.push('/login');
   toastStore.showToast('You have been logged out', 'info');
+};
+
+const handleDeleteAccount = async () => {
+  deleteError.value = '';
+  loadingDelete.value = true;
+  try {
+    await api.delete('/auth/me', { data: { otpVerified: true } });
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    toastStore.showToast('Your account has been deleted.', 'info');
+    router.push('/login');
+  } catch (err) {
+    deleteError.value = err.response?.data?.message || 'Failed to delete account. Please try again.';
+  } finally {
+    loadingDelete.value = false;
+  }
+};
+
+// Step 1: user clicks "Yes, Delete My Account" → send OTP, show OTP modal
+const handleDeleteRequest = async () => {
+  deleteError.value = '';
+  loadingDelete.value = true;
+  try {
+    await api.post('/auth/send-otp', { email: userEmail.value, purpose: 'delete' });
+    showDeleteConfirm.value = false;
+    showDeleteOtp.value = true;
+  } catch (err) {
+    deleteError.value = err.response?.data?.message || 'Failed to send verification code.';
+  } finally {
+    loadingDelete.value = false;
+  }
+};
+
+// Step 2: OTP verified → actually delete account
+const handleOtpVerifiedDelete = async () => {
+  showDeleteOtp.value = false;
+  await handleDeleteAccount();
 };
 
 const formatDate = (date) => {
@@ -403,4 +676,15 @@ const formatDate = (date) => {
     day: 'numeric'
   });
 };
+
+onMounted(() => {
+  fetchProfile();
+});
 </script>
+
+<style>
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+</style>

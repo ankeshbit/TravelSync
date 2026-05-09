@@ -11,7 +11,6 @@ const PlaceSchema = new mongoose.Schema({
 });
 
 const ExpenseSchema = new mongoose.Schema({
-  _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
   title: { type: String, required: true, trim: true },
   amount: { type: Number, required: true, min: 0 },
   currency: { type: String, default: "INR" },

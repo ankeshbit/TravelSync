@@ -213,6 +213,12 @@ const handleLogin = async () => {
   font-family: 'Manrope', 'Inter', sans-serif;
   color: #161c27;
   overflow-x: hidden;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+:global(.dark) .page {
+  background: #020617;
+  color: #f1f5f9;
 }
 
 /* ── Layout ── */
@@ -322,6 +328,11 @@ const handleLogin = async () => {
   justify-content: center;
   background: #ffffff;
   padding: 2.5rem 1.5rem;
+  transition: background-color 0.2s;
+}
+
+:global(.dark) .panel-right {
+  background: #0f172a;
 }
 @media (min-width: 1024px) {
   .panel-right { width: 50%; padding: 3rem 2rem; }
@@ -338,6 +349,9 @@ const handleLogin = async () => {
   margin-bottom: 2.5rem;
   color: #00355f;
 }
+:global(.dark) .mobile-brand {
+  color: #38bdf8;
+}
 .mobile-brand-logo {
   height: 40px;
   width: auto;
@@ -351,6 +365,9 @@ const handleLogin = async () => {
   letter-spacing: -0.02em;
   color: #00355f;
 }
+:global(.dark) .mobile-brand-name {
+  color: #38bdf8;
+}
 @media (min-width: 1024px) { .mobile-brand { display: none; } }
 
 /* Form Header */
@@ -363,13 +380,18 @@ const handleLogin = async () => {
   letter-spacing: -0.02em;
   margin-bottom: 0.4rem;
 }
+:global(.dark) .form-title {
+  color: #f1f5f9;
+}
 .form-sub { font-size: 1rem; color: #42474f; }
+:global(.dark) .form-sub { color: #94a3b8; }
 
 /* Form */
 .form { display: flex; flex-direction: column; gap: 1.25rem; }
 .field { display: flex; flex-direction: column; gap: 0.4rem; }
 .field-label-row { display: flex; justify-content: space-between; align-items: center; }
 .field-label { font-size: 0.875rem; font-weight: 600; color: #161c27; letter-spacing: 0.01em; }
+:global(.dark) .field-label { color: #e2e8f0; }
 .forgot-link {
   font-size: 0.75rem;
   font-weight: 700;
@@ -377,6 +399,7 @@ const handleLogin = async () => {
   text-decoration: none;
   letter-spacing: 0.04em;
 }
+:global(.dark) .forgot-link { color: #38bdf8; }
 .forgot-link:hover { text-decoration: underline; }
 
 .input-wrap { position: relative; }
@@ -390,24 +413,37 @@ const handleLogin = async () => {
   transition: color 0.2s;
 }
 .input-wrap:focus-within .input-icon { color: #00355f; }
+:global(.dark) .input-wrap:focus-within .input-icon { color: #38bdf8; }
 
 .input {
   width: 100%;
   padding: 0.85rem 1rem 0.85rem 3rem;
   font-size: 1rem;
   font-family: inherit;
-  background: #f1f3ff;
+  background: #f1f3ff !important;
   border: 2px solid transparent;
   border-radius: 0.75rem;
-  color: #161c27;
+  color: #000000 !important;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
-.input::placeholder { color: #727780; }
+:global(.dark) .input {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+.input::placeholder { color: #727780 !important; }
+:global(.dark) .input::placeholder { color: #94a3b8 !important; }
 .input:focus {
-  background: #fff;
+  background: #fff !important;
   border-color: #00355f;
   box-shadow: 0 0 0 4px rgba(0, 53, 95, 0.08);
+  color: #000000 !important;
+}
+:global(.dark) .input:focus {
+  background: #0f172a !important;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
+  color: #ffffff !important;
 }
 .input-password { padding-right: 3rem; }
 
@@ -434,6 +470,7 @@ const handleLogin = async () => {
   flex-shrink: 0;
 }
 .remember-label { font-size: 0.875rem; color: #42474f; cursor: pointer; }
+:global(.dark) .remember-label { color: #94a3b8; }
 
 /* Error */
 .error-msg {
@@ -444,6 +481,11 @@ const handleLogin = async () => {
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
+}
+:global(.dark) .error-msg {
+  background: #450a0a;
+  border-color: #7f1d1d;
+  color: #fca5a5;
 }
 
 /* Submit */
@@ -461,7 +503,10 @@ const handleLogin = async () => {
   cursor: pointer;
   box-shadow: 0 4px 20px rgba(0, 53, 95, 0.25);
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: opacity 0.2s, transform 0.15s, background 0.2s;
+}
+:global(.dark) .btn-submit {
+  background: linear-gradient(to right, #0369a1, #0891b2);
 }
 .btn-submit:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
 .btn-submit:active:not(:disabled) { transform: scale(0.98); }
@@ -492,6 +537,8 @@ const handleLogin = async () => {
   color: #42474f;
   white-space: nowrap;
 }
+:global(.dark) .divider-text { color: #64748b; }
+:global(.dark) .divider-line { background: #334155; }
 
 /* Social */
 .social-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -506,9 +553,15 @@ const handleLogin = async () => {
   font-family: inherit;
   color: #161c27;
   cursor: pointer;
-  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s, color 0.2s, border-color 0.2s;
+}
+:global(.dark) .social-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
 }
 .social-btn:hover { background: #f1f3ff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+:global(.dark) .social-btn:hover { background: #334155; }
 .social-logo { width: 20px; height: 20px; flex-shrink: 0; }
 
 /* Sign Up Link */
@@ -518,12 +571,14 @@ const handleLogin = async () => {
   font-size: 1rem;
   color: #42474f;
 }
+:global(.dark) .signup-link { color: #94a3b8; }
 .signup-link a {
   color: #00355f;
   font-weight: 700;
   text-decoration: none;
   margin-left: 4px;
 }
+:global(.dark) .signup-link a { color: #38bdf8; }
 .signup-link a:hover { text-decoration: underline; }
 
 /* FAB */
@@ -539,7 +594,12 @@ const handleLogin = async () => {
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s, transform 0.15s;
+  transition: background 0.2s, color 0.2s, transform 0.15s, border-color 0.2s;
+}
+:global(.dark) .fab {
+  background: #1e293b;
+  border-color: #334155;
+  color: #38bdf8;
 }
 .fab:hover { background: #00355f; color: white; }
 .fab:active { transform: scale(0.9); }

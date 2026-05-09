@@ -14,6 +14,56 @@ html, body, #app {
 
 body {
   font-family: 'Plus Jakarta Sans', sans-serif;
+  @apply bg-surface text-on-surface dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200;
+}
+
+/*
+ * Dark mode semantic color overrides.
+ * Tailwind's custom color tokens (text-on-surface, text-outline-variant, etc.)
+ * are resolved at build time and do not automatically invert in dark mode.
+ * These overrides ensure all semantic text roles switch to readable light values
+ * without modifying any individual component.
+ */
+.dark {
+  /* Primary text — was #151c27 (near-black) */
+  --tw-text-on-surface: theme('colors.slate.100');
+
+  /* Muted / secondary text — was #42474f (dark grey) */
+  --tw-text-on-surface-variant: theme('colors.slate.400');
+
+  /* Hint / caption text — was #c2c7d1 (mid-grey, invisible on dark bg) */
+  --tw-text-outline-variant: theme('colors.slate.400');
+
+  /* Outline / placeholder text */
+  --tw-text-outline: theme('colors.slate.500');
+}
+
+/*
+ * Tailwind generates utility classes like .text-on-surface by reading the
+ * colors map. To make those classes respond to the .dark parent, we override
+ * the computed color directly on any element whose ancestor has .dark.
+ */
+.dark .text-on-surface          { color: #f1f5f9 !important; }
+.dark .text-on-surface-variant  { color: #94a3b8 !important; }
+.dark .text-outline-variant     { color: #94a3b8 !important; }
+.dark .text-outline             { color: #64748b !important; }
+.dark .text-on-background       { color: #f1f5f9 !important; }
+
+/* Input & form text */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark textarea,
+.dark select {
+  color: #f1f5f9;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+/* Labels */
+.dark label {
+  color: #cbd5e1;
 }
 
 .material-symbols-outlined {

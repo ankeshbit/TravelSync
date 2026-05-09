@@ -2,8 +2,8 @@
   <div v-if="isOpen" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
       <!-- Header -->
-      <div class="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 z-10">
-        <h2 class="text-xl font-bold text-on-surface">Add Expense</h2>
+      <div class="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10">
+        <h2 class="text-xl font-bold text-on-surface dark:text-slate-100">Add Expense</h2>
         <button
           @click="closeModal"
           class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
@@ -16,8 +16,8 @@
       <form @submit.prevent="handleSubmit" class="p-6 space-y-4">
         <!-- Title Input -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface mb-2">
-            Title <span class="text-error">*</span>
+          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-2">
+            Title <span class="text-error dark:text-red-400">*</span>
           </label>
           <input
             v-model="form.title"
@@ -30,8 +30,8 @@
 
         <!-- Amount Input -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface mb-2">
-            Amount <span class="text-error">*</span>
+          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-2">
+            Amount <span class="text-error dark:text-red-400">*</span>
           </label>
           <input
             v-model.number="form.amount"
@@ -39,17 +39,17 @@
             step="0.01"
             min="0"
             placeholder="0.00"
-            class="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+            class="w-full px-3 py-2 border border-outline dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:text-white"
           />
           <p v-if="errors.amount" class="text-xs text-error mt-1">{{ errors.amount }}</p>
         </div>
 
         <!-- Currency Selector -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface mb-2">Currency</label>
+          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-2">Currency</label>
           <select
             v-model="form.currency"
-            class="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+            class="w-full px-3 py-2 border border-outline dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:text-white"
           >
             <option value="INR">INR (₹)</option>
             <option value="USD">USD ($)</option>
@@ -60,12 +60,12 @@
 
         <!-- Paid By Dropdown -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface mb-2">
-            Paid By <span class="text-error">*</span>
+          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-2">
+            Paid By <span class="text-error dark:text-red-400">*</span>
           </label>
           <select
             v-model="form.paidBy"
-            class="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+            class="w-full px-3 py-2 border border-outline dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:text-white"
           >
             <option value="">Select a member...</option>
             <option v-for="member in allMembers" :key="member._id" :value="member._id">
@@ -77,20 +77,20 @@
 
         <!-- Split Among Checkboxes -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface mb-3">
-            Split Among <span class="text-error">*</span>
+          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-3">
+            Split Among <span class="text-error dark:text-red-400">*</span>
           </label>
           <div class="space-y-2 max-h-[200px] overflow-y-auto">
-            <label v-for="member in allMembers" :key="member._id" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer">
+            <label v-for="member in allMembers" :key="member._id" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low dark:hover:bg-slate-800 transition-colors cursor-pointer">
               <input
                 type="checkbox"
                 :value="member._id"
                 v-model="form.splitAmong"
-                class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                class="w-4 h-4 rounded border-gray-300 dark:border-slate-600 text-primary focus:ring-primary cursor-pointer bg-white dark:bg-slate-800"
               />
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-on-surface truncate">{{ member.name }}</p>
-                <p class="text-xs text-outline-variant truncate">{{ member.email }}</p>
+                <p class="text-sm font-medium text-on-surface dark:text-slate-200 truncate">{{ member.name }}</p>
+                <p class="text-xs text-outline-variant dark:text-slate-400 truncate">{{ member.email }}</p>
               </div>
             </label>
           </div>
@@ -159,9 +159,15 @@ const errors = ref({
 const loading = ref(false)
 
 const allMembers = computed(() => {
-  // Include owner and all members
-  const members = [props.tripOwner, ...props.members]
-  return members
+  // Include owner and all members, ensuring no duplicates by _id
+  const membersMap = new Map()
+  if (props.tripOwner && props.tripOwner._id) {
+    membersMap.set(props.tripOwner._id, props.tripOwner)
+  }
+  props.members.forEach(m => {
+    if (m && m._id) membersMap.set(m._id, m)
+  })
+  return Array.from(membersMap.values())
 })
 
 const closeModal = () => {

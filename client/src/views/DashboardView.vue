@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-surface">
+  <div class="min-h-screen bg-surface dark:bg-slate-950 transition-colors duration-200">
     <Navbar />
     <Sidebar />
 
@@ -7,10 +7,12 @@
       <!-- Header -->
       <header class="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
         <div>
-          <h1 class="font-h1 text-h1 text-on-background">My Trips</h1>
-          <p class="font-body-md text-body-md text-on-surface-variant mt-1">Manage and plan your upcoming adventures together.</p>
+          <!-- Fix: Added dark:text-slate-100 for primary text contrast -->
+          <h1 class="font-h1 text-h1 text-on-background dark:text-slate-100">My Trips</h1>
+          <!-- Fix: Added dark:text-slate-400 for muted text contrast -->
+          <p class="font-body-md text-body-md text-on-surface-variant dark:text-slate-400 mt-1">Manage and plan your upcoming adventures together.</p>
         </div>
-        <button @click="showCreateModal = true" class="bg-primary-container text-on-secondary px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-md">
+        <button @click="showCreateModal = true" class="bg-primary-container dark:bg-blue-600 text-on-secondary dark:text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-md">
           <span class="material-symbols-outlined">add</span>
           Create Trip
         </button>
@@ -18,7 +20,7 @@
 
       <!-- Loading State -->
       <div v-if="loading" class="flex justify-center items-center py-20">
-        <p class="text-lg text-on-surface-variant">Loading trips...</p>
+        <p class="text-lg text-on-surface-variant dark:text-slate-400">Loading trips...</p>
       </div>
 
       <!-- Error State -->
@@ -38,26 +40,30 @@
           />
           
           <!-- Add New Placeholder Card -->
-          <button @click="showCreateModal = true" class="border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center p-10 bg-gray-50/50 hover:bg-gray-50 transition-colors group cursor-pointer w-full h-full min-h-[240px]">
-          <div class="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-            <span class="material-symbols-outlined text-blue-900 text-3xl">add_location_alt</span>
+          <!-- Fix: Applied card bg (slate-900) and border (white/10) -->
+          <button @click="showCreateModal = true" class="border-2 border-dashed border-gray-200 dark:border-white/10 rounded-xl flex flex-col items-center justify-center p-10 bg-gray-50/50 dark:bg-slate-900/50 hover:bg-gray-50 dark:hover:bg-slate-900 transition-colors group cursor-pointer w-full h-full min-h-[240px]">
+          <div class="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <span class="material-symbols-outlined text-blue-900 dark:text-blue-400 text-3xl">add_location_alt</span>
           </div>
-          <h3 class="font-h3 text-h3 text-blue-900 mb-2">New Adventure?</h3>
-          <p class="font-body-md text-body-md text-gray-500 text-center max-w-[200px]">Start planning your next destination with friends.</p>
+          <h3 class="font-h3 text-h3 text-blue-900 dark:text-blue-300 mb-2">New Adventure?</h3>
+          <p class="font-body-md text-body-md text-gray-500 dark:text-slate-400 text-center max-w-[200px]">Start planning your next destination with friends.</p>
         </button>
         </section>
 
         <!-- Empty State -->
-        <section v-if="!loading && trips.length === 0" class="mt-20 py-20 border-t border-gray-100">
+        <!-- Fix: Applied border-white/10 for dark mode divider -->
+        <section v-if="!loading && trips.length === 0" class="mt-20 py-20 border-t border-gray-100 dark:border-white/10 transition-colors duration-200">
           <div class="flex flex-col items-center text-center">
-            <div class="w-32 h-32 bg-surface-container-low rounded-full flex items-center justify-center mb-6">
-              <span class="material-symbols-outlined text-6xl text-outline-variant">travel_explore</span>
+            <div class="w-32 h-32 bg-surface-container-low dark:bg-slate-900 rounded-full flex items-center justify-center mb-6">
+              <span class="material-symbols-outlined text-6xl text-outline-variant dark:text-slate-600">travel_explore</span>
             </div>
-            <h2 class="font-h2 text-h2 text-on-background mb-4">No trips yet</h2>
-            <p class="font-body-lg text-body-lg text-on-surface-variant max-w-3xl mb-8">
+            <!-- Fix: Added dark:text-slate-100 for header -->
+            <h2 class="font-h2 text-h2 text-on-background dark:text-slate-100 mb-4">No trips yet</h2>
+            <!-- Fix: Added dark:text-slate-400 for description -->
+            <p class="font-body-lg text-body-lg text-on-surface-variant dark:text-slate-400 max-w-3xl mb-8">
               Your journey begins here. Create your first trip itinerary and invite your travel companions to collaborate in real-time.
             </p>
-            <button @click="showCreateModal = true" class="bg-primary-container text-on-secondary px-8 py-3 rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all">
+            <button @click="showCreateModal = true" class="bg-primary-container dark:bg-blue-600 text-on-secondary dark:text-white px-8 py-3 rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all shadow-lg">
               Start Planning
             </button>
           </div>

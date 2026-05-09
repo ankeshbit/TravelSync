@@ -9,7 +9,7 @@
 
       <!-- Modal Content -->
       <div 
-        class="relative bg-surface-container-lowest w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up"
+        class="relative bg-surface-container-lowest dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up"
         role="dialog"
         aria-modal="true"
       >
@@ -36,12 +36,12 @@
 
           <!-- Trip Name -->
           <div class="space-y-1.5">
-            <label class="block font-label-sm text-label-sm text-on-surface" for="trip-name">
-                Trip Name <span class="text-error">*</span>
+            <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="trip-name">
+                Trip Name <span class="text-error dark:text-red-400">*</span>
             </label>
             <input 
               v-model="form.name" 
-              class="w-full px-4 py-2.5 bg-surface border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none" 
+              class="w-full px-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white" 
               id="trip-name" 
               placeholder="e.g., European Summer" 
               required 
@@ -51,14 +51,14 @@
 
           <!-- Destination -->
           <div class="space-y-1.5">
-            <label class="block font-label-sm text-label-sm text-on-surface" for="destination">
-                Destination <span class="text-error">*</span>
+            <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="destination">
+                Destination <span class="text-error dark:text-red-400">*</span>
             </label>
             <div class="relative">
               <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline" data-icon="location_on">location_on</span>
               <input 
                 v-model="form.destination" 
-                class="w-full pl-10 pr-4 py-2.5 bg-surface border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none" 
+                class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white" 
                 id="destination" 
                 placeholder="e.g., Paris, France" 
                 required 
@@ -70,14 +70,14 @@
           <!-- Dates Grid -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label class="block font-label-sm text-label-sm text-on-surface" for="start-date">
-                  Start Date <span class="text-error">*</span>
+              <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="start-date">
+                  Start Date <span class="text-error dark:text-red-400">*</span>
               </label>
               <div class="relative">
                 <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline" data-icon="calendar_today">calendar_today</span>
                 <input 
                   v-model="form.startDate" 
-                  class="w-full pl-10 pr-4 py-2.5 bg-surface border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none" 
+                  class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white" 
                   id="start-date" 
                   required 
                   type="date"
@@ -85,14 +85,14 @@
               </div>
             </div>
             <div class="space-y-1.5">
-              <label class="block font-label-sm text-label-sm text-on-surface" for="end-date">
-                  End Date <span class="text-error">*</span>
+              <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="end-date">
+                  End Date <span class="text-error dark:text-red-400">*</span>
               </label>
               <div class="relative">
                 <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline" data-icon="event">event</span>
                 <input 
                   v-model="form.endDate" 
-                  class="w-full pl-10 pr-4 py-2.5 bg-surface border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none" 
+                  class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white" 
                   id="end-date" 
                   required 
                   type="date"
@@ -106,10 +106,10 @@
           </div>
 
           <!-- Actions -->
-          <div class="pt-4 border-t border-outline-variant flex flex-col sm:flex-row-reverse items-center gap-3 mt-6">
+          <div class="pt-4 border-t border-outline-variant dark:border-slate-700 flex flex-col sm:flex-row-reverse items-center gap-3 mt-6">
             <button 
               :disabled="loading" 
-              class="w-full sm:w-auto px-6 py-2.5 bg-primary-container text-on-secondary rounded-lg font-h3 text-h3 hover:bg-primary hover:text-white transition-all active:scale-95 shadow-sm disabled:opacity-70 flex items-center justify-center min-w-[120px]" 
+              class="w-full sm:w-auto px-6 py-2.5 bg-primary-container dark:bg-blue-600 text-on-secondary dark:text-white rounded-lg font-h3 text-h3 hover:bg-primary hover:text-white transition-all active:scale-95 shadow-sm disabled:opacity-70 flex items-center justify-center min-w-[120px]" 
               type="submit"
             >
               <span v-if="loading" class="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full mr-2"></span>
@@ -117,7 +117,7 @@
             </button>
             <button 
               @click="closeModal" 
-              class="w-full sm:w-auto px-6 py-2.5 bg-transparent border border-outline-variant text-on-surface-variant rounded-lg font-h3 text-h3 hover:bg-surface-variant transition-all active:scale-95" 
+              class="w-full sm:w-auto px-6 py-2.5 bg-transparent border border-outline-variant dark:border-slate-700 text-on-surface-variant dark:text-slate-300 rounded-lg font-h3 text-h3 hover:bg-surface-variant dark:hover:bg-slate-800 transition-all active:scale-95" 
               type="button"
             >
               Cancel
@@ -160,8 +160,7 @@ const form = reactive({
 // Reset form when opened
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
-    form.name = '';
-    // Prefill destination if provided from parent
+    form.name = props.initialDestination ? `Trip to ${props.initialDestination}` : '';
     form.destination = props.initialDestination || '';
     form.startDate = '';
     form.endDate = '';

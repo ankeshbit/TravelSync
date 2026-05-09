@@ -28,7 +28,7 @@ router.post('/', verifyToken, async (req, res) => {
       ownerId: req.userId,
       members: [req.userId]
     });
-    
+
     const savedTrip = await newTrip.save();
     res.status(201).json(savedTrip);
   } catch (err) {
@@ -41,11 +41,11 @@ const checkTripMembership = async (req, res, next) => {
   try {
     const trip = await Trip.findById(req.params.tripId);
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
-    
+
     if (trip.ownerId.toString() !== req.userId && !trip.members.includes(req.userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
-    
+
     req.trip = trip; // Attach trip to request
     next();
   } catch (err) {
@@ -60,12 +60,12 @@ router.get('/:tripId/members', verifyToken, async (req, res) => {
   try {
     const trip = await Trip.findById(req.params.tripId);
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
-    
+
     // Check access — only trip members can view members
     if (trip.ownerId.toString() !== req.userId && !trip.members.includes(req.userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
-    
+
     // Populate members array with name and email
     const populatedTrip = await Trip.findById(req.params.tripId).populate('members', 'name email').populate('ownerId', 'name email');
     res.json(populatedTrip.members);
@@ -81,35 +81,35 @@ router.post('/:tripId/members', verifyToken, async (req, res) => {
     if (!email) {
       return res.status(400).json({ message: 'Email is required' });
     }
-    
+
     const trip = await Trip.findById(req.params.tripId);
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
-    
+
     // Only owner can invite members
     if (trip.ownerId.toString() !== req.userId) {
       return res.status(403).json({ message: 'Only the trip owner can invite members' });
     }
-    
+
     // Find user by email
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(404).json({ message: 'No user found with this email' });
     }
-    
+
     // Check if user is already a member
     if (trip.members.includes(user._id)) {
       return res.status(400).json({ message: 'User is already a member' });
     }
-    
+
     // Check if user is the owner
     if (trip.ownerId.toString() === user._id.toString()) {
       return res.status(400).json({ message: 'Owner is already part of the trip' });
     }
-    
+
     // Add user to members array
     trip.members.push(user._id);
     await trip.save();
-    
+
     // Return updated trip with populated members
     const updatedTrip = await Trip.findById(req.params.tripId).populate('members', 'name email').populate('ownerId', 'name email');
     res.status(200).json(updatedTrip);
@@ -123,21 +123,21 @@ router.delete('/:tripId/members/:userId', verifyToken, async (req, res) => {
   try {
     const trip = await Trip.findById(req.params.tripId);
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
-    
+
     // Only owner can remove members
     if (trip.ownerId.toString() !== req.userId) {
       return res.status(403).json({ message: 'Only the trip owner can remove members' });
     }
-    
+
     // Cannot remove the owner
     if (trip.ownerId.toString() === req.params.userId) {
       return res.status(400).json({ message: 'Cannot remove the trip owner' });
     }
-    
+
     // Remove user from members array
     trip.members = trip.members.filter(memberId => memberId.toString() !== req.params.userId);
     await trip.save();
-    
+
     // Return updated trip with populated members
     const updatedTrip = await Trip.findById(req.params.tripId).populate('members', 'name email').populate('ownerId', 'name email');
     res.status(200).json(updatedTrip);
@@ -161,11 +161,18 @@ router.get('/:tripId/places', verifyToken, checkTripMembership, async (req, res)
 router.post('/:tripId/places', verifyToken, checkTripMembership, async (req, res) => {
   try {
     const { name, address, lat, lng, dayNumber, orderIndex } = req.body;
-    
+
     const newPlace = { name, address, lat, lng, dayNumber, orderIndex };
     req.trip.places.push(newPlace);
-    
+
     await req.trip.save();
+
+    // Broadcast itinerary update
+    req.io.to(`trip:${req.params.tripId}`).emit('itinerary_updated', {
+      tripId: req.params.tripId,
+      itinerary: req.trip.places
+    });
+
     // Return the newly created place (the last one in the array)
     res.status(201).json(req.trip.places[req.trip.places.length - 1]);
   } catch (err) {
@@ -178,10 +185,16 @@ router.delete('/:tripId/places/:placeId', verifyToken, checkTripMembership, asyn
   try {
     const placeIndex = req.trip.places.findIndex(p => p._id.toString() === req.params.placeId);
     if (placeIndex === -1) return res.status(404).json({ message: 'Place not found' });
-    
+
     req.trip.places.splice(placeIndex, 1);
     await req.trip.save();
-    
+
+    // Broadcast itinerary update
+    req.io.to(`trip:${req.params.tripId}`).emit('itinerary_updated', {
+      tripId: req.params.tripId,
+      itinerary: req.trip.places
+    });
+
     res.json({ message: 'Place deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -193,10 +206,16 @@ router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership, 
   try {
     const place = req.trip.places.id(req.params.placeId);
     if (!place) return res.status(404).json({ message: 'Place not found' });
-    
+
     place.note = req.body.note;
     await req.trip.save();
-    
+
+    // Broadcast itinerary update
+    req.io.to(`trip:${req.params.tripId}`).emit('itinerary_updated', {
+      tripId: req.params.tripId,
+      itinerary: req.trip.places
+    });
+
     res.json(place);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -207,7 +226,7 @@ router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership, 
 router.patch('/:tripId/places/reorder', verifyToken, checkTripMembership, async (req, res) => {
   try {
     const updates = req.body; // Array of { placeId, dayNumber, orderIndex }
-    
+
     updates.forEach(update => {
       const place = req.trip.places.id(update.placeId);
       if (place) {
@@ -215,7 +234,7 @@ router.patch('/:tripId/places/reorder', verifyToken, checkTripMembership, async 
         if (update.orderIndex !== undefined) place.orderIndex = update.orderIndex;
       }
     });
-    
+
     // Sort the places array based on dayNumber and orderIndex just to keep the DB tidy
     req.trip.places.sort((a, b) => {
       if (a.dayNumber === b.dayNumber) {
@@ -225,6 +244,13 @@ router.patch('/:tripId/places/reorder', verifyToken, checkTripMembership, async 
     });
 
     await req.trip.save();
+
+    // Broadcast itinerary update
+    req.io.to(`trip:${req.params.tripId}`).emit('itinerary_updated', {
+      tripId: req.params.tripId,
+      itinerary: req.trip.places
+    });
+
     res.json(req.trip.places);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -294,6 +320,7 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership, async (req, r
     const addedExpense = populatedTrip.expenses[populatedTrip.expenses.length - 1];
     res.status(201).json(addedExpense);
   } catch (err) {
+    require('fs').writeFileSync('expense_error.log', err.stack || err.message);
     res.status(500).json({ message: err.message });
   }
 });
@@ -306,7 +333,7 @@ router.delete('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership, 
     if (expenseIndex === -1) return res.status(404).json({ message: 'Expense not found' });
 
     const expense = req.trip.expenses[expenseIndex];
-    
+
     // Check if user is the payer or trip owner
     if (expense.paidBy.toString() !== req.userId && req.trip.ownerId.toString() !== req.userId) {
       return res.status(403).json({ message: 'Only the expense creator or trip owner can delete' });
@@ -359,14 +386,16 @@ router.get('/:tripId/expenses/balances', verifyToken, checkTripMembership, async
 // GET /api/trips/:id - Fetch single trip
 router.get('/:id', verifyToken, async (req, res) => {
   try {
-    const trip = await Trip.findById(req.params.id).populate('ownerId', 'name email');
+    const trip = await Trip.findById(req.params.id)
+      .populate('ownerId', 'name email')
+      .populate('members', 'name email');
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
-    
+
     // Check access
     if (trip.ownerId._id.toString() !== req.userId && !trip.members.includes(req.userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
-    
+
     res.json(trip);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -378,7 +407,7 @@ router.put('/:id', verifyToken, async (req, res) => {
   try {
     const trip = await Trip.findById(req.params.id);
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
-    
+
     // Only owner can update details currently
     if (trip.ownerId.toString() !== req.userId) {
       return res.status(403).json({ message: 'Access denied' });

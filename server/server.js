@@ -4,7 +4,11 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
+const path = require('path');
+const fs = require('fs');
 const { errorHandler } = require('./middleware/errorHandler');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const isProduction = process.env.NODE_ENV === 'production';
 const mongoUri = process.env.MONGO_URI?.trim();
@@ -15,9 +19,13 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || (!isProduction ? 'travelsync-
 process.env.ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
 
 const app = express();
+const server = http.createServer(app);
 
 // ─── Security Middleware ─────────────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,          // Don't block cross-origin images in dev
+  crossOriginResourcePolicy: false       // Allow images to be loaded cross-origin
+}));
 
 // ─── CORS Configuration ──────────────────────────────────────────────────────
 const corsOptions = {
@@ -36,6 +44,36 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// ─── Static Uploads ───────────────────────────────────────────────────────────
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
+
+// ─── Socket.IO Setup ─────────────────────────────────────────────────────────
+const io = new Server(server, {
+  cors: corsOptions
+});
+
+io.on('connection', (socket) => {
+  console.log('New client connected:', socket.id);
+
+  socket.on('join_trip', (tripId) => {
+    const roomName = `trip:${tripId}`;
+    socket.join(roomName);
+    console.log(`Socket ${socket.id} joined room ${roomName}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+// Attach io to req for use in routes
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
 const authLimiter = rateLimit({
@@ -93,7 +131,7 @@ app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
   console.log(`✓ CORS origin: ${corsOptions.origin}`);
 });

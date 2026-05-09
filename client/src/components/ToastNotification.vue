@@ -5,10 +5,10 @@
         v-for="toast in visibleToasts"
         :key="toast.id"
         :class="[
-          'flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium min-w-[300px] animate-in fade-in slide-in-from-top-4',
-          toast.type === 'success' && 'bg-green-100 text-green-900 border border-green-300',
-          toast.type === 'error' && 'bg-red-100 text-red-900 border border-red-300',
-          toast.type === 'info' && 'bg-blue-100 text-blue-900 border border-blue-300'
+          'flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium min-w-[300px] animate-in fade-in slide-in-from-top-4 transition-colors duration-200',
+          toast.type === 'success' && 'bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-300 border border-green-300 dark:border-green-800',
+          toast.type === 'error' && 'bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-300 border border-red-300 dark:border-red-800',
+          toast.type === 'info' && 'bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
         ]"
       >
         <span class="material-symbols-outlined text-lg">
