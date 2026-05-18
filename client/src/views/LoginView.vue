@@ -165,8 +165,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api.js'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const form = ref({ email: '', password: '', remember: false })
 const loading = ref(false)
 const error = ref('')
@@ -183,8 +185,10 @@ const handleLogin = async () => {
       email: form.value.email,
       password: form.value.password,
     })
-    localStorage.setItem('token', res.data.token)
-    localStorage.setItem('user', JSON.stringify(res.data.user))
+    authStore.setSession({
+      accessToken: res.data.accessToken || res.data.token,
+      user: res.data.user,
+    })
     router.push('/dashboard')
   } catch (err) {
     error.value = err.response?.data?.message || 'Login failed. Please check your credentials.'

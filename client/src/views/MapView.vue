@@ -10,6 +10,7 @@
         </nav>
       </div>
       <div class="flex items-center gap-4">
+        <TripPresence :activeMembers="activeMembers" />
         <!-- Not replacing user profile, keep static for now -->
         <button class="material-symbols-outlined text-outline hover:bg-gray-50 p-2 rounded-full transition-colors">notifications</button>
         <button class="material-symbols-outlined text-outline hover:bg-gray-50 p-2 rounded-full transition-colors">settings</button>
@@ -68,15 +69,16 @@
           </div>
 
           <!-- MapContainer -->
-          <div class="flex-1 bg-surface-variant/30 rounded-xl border border-outline-variant overflow-hidden relative shadow-sm min-h-[400px]">
-            <div v-if="!apiKey" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+          <div class="flex-1 bg-surface-variant/30 rounded-2xl border border-outline-variant dark:border-slate-700 overflow-hidden relative shadow-md min-h-[400px]">
+            <div v-if="!apiKey" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
               <span class="material-symbols-outlined text-4xl text-error mb-2">map</span>
               <h3 class="text-lg font-bold text-primary">Map API Key Missing</h3>
               <p class="text-sm text-outline max-w-xs">Please ensure VITE_GOOGLE_MAPS_KEY is set in your .env file and restart the development server.</p>
             </div>
-            <div ref="mapContainer" class="w-full h-full"></div>
             
-            <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-lg border border-outline-variant dark:border-slate-700 flex items-center gap-3 transition-colors duration-200">
+            <div ref="mapContainer" class="absolute inset-0 z-0"></div>
+            
+            <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-outline-variant dark:border-slate-700 flex items-center gap-3 transition-colors duration-200 z-10">
               <div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
               <span class="text-xs font-semibold text-primary uppercase tracking-wider">Viewing {{ placesStore.places.length }} locations</span>
             </div>
@@ -118,12 +120,22 @@
         </section>
 
         <!-- Right Column: ItineraryPanel -->
-        <aside class="w-full md:w-[360px] bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-800 flex flex-col overflow-hidden transition-colors duration-200">
+        <aside class="w-full md:w-[360px] bg-white dark:bg-slate-900 flex flex-col overflow-hidden transition-colors duration-200">
           <div class="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
             <h2 class="font-h2 text-h2 text-primary">Itinerary</h2>
-            <div class="flex items-center gap-1.5" v-if="syncActive" title="Live sync enabled">
-              <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              <span class="text-[11px] font-bold text-green-600 uppercase tracking-wider">Live</span>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5" v-if="syncActive" title="Live sync enabled">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span class="text-[11px] font-bold text-green-600 uppercase tracking-wider">Live</span>
+              </div>
+              <button
+                @click="showAiPlanner = true"
+                title="Generate AI itinerary"
+                style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:linear-gradient(135deg,#0ea5e9,#4f46e5);color:#fff;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25);flex-shrink:0"
+              >
+                <span class="material-symbols-outlined" style="font-size:16px;line-height:1">auto_awesome</span>
+                AI Plan
+              </button>
             </div>
           </div>
           <div class="flex-1 overflow-y-auto p-4 space-y-8 relative">
@@ -198,6 +210,14 @@
         </div>
       </div>
     </div>
+
+    <!-- AI Planner Modal -->
+    <AiPlannerModal
+      v-model:isOpen="showAiPlanner"
+      :tripId="tripId"
+      :initialDestination="trip?.destination || ''"
+      :tripDaysCount="tripDaysCount"
+    />
   </div>
 </template>
 
@@ -207,9 +227,11 @@ import { useRoute } from 'vue-router';
 import { usePlacesStore } from '../stores/places';
 import api from '../api';
 import draggable from 'vuedraggable';
-import { Loader } from '@googlemaps/js-api-loader';
-import { socket } from '../services/socket';
+import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 import { useDarkMode } from '../composables/useDarkMode';
+import { useSocket } from '../composables/useSocket';
+import AiPlannerModal from '../components/AiPlannerModal.vue';
+import TripPresence from '../components/TripPresence.vue';
 
 const route = useRoute();
 const tripId = route.params.tripId;
@@ -218,18 +240,19 @@ const placesStore = usePlacesStore();
 const trip = ref(null);
 const searchInput = ref(null);
 const mapContainer = ref(null);
-const syncActive = ref(false);
+const syncActive = ref(true);
 const { isDarkMode } = useDarkMode();
+const { activeMembers } = useSocket(tripId);
 
 // Modal state
 const showDayModal = ref(false);
 const pendingPlace = ref(null);
 const selectedDay = ref(1);
+const showAiPlanner = ref(false);
 
 const noteText = ref('');
 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 let map = null;
-let loader = null;
 let markers = [];
 
 const tripDaysCount = computed(() => {
@@ -255,15 +278,15 @@ const initMap = async () => {
   }
 
   try {
-    loader = new Loader({
+    setOptions({
       apiKey: apiKey,
       version: "weekly",
       libraries: ["places"]
     });
 
     const [{ Map }, { Autocomplete }] = await Promise.all([
-      loader.importLibrary("maps"),
-      loader.importLibrary("places")
+      importLibrary("maps"),
+      importLibrary("places")
     ]);
 
     // Default center
@@ -296,8 +319,7 @@ const initMap = async () => {
       styles: isDarkMode.value ? darkMapStyle : [],
       mapTypeControl: false,
       streetViewControl: false,
-      fullscreenControl: false,
-      mapId: 'TRAVEL_SYNC_MAP' // Optional: needed for advanced markers
+      fullscreenControl: false
     });
 
     watch(isDarkMode, (newVal) => {
@@ -337,10 +359,10 @@ const initMap = async () => {
 };
 
 const updateMarkers = async () => {
-  if (!map || !loader) return;
+  if (!map) return;
   
   try {
-    const { Marker } = await loader.importLibrary("marker");
+    const { Marker } = await importLibrary("marker");
     
     // Clear old markers
     markers.forEach(m => m.setMap(null));
@@ -472,31 +494,11 @@ onMounted(async () => {
   // Set initial markers
   updateMarkers();
 
-  // Socket.IO Setup for real-time sync
-  socket.connect();
-  socket.emit('join_trip', tripId);
-  syncActive.value = true;
-
-  socket.on('itinerary_updated', (data) => {
-    if (data.tripId === tripId) {
-      placesStore.places = data.itinerary;
-      // Re-selection logic if selected place is modified/deleted
-      if (placesStore.selectedPlace) {
-        const stillExists = placesStore.places.find(p => p._id === placesStore.selectedPlace._id);
-        if (!stillExists) {
-          placesStore.closeDetailPanel();
-        } else {
-          placesStore.selectedPlace = stillExists;
-        }
-      }
-    }
-  });
+  // socket is handled by useSocket
 });
 
 onUnmounted(() => {
-  socket.off('itinerary_updated');
-  socket.disconnect();
-  syncActive.value = false;
+  // socket cleanup is handled by useSocket
 });
 
 </script>

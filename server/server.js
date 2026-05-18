@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
@@ -43,6 +44,7 @@ const corsOptions = {
   credentials: true,
 };
 app.use(cors(corsOptions));
+app.use(cookieParser());
 app.use(express.json());
 
 // ─── Static Uploads ───────────────────────────────────────────────────────────
@@ -51,23 +53,8 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(uploadsDir));
 
 // ─── Socket.IO Setup ─────────────────────────────────────────────────────────
-const io = new Server(server, {
-  cors: corsOptions
-});
-
-io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
-
-  socket.on('join_trip', (tripId) => {
-    const roomName = `trip:${tripId}`;
-    socket.join(roomName);
-    console.log(`Socket ${socket.id} joined room ${roomName}`);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
-});
+const { setupSocket } = require('./socket');
+const io = setupSocket(server, corsOptions);
 
 // Attach io to req for use in routes
 app.use((req, res, next) => {
@@ -119,7 +106,7 @@ app.use('/api/trips', require('./routes/trips'));
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     success: false,
     message: 'Route not found',
     code: 'NOT_FOUND'

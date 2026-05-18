@@ -151,8 +151,10 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api.js'
 import OtpModal from '../components/OtpModal.vue'
+import { useAuthStore } from '../stores/auth'
 
 const router  = useRouter()
+const authStore = useAuthStore()
 const form    = ref({ name: '', email: '', password: '', confirmPassword: '', terms: false })
 const loading = ref(false)
 const error   = ref('')
@@ -193,8 +195,10 @@ const handleOtpVerified = async () => {
       password: form.value.password,
       otpVerified: true,
     })
-    localStorage.setItem('token', res.data.token)
-    localStorage.setItem('user', JSON.stringify(res.data.user))
+    authStore.setSession({
+      accessToken: res.data.accessToken || res.data.token,
+      user: res.data.user,
+    })
     router.push('/dashboard')
   } catch (err) {
     error.value = err.response?.data?.message || 'Registration failed. Please try again.'

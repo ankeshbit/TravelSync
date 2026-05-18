@@ -6,7 +6,7 @@
       <Sidebar />
 
       <!-- Main Content Canvas -->
-      <main class="flex-1 md:ml-64 p-4 md:p-6 pb-20 w-full">
+      <main class="flex-1 md:ml-64 p-4 md:p-6 pb-20">
         <!-- Page Header -->
         <section v-if="!loading && trip" class="mb-lg">
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -14,13 +14,16 @@
               <h1 class="text-3xl font-bold text-on-surface dark:text-slate-100">{{ trip.name }} - Expenses</h1>
               <p class="text-outline-variant dark:text-slate-400 mt-1">Track and split expenses for this trip</p>
             </div>
-            <button
-              @click="() => { error = ''; showAddExpenseModal = true }"
-              class="bg-primary text-on-primary px-6 py-2 rounded-lg font-semibold flex items-center gap-2 hover:opacity-90 transition-opacity self-start md:self-auto"
-            >
-              <span class="material-symbols-outlined">add</span>
-              Add Expense
-            </button>
+            <div class="flex items-center gap-4">
+              <TripPresence :activeMembers="activeMembers" />
+              <button
+                @click="() => { error = ''; showAddExpenseModal = true }"
+                class="bg-primary text-on-primary px-6 py-2 rounded-lg font-semibold flex items-center gap-2 hover:opacity-90 transition-opacity self-start md:self-auto"
+              >
+                <span class="material-symbols-outlined">add</span>
+                Add Expense
+              </button>
+            </div>
           </div>
         </section>
 
@@ -250,9 +253,12 @@ import { useExpensesStore } from '../stores/expenses'
 import Navbar from '../components/Navbar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import AddExpenseModal from '../components/AddExpenseModal.vue'
+import { useSocket } from '../composables/useSocket'
+import TripPresence from '../components/TripPresence.vue'
 
 const route = useRoute()
 const expensesStore = useExpensesStore()
+const { activeMembers } = useSocket(route.params.tripId)
 
 const trip = ref(null)
 const loading = ref(true)

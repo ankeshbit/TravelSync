@@ -6,7 +6,7 @@
       <Sidebar />
 
       <!-- Main Content Canvas -->
-      <main class="flex-1 md:ml-64 p-4 md:p-6 pb-20 w-full">
+      <main class="flex-1 md:ml-64 p-4 md:p-6 pb-20">
         <!-- Hero Header Section -->
         <section v-if="!loading && trip" class="relative rounded-xl overflow-hidden mb-lg border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 transition-colors duration-200">
           <div class="h-48 md:h-64 w-full relative">
@@ -26,10 +26,20 @@
                   </span>
                 </div>
               </div>
-              <button v-if="isCreator" @click="$router.push(`/trips/${trip._id}/edit`)" class="bg-white dark:bg-slate-800 text-primary dark:text-blue-400 px-6 py-2 rounded-lg font-semibold flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors shadow-lg active:scale-95 duration-150">
-                <span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span>
-                Edit
-              </button>
+              <div class="flex items-center gap-3">
+                <button
+                  @click="showAiPlanner = true"
+                  style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:linear-gradient(135deg,#0ea5e9,#4f46e5);color:#fff;font-size:13px;font-weight:700;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);flex-shrink:0"
+                  title="Generate AI itinerary"
+                >
+                  <span class="material-symbols-outlined" style="font-size:18px;line-height:1">auto_awesome</span>
+                  AI Plan
+                </button>
+                <button v-if="isCreator" @click="$router.push(`/trips/${trip._id}/edit`)" class="bg-white dark:bg-slate-800 text-primary dark:text-blue-400 px-6 py-2 rounded-lg font-semibold flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors shadow-lg active:scale-95 duration-150">
+                  <span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span>
+                  Edit
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -187,6 +197,14 @@
         </div>
       </main>
     </div>
+
+    <!-- AI Planner Modal -->
+    <AiPlannerModal
+      v-model:isOpen="showAiPlanner"
+      :tripId="trip?._id || ''"
+      :initialDestination="trip?.destination || ''"
+      :tripDaysCount="tripDaysCount"
+    />
   </div>
 </template>
 
@@ -197,6 +215,7 @@ import api from '../api';
 import { useTripsStore } from '../stores/trips';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
+import AiPlannerModal from '../components/AiPlannerModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -207,6 +226,15 @@ const loading = ref(true);
 const error = ref('');
 const inviteEmail = ref('');
 const memberSuccessMessage = ref('');
+const showAiPlanner = ref(false);
+
+const tripDaysCount = computed(() => {
+  if (!trip.value) return 3;
+  const start = new Date(trip.value.startDate);
+  const end = new Date(trip.value.endDate);
+  const diff = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24)) + 1;
+  return diff > 0 ? diff : 1;
+});
 
 const fetchTrip = async () => {
   try {

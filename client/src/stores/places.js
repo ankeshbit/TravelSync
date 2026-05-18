@@ -40,7 +40,9 @@ export const usePlacesStore = defineStore('places', {
     async addPlace(tripId, placeData) {
       try {
         const response = await api.post(`/trips/${tripId}/places`, placeData)
-        this.places.push(response.data)
+        if (!this.places.some(p => p._id === response.data._id)) {
+          this.places.push(response.data)
+        }
         return response.data
       } catch (err) {
         console.error('Error adding place:', err)

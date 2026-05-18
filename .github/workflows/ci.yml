@@ -1,0 +1,83 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./server
+        run: npm install
+
+      - name: Run ESLint
+        working-directory: ./server
+        run: npm run lint
+
+      - name: Run tests
+        working-directory: ./server
+        run: npm test
+
+      - name: Build Docker image
+        working-directory: ./server
+        run: docker build -t travelsync-api:latest .
+
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./client
+        run: npm install
+
+      - name: Run build
+        working-directory: ./client
+        run: npm run build
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Railway deployment
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_WEBHOOK_URL }}" \
+            ${{ secrets.RAILWAY_WEBHOOK_URL }}
+
+      - name: Trigger Vercel deployment
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "{}" \
+            ${{ secrets.VERCEL_WEBHOOK_URL }}
+
+      - name: Notify deployment success
+        run: echo "✅ Deployment triggered successfully to Railway and Vercel"

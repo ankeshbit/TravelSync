@@ -3,7 +3,7 @@
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] w-full">
+    <main class="md:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)]">
       <!-- Header -->
       <section class="mb-lg">
         <div>
@@ -404,6 +404,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useToastStore } from '../stores/toast';
+import { useAuthStore } from '../stores/auth';
 import { useDarkMode } from '../composables/useDarkMode';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
@@ -426,6 +427,7 @@ const profilePicture = ref(_storedPicture);
 
 const router = useRouter();
 const toastStore = useToastStore();
+const authStore = useAuthStore();
 const { isDarkMode, toggleDarkMode } = useDarkMode();
 
 const activeTab = ref('profile');
@@ -625,9 +627,11 @@ const savePreferences = () => {
   toastStore.showToast('Preferences saved', 'success');
 };
 
-const handleLogout = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
+const handleLogout = async () => {
+  try {
+    await api.post('/auth/logout');
+  } catch {}
+  authStore.clearAuth();
   router.push('/login');
   toastStore.showToast('You have been logged out', 'info');
 };
@@ -637,8 +641,10 @@ const handleDeleteAccount = async () => {
   loadingDelete.value = true;
   try {
     await api.delete('/auth/me', { data: { otpVerified: true } });
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    try {
+      await api.post('/auth/logout');
+    } catch {}
+    authStore.clearAuth();
     toastStore.showToast('Your account has been deleted.', 'info');
     router.push('/login');
   } catch (err) {

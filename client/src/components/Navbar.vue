@@ -49,9 +49,12 @@
 import { useRoute, useRouter } from 'vue-router';
 import { computed } from 'vue';
 import ThemeToggle from './ThemeToggle.vue';
+import api from '../api';
+import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 
 const isActive = (path) => {
   if (path === '/dashboard') {
@@ -87,9 +90,11 @@ const userPicture = computed(() => {
   return '';
 });
 
-const handleLogout = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
+const handleLogout = async () => {
+  try {
+    await api.post('/auth/logout');
+  } catch {}
+  authStore.clearAuth();
   router.push('/login');
 };
 </script>

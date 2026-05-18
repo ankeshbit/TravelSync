@@ -3,7 +3,7 @@
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] w-full">
+    <main class="md:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)]">
       <!-- Header -->
       <section class="mb-lg">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

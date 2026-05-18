@@ -6,8 +6,20 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   picture: { type: String, default: '' },
+  refreshTokens: {
+    type: [
+      {
+        tokenHash: { type: String, required: true },
+        expiresAt: { type: Date, required: true },
+        createdAt: { type: Date, default: Date.now }
+      }
+    ],
+    default: []
+  },
   createdAt: { type: Date, default: Date.now }
 });
+
+UserSchema.index({ 'refreshTokens.tokenHash': 1 });
 
 // Hash password before saving
 // NOTE: Mongoose v9 async pre-hooks must NOT call next() — it's handled automatically

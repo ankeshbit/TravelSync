@@ -37,7 +37,9 @@ export const useExpensesStore = defineStore('expenses', {
       this.error = null
       try {
         const response = await api.post(`/trips/${tripId}/expenses`, expenseData)
-        this.expenses.push(response.data)
+        if (!this.expenses.some(e => e._id === response.data._id)) {
+          this.expenses.push(response.data)
+        }
         return response.data
       } catch (err) {
         this.error = err.response?.data?.message || 'Failed to add expense'

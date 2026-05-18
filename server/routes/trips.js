@@ -3,6 +3,8 @@ const router = express.Router();
 const Trip = require('../models/Trip');
 const User = require('../models/User');
 const { verifyToken } = require('../middleware/auth');
+const Groq = require('groq-sdk');
+const { getIO } = require('../socket');
 
 // GET /api/trips - Fetch all trips for the logged-in user
 router.get('/', verifyToken, async (req, res) => {
@@ -112,6 +114,9 @@ router.post('/:tripId/members', verifyToken, async (req, res) => {
 
     // Return updated trip with populated members
     const updatedTrip = await Trip.findById(req.params.tripId).populate('members', 'name email').populate('ownerId', 'name email');
+    
+    getIO().to(`trip:${req.params.tripId}`).emit('member:joined', user);
+
     res.status(200).json(updatedTrip);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -167,14 +172,13 @@ router.post('/:tripId/places', verifyToken, checkTripMembership, async (req, res
 
     await req.trip.save();
 
+    const createdPlace = req.trip.places[req.trip.places.length - 1];
+    
     // Broadcast itinerary update
-    req.io.to(`trip:${req.params.tripId}`).emit('itinerary_updated', {
-      tripId: req.params.tripId,
-      itinerary: req.trip.places
-    });
+    getIO().to(`trip:${req.params.tripId}`).emit('place:added', createdPlace);
 
     // Return the newly created place (the last one in the array)
-    res.status(201).json(req.trip.places[req.trip.places.length - 1]);
+    res.status(201).json(createdPlace);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -190,10 +194,7 @@ router.delete('/:tripId/places/:placeId', verifyToken, checkTripMembership, asyn
     await req.trip.save();
 
     // Broadcast itinerary update
-    req.io.to(`trip:${req.params.tripId}`).emit('itinerary_updated', {
-      tripId: req.params.tripId,
-      itinerary: req.trip.places
-    });
+    getIO().to(`trip:${req.params.tripId}`).emit('place:deleted', { placeId: req.params.placeId });
 
     res.json({ message: 'Place deleted' });
   } catch (err) {
@@ -211,10 +212,7 @@ router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership, 
     await req.trip.save();
 
     // Broadcast itinerary update
-    req.io.to(`trip:${req.params.tripId}`).emit('itinerary_updated', {
-      tripId: req.params.tripId,
-      itinerary: req.trip.places
-    });
+    getIO().to(`trip:${req.params.tripId}`).emit('place:reordered', req.trip.places);
 
     res.json(place);
   } catch (err) {
@@ -246,10 +244,7 @@ router.patch('/:tripId/places/reorder', verifyToken, checkTripMembership, async 
     await req.trip.save();
 
     // Broadcast itinerary update
-    req.io.to(`trip:${req.params.tripId}`).emit('itinerary_updated', {
-      tripId: req.params.tripId,
-      itinerary: req.trip.places
-    });
+    getIO().to(`trip:${req.params.tripId}`).emit('place:reordered', req.trip.places);
 
     res.json(req.trip.places);
   } catch (err) {
@@ -283,6 +278,7 @@ router.get('/:tripId/expenses', verifyToken, checkTripMembership, async (req, re
 // POST /api/trips/:tripId/expenses - Add new expense
 router.post('/:tripId/expenses', verifyToken, checkTripMembership, async (req, res) => {
   try {
+    const { title, amount, currency, paidBy, splitAmong } = req.body;
 
     // Validate required fields
     if (!title || !amount || !paidBy || !splitAmong || splitAmong.length === 0) {
@@ -318,6 +314,9 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership, async (req, r
     });
 
     const addedExpense = populatedTrip.expenses[populatedTrip.expenses.length - 1];
+    
+    getIO().to(`trip:${req.params.tripId}`).emit('expense:added', addedExpense);
+    
     res.status(201).json(addedExpense);
   } catch (err) {
     require('fs').writeFileSync('expense_error.log', err.stack || err.message);
@@ -341,6 +340,8 @@ router.delete('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership, 
 
     req.trip.expenses.splice(expenseIndex, 1);
     await req.trip.save();
+
+    getIO().to(`trip:${req.params.tripId}`).emit('expense:deleted', { expenseId: req.params.expenseId });
 
     res.json({ message: 'Expense deleted' });
   } catch (err) {
@@ -376,6 +377,72 @@ router.get('/:tripId/expenses/balances', verifyToken, checkTripMembership, async
       settlements,
       membersWithBalance
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- AI PLANNER ---
+
+// POST /api/trips/:tripId/ai-plan
+router.post('/:tripId/ai-plan', verifyToken, checkTripMembership, async (req, res) => {
+  try {
+    const { destination, days, budget, style } = req.body;
+
+    if (!destination || !days || !budget || !style) {
+      return res.status(400).json({ message: 'Missing required fields: destination, days, budget, style' });
+    }
+
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+    const prompt = `You are an expert travel planner. Return ONLY a valid JSON array of place objects for a ${days}-day trip to ${destination}.
+
+Budget: Rs.${budget} INR total. Travel style: ${style}.
+
+Each object must have exactly these fields:
+- name: string (place or attraction name)
+- address: string (full address or area name)
+- lat: number (realistic latitude for the destination)
+- lng: number (realistic longitude for the destination)
+- dayNumber: number (day of the trip, 1 to ${days})
+- orderIndex: number (order within that day, starting from 0)
+- note: string (one helpful tip about the place)
+
+Rules:
+- Aim for 3-4 places per day spread across all ${days} days
+- orderIndex resets to 0 for each new dayNumber
+- lat/lng must be accurate geographic coordinates
+- Return ONLY the raw JSON array, no markdown, no explanation, no code fences`;
+
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: 'You are a travel planning assistant. You always respond with only valid JSON arrays, no other text.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 4096
+    });
+
+    const rawText = completion.choices[0]?.message?.content?.trim();
+    if (!rawText) {
+      return res.status(500).json({ message: 'AI returned an empty response. Please try again.' });
+    }
+
+    let places;
+    try {
+      places = JSON.parse(rawText);
+    } catch (parseErr) {
+      // Strip markdown fences if present
+      const stripped = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      places = JSON.parse(stripped);
+    }
+
+    if (!Array.isArray(places)) {
+      return res.status(500).json({ message: 'AI returned an unexpected format. Please try again.' });
+    }
+
+    res.json(places);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

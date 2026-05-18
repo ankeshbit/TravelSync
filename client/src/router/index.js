@@ -7,6 +7,7 @@ import EditTripView from '../views/EditTripView.vue'
 import ExploreView from '../views/ExploreView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
+import { useAuthStore } from '../stores/auth'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -59,11 +60,16 @@ const router = createRouter({
 })
 
 // Navigation guard — protect dashboard
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
-  if (to.meta.requiresAuth && !token) {
+router.beforeEach(async (to, from, next) => {
+  const authStore = useAuthStore()
+
+  if (!authStore.initialized) {
+    await authStore.hydrateSession()
+  }
+
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
-  } else if ((to.path === '/login' || to.path === '/register') && token) {
+  } else if ((to.path === '/login' || to.path === '/register') && authStore.isAuthenticated) {
     next('/dashboard')
   } else {
     next()

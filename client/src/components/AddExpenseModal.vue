@@ -251,4 +251,11 @@ watch(() => props.isOpen, (newVal) => {
     resetForm()
   }
 })
+
+// Watch for errors to stop loading spinner
+watch(() => props.error, (newVal) => {
+  if (newVal) {
+    loading.value = false
+  }
+})
 </script>

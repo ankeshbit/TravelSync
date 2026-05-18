@@ -1,5 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const path = require('path');
 const multer = require('multer');
 const User = require('../models/User');
@@ -34,6 +35,45 @@ const upload = multer({
 
 const router = express.Router();
 
+const ACCESS_TOKEN_TTL = '15m';
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_COOKIE_NAME = 'refreshToken';
+
+const getRefreshHashSecret = () => process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET;
+
+const hashRefreshToken = (token) => {
+  return crypto.createHmac('sha256', getRefreshHashSecret()).update(token).digest('hex');
+};
+
+const createAccessToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+};
+
+const createRefreshTokenPayload = () => {
+  const refreshToken = crypto.randomBytes(64).toString('hex');
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+  return {
+    refreshToken,
+    refreshTokenHash: hashRefreshToken(refreshToken),
+    expiresAt,
+  };
+};
+
+const getRefreshCookieOptions = () => ({
+  httpOnly: true,
+  sameSite: 'strict',
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: REFRESH_TOKEN_TTL_MS,
+  path: '/api/auth',
+});
+
+const getRefreshClearCookieOptions = () => ({
+  httpOnly: true,
+  sameSite: 'strict',
+  secure: process.env.NODE_ENV === 'production',
+  path: '/api/auth',
+});
+
 // ─── POST /api/auth/register ─────────────────────────────────────────────────
 // Frontend must first call /send-otp then /verify-otp and pass otpVerified:true
 router.post('/register', async (req, res) => {
@@ -60,11 +100,24 @@ router.post('/register', async (req, res) => {
     const user = new User({ name, email, password });
     await user.save();
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const accessToken = createAccessToken(user._id);
+    const { refreshToken, refreshTokenHash, expiresAt } = createRefreshTokenPayload();
+
+    await User.findByIdAndUpdate(user._id, {
+      $push: {
+        refreshTokens: {
+          tokenHash: refreshTokenHash,
+          expiresAt,
+          createdAt: new Date(),
+        }
+      }
+    });
+
+    res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
 
     res.status(201).json({
       message: 'User registered successfully.',
-      token,
+      accessToken,
       user: { id: user._id, name: user.name, email: user.email }
     });
   } catch (err) {
@@ -92,11 +145,32 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const accessToken = createAccessToken(user._id);
+    const { refreshToken, refreshTokenHash, expiresAt } = createRefreshTokenPayload();
+
+    await User.updateOne(
+      { _id: user._id },
+      { $pull: { refreshTokens: { expiresAt: { $lte: new Date() } } } }
+    );
+
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $push: {
+          refreshTokens: {
+            tokenHash: refreshTokenHash,
+            expiresAt,
+            createdAt: new Date(),
+          }
+        }
+      }
+    );
+
+    res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
 
     res.json({
       message: 'Login successful.',
-      token,
+      accessToken,
       user: { id: user._id, name: user.name, email: user.email }
     });
   } catch (err) {
@@ -105,10 +179,97 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// ─── POST /api/auth/refresh ──────────────────────────────────────────────────
+router.post('/refresh', async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
+    if (!refreshToken) {
+      return res.status(401).json({ message: 'Refresh token missing.' });
+    }
+
+    const oldTokenHash = hashRefreshToken(refreshToken);
+    const { refreshToken: newRefreshToken, refreshTokenHash: newTokenHash, expiresAt } = createRefreshTokenPayload();
+
+    // Atomic rotation in one update pipeline: prune expired + remove old + append new.
+    const updatedUser = await User.findOneAndUpdate(
+      {
+        refreshTokens: {
+          $elemMatch: {
+            tokenHash: oldTokenHash,
+            expiresAt: { $gt: new Date() }
+          }
+        }
+      },
+      [
+        {
+          $set: {
+            refreshTokens: {
+              $filter: {
+                input: '$refreshTokens',
+                as: 'rt',
+                cond: {
+                  $and: [
+                    { $gt: ['$$rt.expiresAt', new Date()] },
+                    { $ne: ['$$rt.tokenHash', oldTokenHash] }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          $set: {
+            refreshTokens: {
+              $concatArrays: [
+                '$refreshTokens',
+                [
+                  {
+                    tokenHash: newTokenHash,
+                    expiresAt,
+                    createdAt: new Date(),
+                  }
+                ]
+              ]
+            }
+          }
+        }
+      ],
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      res.clearCookie(REFRESH_COOKIE_NAME, getRefreshClearCookieOptions());
+      return res.status(401).json({ message: 'Invalid or expired refresh token.' });
+    }
+
+    const accessToken = createAccessToken(updatedUser._id);
+    res.cookie(REFRESH_COOKIE_NAME, newRefreshToken, getRefreshCookieOptions());
+
+    res.json({ accessToken });
+  } catch (err) {
+    console.error('Refresh token error:', err);
+    res.status(500).json({ message: 'Server error.', error: err.message });
+  }
+});
+
 // ─── POST /api/auth/logout ───────────────────────────────────────────────────
-// Token invalidation is handled client-side (delete from localStorage).
-router.post('/logout', (req, res) => {
-  res.json({ message: 'Logged out successfully.' });
+router.post('/logout', async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
+    if (refreshToken) {
+      const tokenHash = hashRefreshToken(refreshToken);
+      await User.updateOne(
+        { 'refreshTokens.tokenHash': tokenHash },
+        { $pull: { refreshTokens: { tokenHash } } }
+      );
+    }
+
+    res.clearCookie(REFRESH_COOKIE_NAME, getRefreshClearCookieOptions());
+    res.json({ message: 'Logged out successfully.' });
+  } catch (err) {
+    console.error('Logout error:', err);
+    res.status(500).json({ message: 'Server error.', error: err.message });
+  }
 });
 
 // ─── GET /api/auth/me (Protected) ────────────────────────────────────────────
