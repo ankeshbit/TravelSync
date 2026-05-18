@@ -72,6 +72,20 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth/', authLimiter);
 
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: 'Too many AI requests. Please wait a minute.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/trips', (req, res, next) => {
+  if (req.path.endsWith('/ai-plan') && req.method === 'POST') {
+    return aiLimiter(req, res, next);
+  }
+  next();
+});
+
 // ─── MongoDB Connection ──────────────────────────────────────────────────────
 if (mongoUri) {
   mongoose

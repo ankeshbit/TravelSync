@@ -1,5 +1,6 @@
+const { describe, test } = require('node:test');
+const assert = require('node:assert/strict');
 const { calculateBalances } = require('./calculateBalances');
-const assert = require('assert');
 
 describe('calculateBalances', () => {
   test('should calculate balances for a simple expense split evenly', () => {

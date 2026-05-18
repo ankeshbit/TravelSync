@@ -19,19 +19,13 @@ export const useAuthStore = defineStore('auth', {
         localStorage.removeItem('token');
       }
     },
-    setSession({ accessToken, user }) {
+    setSession({ accessToken }) {
       this.setAccessToken(accessToken);
-      if (user && typeof window !== 'undefined') {
-        localStorage.setItem('user', JSON.stringify(user));
-      }
     },
-    clearAuth({ clearUser = true } = {}) {
+    clearAuth() {
       this.accessToken = null;
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
-        if (clearUser) {
-          localStorage.removeItem('user');
-        }
       }
     },
     async hydrateSession() {

@@ -22,6 +22,15 @@ router.get('/', verifyToken, async (req, res) => {
 router.post('/', verifyToken, async (req, res) => {
   try {
     const { name, destination, startDate, endDate } = req.body;
+    if (!name || !destination || !startDate || !endDate) {
+      return res.status(400).json({ message: 'name, destination, startDate and endDate are all required.' });
+    }
+    if (isNaN(Date.parse(startDate)) || isNaN(Date.parse(endDate))) {
+      return res.status(400).json({ message: 'startDate and endDate must be valid dates.' });
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+      return res.status(400).json({ message: 'endDate must be on or after startDate.' });
+    }
     const newTrip = new Trip({
       name,
       destination,
@@ -44,7 +53,7 @@ const checkTripMembership = async (req, res, next) => {
     const trip = await Trip.findById(req.params.tripId);
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
 
-    if (trip.ownerId.toString() !== req.userId && !trip.members.includes(req.userId)) {
+    if (trip.ownerId.toString() !== req.userId && !trip.members.some(m => m.toString() === req.userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -64,7 +73,7 @@ router.get('/:tripId/members', verifyToken, async (req, res) => {
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
 
     // Check access — only trip members can view members
-    if (trip.ownerId.toString() !== req.userId && !trip.members.includes(req.userId)) {
+    if (trip.ownerId.toString() !== req.userId && !trip.members.some(m => m.toString() === req.userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -99,7 +108,7 @@ router.post('/:tripId/members', verifyToken, async (req, res) => {
     }
 
     // Check if user is already a member
-    if (trip.members.includes(user._id)) {
+    if (trip.members.some(m => m.toString() === user._id.toString())) {
       return res.status(400).json({ message: 'User is already a member' });
     }
 
@@ -212,7 +221,7 @@ router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership, 
     await req.trip.save();
 
     // Broadcast itinerary update
-    getIO().to(`trip:${req.params.tripId}`).emit('place:reordered', req.trip.places);
+    getIO().to(`trip:${req.params.tripId}`).emit('place:note_updated', place);
 
     res.json(place);
   } catch (err) {
@@ -319,7 +328,7 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership, async (req, r
     
     res.status(201).json(addedExpense);
   } catch (err) {
-    require('fs').writeFileSync('expense_error.log', err.stack || err.message);
+    console.error('Add expense error:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -459,7 +468,7 @@ router.get('/:id', verifyToken, async (req, res) => {
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
 
     // Check access
-    if (trip.ownerId._id.toString() !== req.userId && !trip.members.includes(req.userId)) {
+    if (trip.ownerId._id.toString() !== req.userId && !trip.members.some(m => m.toString() === req.userId)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 

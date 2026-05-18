@@ -82,34 +82,23 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import api from '../api';
+import { storeToRefs } from 'pinia';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
 import TripCard from '../components/TripCard.vue';
 import CreateTripModal from '../components/CreateTripModal.vue';
+import { useTripsStore } from '../stores/trips';
 
 const router = useRouter();
 const route = useRoute();
+const tripsStore = useTripsStore();
+const { trips, loading, error } = storeToRefs(tripsStore);
 const initialDestination = ref('');
-const trips = ref([]);
-const loading = ref(true);
-const error = ref('');
 const showCreateModal = ref(false);
 
-const onTripCreated = () => {
-  fetchTrips();
-};
-
-const fetchTrips = async () => {
-  try {
-    loading.value = true;
-    error.value = '';
-    const res = await api.get('/trips');
-    trips.value = res.data;
-  } catch (err) {
-    error.value = err.response?.data?.message || 'Failed to fetch trips. Please try again.';
-  } finally {
-    loading.value = false;
+const onTripCreated = (trip) => {
+  if (trip && !trips.value.some(existingTrip => existingTrip._id === trip._id)) {
+    trips.value.unshift(trip);
   }
 };
 
@@ -118,7 +107,7 @@ const goToTrip = (id) => {
 };
 
 onMounted(() => {
-  fetchTrips();
+  tripsStore.fetchTrips();
   // If navigated with ?create=1, open the Create Trip modal and prefill destination
   if (route.query.create) {
     initialDestination.value = route.query.dest || '';

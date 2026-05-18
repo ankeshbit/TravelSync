@@ -3,6 +3,7 @@ import api from '../api'
 
 export const useTripsStore = defineStore('trips', {
   state: () => ({
+    trips: [],
     currentTrip: null,
     members: [],
     loading: false,
@@ -11,6 +12,38 @@ export const useTripsStore = defineStore('trips', {
     memberLoading: false
   }),
   actions: {
+    async fetchTrips() {
+      this.loading = true
+      this.error = null
+      try {
+        const response = await api.get('/trips')
+        this.trips = response.data
+      } catch (err) {
+        this.error = err.response?.data?.message || err.message
+        throw err
+      } finally {
+        this.loading = false
+      }
+    },
+    async createTrip(data) {
+      try {
+        const response = await api.post('/trips', data)
+        this.trips.push(response.data)
+        return response.data
+      } catch (err) {
+        this.error = err.response?.data?.message || err.message
+        throw err
+      }
+    },
+    async deleteTrip(id) {
+      try {
+        await api.delete(`/trips/${id}`)
+        this.trips = this.trips.filter(trip => trip._id !== id)
+      } catch (err) {
+        this.error = err.response?.data?.message || err.message
+        throw err
+      }
+    },
     async fetchMembers(tripId) {
       this.memberLoading = true
       this.memberError = null

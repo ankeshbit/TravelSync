@@ -14,11 +14,10 @@ export function useSocket(tripId) {
   const activeMembers = ref([]);
 
   onMounted(() => {
-    const token = authStore.accessToken;
     const socketURL = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:3000';
 
     socket.value = io(socketURL, {
-      auth: { token },
+      auth: (cb) => cb({ token: authStore.accessToken }),
       query: { tripId }
     });
 
@@ -44,6 +43,14 @@ export function useSocket(tripId) {
     socket.value.on('place:reordered', (places) => {
       placesStore.places = places;
       toastStore.showToast(`A member reordered places`, 'info');
+    });
+
+    socket.value.on('place:note_updated', (updatedPlace) => {
+      const index = placesStore.places.findIndex(p => p._id === updatedPlace._id);
+      if (index !== -1) {
+        placesStore.places[index] = updatedPlace;
+        toastStore.showToast('A member updated a note', 'info');
+      }
     });
 
     socket.value.on('expense:added', (expense) => {

@@ -7,16 +7,13 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "lint": "eslint .",
-    "test": "node --test '**/*.test.js'"
+    "test": "node -e \"const { spawnSync } = require('child_process'); const fs = require('fs'); const path = require('path'); const root = process.cwd(); const files = []; const walk = (dir) => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) { if (entry.name === 'node_modules' || entry.name === '.git') continue; const full = path.join(dir, entry.name); if (entry.isDirectory()) walk(full); else if (entry.isFile() && entry.name.endsWith('.test.js')) files.push(path.relative(root, full)); } }; walk(root); if (!files.length) { process.exit(0); } const result = spawnSync(process.execPath, ['--test', ...files], { stdio: 'inherit' }); process.exit(result.status ?? 1);\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.96.0",
-    "@google/genai": "^2.3.0",
-    "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
