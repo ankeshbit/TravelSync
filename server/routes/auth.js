@@ -61,7 +61,7 @@ const createRefreshTokenPayload = () => {
 
 const getRefreshCookieOptions = () => ({
   httpOnly: true,
-  sameSite: 'strict',
+  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
   secure: process.env.NODE_ENV === 'production',
   maxAge: REFRESH_TOKEN_TTL_MS,
   path: '/api/auth',
@@ -69,7 +69,7 @@ const getRefreshCookieOptions = () => ({
 
 const getRefreshClearCookieOptions = () => ({
   httpOnly: true,
-  sameSite: 'strict',
+  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
   secure: process.env.NODE_ENV === 'production',
   path: '/api/auth',
 });
@@ -234,7 +234,7 @@ router.post('/refresh', async (req, res) => {
           }
         }
       ],
-      { new: true }
+      { new: true, updatePipeline: true }
     );
 
     if (!updatedUser) {
