@@ -69,10 +69,7 @@ A full-stack web application for planning trips with friends, managing itinerari
 - **Nodemailer** — Verification email OTP generation and delivery
 
 ### DevOps
-- **Docker** — Containerized backend server deployment configurations
-- **Vercel / Netlify** — Premium static hosting setups for the frontend
-- **Railway / Render** — Highly scalable dynamic hosting configurations for the API server
-- **GitHub Actions** — Continuous integration (CI) and automated pipeline builds
+- **Docker** — Containerized backend server development configurations
 
 ---
 
