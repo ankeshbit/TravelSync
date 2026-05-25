@@ -1,4 +1,3 @@
-process.env.MONGO_URI = 'mongodb://localhost:27017/travelsync_test';
 process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.REFRESH_SECRET = 'test-refresh-secret';
 process.env.NODE_ENV = 'test';
@@ -12,13 +11,15 @@ const User = require('../models/User');
 const Trip = require('../models/Trip');
 
 beforeAll(async () => {
-  try {
-    process.env.MONGO_URI = 'mongodb://localhost:27017/travelsync_test';
-    await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 2000 });
-  } catch (err) {
-    process.env.MONGO_URI = 'mongodb+srv://Cluster0:0P31NqxmsYL6sGNu@cluster0.40hphfj.mongodb.net/travelsync_test';
-    await mongoose.connect(process.env.MONGO_URI);
+  // Tests require MONGO_URI to be set in environment
+  // Run with: MONGO_URI=mongodb://localhost:27017/travelsync_test npx jest
+  if (!process.env.MONGO_URI) {
+    throw new Error(
+      'MONGO_URI environment variable is required for tests. ' +
+      'Set it to a test database URI, never a production database.'
+    );
   }
+  await mongoose.connect(process.env.MONGO_URI);
 
   // Clear collections once at the start
   await User.deleteMany({});

@@ -1,8 +1,99 @@
-node_modules/
+# ================================
+# SECRETS — never commit these
+# ================================
 .env
-.env.example
 .env.local
-*.log
-.DS_Store
+.env.development
+.env.production
+.env.staging
+.env.test
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+serviceAccountKey.json
+google-credentials.json
+firebase-adminsdk*.json
+
+# ================================
+# DEPENDENCIES
+# ================================
+node_modules/
+.pnp
+.pnp.js
+
+# ================================
+# BUILD OUTPUTS
+# ================================
 dist/
+dist-ssr/
+build/
+out/
 .vite/
+.nuxt/
+.next/
+
+# ================================
+# TEST & COVERAGE
+# ================================
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+
+# ================================
+# LOGS
+# ================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ================================
+# UPLOADS & USER DATA
+# ================================
+server/uploads/
+server/tmp/
+public/uploads/
+
+# ================================
+# OS FILES
+# ================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ================================
+# EDITOR & IDE
+# ================================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+
+# ================================
+# MISC
+# ================================
+*.local
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo

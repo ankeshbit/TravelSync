@@ -1,0 +1,15 @@
+# Server-specific ignores (supplements root .gitignore)
+
+# Local test scratch files — not part of the real test suite
+test-api.js
+test-balances.js
+test-mongoose.js
+test-mongoose-2.js
+
+# Uploaded files from users
+uploads/
+
+# SSL certificates if added locally
+*.pem
+*.key
+*.crt
