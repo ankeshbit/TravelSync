@@ -87,7 +87,7 @@ app.use('/api/trips', (req, res, next) => {
 });
 
 // ─── MongoDB Connection ──────────────────────────────────────────────────────
-if (mongoUri) {
+if (mongoUri && process.env.NODE_ENV !== 'test') {
   mongoose
     .connect(mongoUri)
     .then(() => console.log('✓ MongoDB connected successfully'))
@@ -101,7 +101,7 @@ if (mongoUri) {
 
       console.warn('⚠ Starting without a database connection. API routes that need MongoDB will fail until MONGO_URI is configured.');
     });
-} else {
+} else if (process.env.NODE_ENV !== 'test') {
   console.warn('⚠ MONGO_URI is not configured. Starting the API without a database connection.');
 }
 
@@ -114,7 +114,13 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ─── Swagger Documentation ──────────────────────────────────────────────────
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
+app.use('/api-auth', require('./routes/auth'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/trips', require('./routes/trips'));
 
@@ -131,11 +137,15 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`✓ Server running on http://localhost:${PORT}`);
-  console.log(`✓ CORS origin: ${corsOptions.origin}`);
-});
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`✓ Server running on http://localhost:${PORT}`);
+    console.log(`✓ CORS origin: ${corsOptions.origin}`);
+  });
+}
+
+module.exports = app;
 
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 const gracefulShutdown = () => {

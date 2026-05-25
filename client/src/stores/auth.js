@@ -7,6 +7,7 @@ let hydratePromise = null;
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     accessToken: null,
+    currentUser: null,
     initialized: false,
   }),
   getters: {
@@ -19,13 +20,22 @@ export const useAuthStore = defineStore('auth', {
         localStorage.removeItem('token');
       }
     },
-    setSession({ accessToken }) {
+    setUser(user) {
+      this.currentUser = user || null;
+    },
+    setSession({ accessToken, refreshToken, user }) {
       this.setAccessToken(accessToken);
+      if (user) this.setUser(user);
+      if (refreshToken && typeof window !== 'undefined') {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
     },
     clearAuth() {
       this.accessToken = null;
+      this.currentUser = null;
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
       }
     },
     async hydrateSession() {
@@ -37,6 +47,16 @@ export const useAuthStore = defineStore('auth', {
         return hydratePromise;
       }
 
+      const storedRefreshToken = typeof window !== 'undefined'
+        ? localStorage.getItem('refreshToken')
+        : null;
+
+      if (!storedRefreshToken) {
+        this.initialized = true;
+        hydratePromise = null;
+        return false;
+      }
+
       hydratePromise = (async () => {
         try {
           if (typeof window !== 'undefined') {
@@ -45,13 +65,19 @@ export const useAuthStore = defineStore('auth', {
 
           const response = await axios.post(
             `${apiBaseUrl}/auth/refresh`,
-            {},
+            { refreshToken: storedRefreshToken },
             {
               withCredentials: true,
               headers: { 'x-skip-auth-refresh': '1' },
             }
           );
 
+          if (response.data?.refreshToken) {
+            localStorage.setItem('refreshToken', response.data.refreshToken);
+          }
+          if (response.data?.user) {
+            this.setUser(response.data.user);
+          }
           this.accessToken = response.data?.accessToken || null;
         } catch {
           this.accessToken = null;

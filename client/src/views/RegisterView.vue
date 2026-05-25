@@ -196,8 +196,9 @@ const handleOtpVerified = async () => {
       otpVerified: true,
     })
     authStore.setSession({
-      accessToken: res.data.accessToken || res.data.token,
-      user: res.data.user,
+      accessToken: res.data.accessToken,
+      refreshToken: res.data.refreshToken,
+      user: res.data.user
     })
     router.push('/dashboard')
   } catch (err) {

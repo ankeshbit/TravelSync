@@ -176,6 +176,7 @@ const closeModal = () => {
 }
 
 const resetForm = () => {
+  loading.value = false
   form.value = {
     title: '',
     amount: null,

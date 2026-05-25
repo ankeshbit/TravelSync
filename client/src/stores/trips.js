@@ -13,16 +13,16 @@ export const useTripsStore = defineStore('trips', {
   }),
   actions: {
     async fetchTrips() {
-      this.loading = true
-      this.error = null
+      this.loading = true;
+      this.error = null;
       try {
-        const response = await api.get('/trips')
-        this.trips = response.data
+        const response = await api.get('/trips');
+        this.trips = response.data.trips ?? response.data;
       } catch (err) {
-        this.error = err.response?.data?.message || err.message
-        throw err
+        this.error = err.response?.data?.message || err.message;
+        throw err;
       } finally {
-        this.loading = false
+        this.loading = false;
       }
     },
     async createTrip(data) {

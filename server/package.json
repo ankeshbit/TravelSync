@@ -7,7 +7,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "lint": "eslint .",
-    "test": "node -e \"const { spawnSync } = require('child_process'); const fs = require('fs'); const path = require('path'); const root = process.cwd(); const files = []; const walk = (dir) => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) { if (entry.name === 'node_modules' || entry.name === '.git') continue; const full = path.join(dir, entry.name); if (entry.isDirectory()) walk(full); else if (entry.isFile() && entry.name.endsWith('.test.js')) files.push(path.relative(root, full)); } }; walk(root); if (!files.length) { process.exit(0); } const result = spawnSync(process.execPath, ['--test', ...files], { stdio: 'inherit' }); process.exit(result.status ?? 1);\""
+    "test": "jest --coverage"
   },
   "keywords": [],
   "author": "",
@@ -27,10 +27,14 @@
     "mongoose": "^9.5.0",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.7",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "eslint": "^8.51.0",
-    "nodemon": "^3.1.14"
+    "jest": "^30.4.2",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.2.2"
   }
 }

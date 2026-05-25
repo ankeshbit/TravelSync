@@ -9,19 +9,18 @@
 
       <!-- Modal Content -->
       <div
-        class="relative bg-surface-container-lowest dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up max-h-[90vh] flex flex-col"
+        class="relative bg-surface-container-lowest dark:bg-slate-900 w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up max-h-[90vh] flex flex-col"
         role="dialog"
         aria-modal="true"
       >
         <!-- Header -->
-        <div class="relative h-32 w-full bg-primary-container flex-shrink-0">
+        <div class="relative h-24 w-full bg-primary-container flex-shrink-0">
           <div class="absolute inset-0 bg-gradient-to-br from-sky-600 to-indigo-700 opacity-90"></div>
           <div class="absolute inset-0 flex flex-col justify-end p-6">
             <div class="flex items-center gap-3 mb-1">
               <span class="material-symbols-outlined text-white text-2xl">auto_awesome</span>
               <h2 class="font-h2 text-h2 text-white">AI Trip Planner</h2>
             </div>
-            <p class="font-body-md text-body-md text-white/80">Let AI craft a personalised itinerary for you</p>
           </div>
           <button
             @click="closeModal"
@@ -32,195 +31,111 @@
         </div>
 
         <!-- Scrollable Body -->
-        <div class="flex-1 overflow-y-auto">
-          <!-- Plan Form -->
-          <form v-if="!itinerary" @submit.prevent="generatePlan" class="p-6 space-y-5">
-
-            <!-- Destination -->
-            <div class="space-y-1.5">
-              <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="ai-destination">
-                Destination <span class="text-error dark:text-red-400">*</span>
-              </label>
-              <div class="relative">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">location_on</span>
-                <input
-                  v-model="form.destination"
-                  id="ai-destination"
-                  type="text"
-                  required
-                  placeholder="e.g., Goa, India"
-                  class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white"
+        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-slate-900">
+          <!-- Form -->
+          <div v-if="!itinerary && !loading" class="p-6 space-y-5 bg-white dark:bg-slate-800 m-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-200 mb-4">Tell us your preferences</h3>
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Budget</label>
+                <select v-model="form.budget" class="w-full p-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 outline-none">
+                  <option value="economy">Economy</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="luxury">Luxury</option>
+                </select>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Interests</label>
+                <input 
+                  type="text" 
+                  v-model="form.interests" 
+                  placeholder="e.g. food, culture, nightlife, shopping" 
+                  class="w-full p-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
                 />
               </div>
-            </div>
 
-            <!-- Days + Budget Grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div class="space-y-1.5">
-                <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="ai-days">
-                  Number of Days <span class="text-error dark:text-red-400">*</span>
-                </label>
-                <div class="relative">
-                  <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">calendar_today</span>
-                  <input
-                    v-model.number="form.days"
-                    id="ai-days"
-                    type="number"
-                    min="1"
-                    max="30"
-                    required
-                    placeholder="e.g., 5"
-                    class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white"
-                  />
-                </div>
-              </div>
-              <div class="space-y-1.5">
-                <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="ai-budget">
-                  Budget (₹ INR) <span class="text-error dark:text-red-400">*</span>
-                </label>
-                <div class="relative">
-                  <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">currency_rupee</span>
-                  <input
-                    v-model.number="form.budget"
-                    id="ai-budget"
-                    type="number"
-                    min="0"
-                    required
-                    placeholder="e.g., 50000"
-                    class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <!-- Travel Style -->
-            <div class="space-y-1.5">
-              <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200">
-                Travel Style <span class="text-error dark:text-red-400">*</span>
-              </label>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <button
-                  v-for="s in styles"
-                  :key="s.value"
-                  type="button"
-                  @click="form.style = s.value"
-                  :class="[
-                    'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all duration-200 text-center',
-                    form.style === s.value
-                      ? 'border-primary bg-primary/10 dark:bg-sky-900/30 text-primary dark:text-sky-400'
-                      : 'border-outline-variant dark:border-slate-700 text-on-surface-variant dark:text-slate-400 hover:border-primary/50 hover:bg-surface-variant dark:hover:bg-slate-800'
-                  ]"
-                >
-                  <span class="material-symbols-outlined text-xl">{{ s.icon }}</span>
-                  <span class="text-xs font-semibold capitalize">{{ s.label }}</span>
+              <div class="pt-4 flex justify-end gap-3">
+                <button @click="closeModal" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors">Cancel</button>
+                <button @click="generatePlan" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
+                  <span class="material-symbols-outlined text-sm">auto_awesome</span>
+                  Generate Itinerary
                 </button>
-              </div>
-            </div>
-
-            <!-- Actions -->
-            <div class="pt-4 border-t border-outline-variant dark:border-slate-700 flex flex-col sm:flex-row-reverse items-center gap-3 mt-6">
-              <button
-                type="submit"
-                :disabled="loading || !form.style"
-                class="w-full sm:w-auto px-6 py-2.5 bg-primary-container dark:bg-blue-600 text-on-secondary dark:text-white rounded-lg font-h3 text-h3 hover:bg-primary hover:text-white transition-all active:scale-95 shadow-sm disabled:opacity-60 flex items-center justify-center gap-2 min-w-[150px]"
-              >
-                <span v-if="loading" class="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"></span>
-                <span class="material-symbols-outlined text-base" v-else>auto_awesome</span>
-                {{ loading ? 'Generating...' : 'Generate Plan' }}
-              </button>
-              <button
-                type="button"
-                @click="closeModal"
-                class="w-full sm:w-auto px-6 py-2.5 bg-transparent border border-outline-variant dark:border-slate-700 text-on-surface-variant dark:text-slate-300 rounded-lg font-h3 text-h3 hover:bg-surface-variant dark:hover:bg-slate-800 transition-all active:scale-95"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-
-          <!-- Skeleton Loader -->
-          <div v-else-if="loading" class="p-6 space-y-6">
-            <div v-for="d in 3" :key="d" class="space-y-3">
-              <div class="h-4 w-24 bg-gray-200 dark:bg-slate-700 rounded animate-pulse"></div>
-              <div v-for="i in 3" :key="i" class="flex items-center gap-3 p-3 border border-outline-variant dark:border-slate-700 rounded-xl">
-                <div class="w-12 h-12 rounded-lg bg-gray-200 dark:bg-slate-700 animate-pulse flex-shrink-0"></div>
-                <div class="flex-1 space-y-2">
-                  <div class="h-3 bg-gray-200 dark:bg-slate-700 rounded animate-pulse w-2/3"></div>
-                  <div class="h-3 bg-gray-200 dark:bg-slate-700 rounded animate-pulse w-1/2"></div>
-                </div>
               </div>
             </div>
           </div>
 
-          <!-- Itinerary Preview -->
-          <div v-else-if="itinerary" class="p-6 space-y-6">
-            <div class="flex items-center justify-between mb-2">
-              <div>
-                <h3 class="font-h3 text-h3 text-primary">Your AI Itinerary</h3>
-                <p class="text-sm text-outline">{{ itinerary.length }} places across {{ form.days }} days</p>
-              </div>
-              <button
-                @click="resetPlan"
-                class="flex items-center gap-1.5 text-sm text-outline hover:text-primary transition-colors px-3 py-1.5 rounded-lg hover:bg-surface-variant dark:hover:bg-slate-800"
-              >
-                <span class="material-symbols-outlined text-base">refresh</span>
-                Re-generate
-              </button>
+          <!-- Loading Spinner -->
+          <div v-if="loading" class="p-12 flex flex-col items-center justify-center space-y-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+            <p class="text-gray-500 dark:text-gray-400 font-medium">Crafting your perfect trip...</p>
+          </div>
+
+          <!-- AI Response -->
+          <div v-if="itinerary && !loading" class="p-6 space-y-6">
+            <!-- Summary Banner -->
+            <div class="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-4 rounded-r-lg">
+              <h3 class="text-blue-800 dark:text-blue-300 font-semibold mb-1">Overview</h3>
+              <p class="text-blue-900 dark:text-blue-200 text-sm">{{ itinerary.summary }}</p>
             </div>
 
-            <!-- Day Groups -->
-            <div v-for="(dayPlaces, dayNumber) in placesByDay" :key="dayNumber" class="space-y-3">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold text-outline-variant uppercase tracking-widest">Day {{ dayNumber }}</span>
-                <div class="flex-1 h-[1px] bg-gray-100 dark:bg-slate-700"></div>
-                <span class="text-xs text-outline">{{ dayPlaces.length }} places</span>
-              </div>
-
-              <div
-                v-for="(place, idx) in dayPlaces"
-                :key="idx"
-                class="flex items-start gap-3 p-3 bg-white dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-xl hover:shadow-md hover:border-primary-container dark:hover:border-blue-800 transition-all"
-              >
-                <div class="relative flex-shrink-0">
-                  <div class="w-10 h-10 rounded-lg bg-surface-container-low dark:bg-slate-700 flex items-center justify-center text-primary dark:text-blue-400">
-                    <span class="material-symbols-outlined text-lg">location_on</span>
+            <!-- Day-by-Day Accordion -->
+            <div class="space-y-4">
+              <div v-for="dayData in itinerary.days" :key="dayData.day" class="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm">
+                
+                <div class="bg-gray-50 dark:bg-slate-750 px-4 py-3 flex justify-between items-center cursor-pointer border-b border-gray-200 dark:border-slate-700">
+                  <div>
+                    <h4 class="font-bold text-gray-900 dark:text-white">Day {{ dayData.day }}</h4>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ dayData.theme }}</p>
                   </div>
-                  <div class="absolute -top-1.5 -left-1.5 w-4 h-4 bg-primary text-white rounded-full flex items-center justify-center text-[9px] font-bold border border-white">{{ place.orderIndex + 1 }}</div>
                 </div>
-                <div class="flex-1 min-w-0">
-                  <h4 class="font-body-md font-bold text-on-surface dark:text-white truncate">{{ place.name }}</h4>
-                  <p class="text-[12px] text-outline truncate">{{ place.address }}</p>
-                  <p v-if="place.note" class="text-[11px] text-outline-variant italic mt-0.5 line-clamp-2">{{ place.note }}</p>
+
+                <div class="p-4 space-y-4">
+                  <div v-for="(place, index) in dayData.places" :key="index" class="flex gap-4 items-start p-3 rounded-lg border border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+                    
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2 mb-1">
+                        <h5 class="font-bold text-gray-900 dark:text-white">{{ place.name }}</h5>
+                        <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-gray-300">{{ place.type }}</span>
+                      </div>
+                      <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">{{ place.description }}</p>
+                      <div class="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+                        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">schedule</span> {{ place.bestTime }}</span>
+                        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">timer</span> {{ place.estimatedDuration }}</span>
+                      </div>
+                    </div>
+
+                    <button 
+                      @click="addPlaceToItinerary(place, dayData.day, index)"
+                      :disabled="addedPlaces.has(`${dayData.day}-${index}`)"
+                      class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border"
+                      :class="addedPlaces.has(`${dayData.day}-${index}`) ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-primary border-primary/30 hover:bg-primary hover:text-white'"
+                    >
+                      <span class="material-symbols-outlined text-[16px]">{{ addedPlaces.has(`${dayData.day}-${index}`) ? 'check' : 'add' }}</span>
+                      {{ addedPlaces.has(`${dayData.day}-${index}`) ? 'Added' : 'Add to itinerary' }}
+                    </button>
+                  </div>
                 </div>
-                <button
-                  @click="addSinglePlace(place)"
-                  :disabled="addedPlaceIndices.has(`${place.dayNumber}-${place.orderIndex}`)"
-                  class="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-60"
-                  :class="addedPlaceIndices.has(`${place.dayNumber}-${place.orderIndex}`)
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                    : 'bg-primary-container dark:bg-sky-900/40 text-primary dark:text-sky-400 hover:bg-primary hover:text-white dark:hover:bg-sky-600'"
-                >
-                  <span class="material-symbols-outlined text-sm">{{ addedPlaceIndices.has(`${place.dayNumber}-${place.orderIndex}`) ? 'check' : 'add' }}</span>
-                  {{ addedPlaceIndices.has(`${place.dayNumber}-${place.orderIndex}`) ? 'Added' : 'Add' }}
-                </button>
               </div>
             </div>
 
-            <!-- Add All Button -->
-            <div class="pt-4 border-t border-outline-variant dark:border-slate-700 flex flex-col sm:flex-row-reverse items-center gap-3">
-              <button
-                @click="addAllPlaces"
-                :disabled="addingAll || allAdded"
-                class="w-full sm:w-auto px-6 py-2.5 bg-primary-container dark:bg-blue-600 text-on-secondary dark:text-white rounded-lg font-h3 text-h3 hover:bg-primary hover:text-white transition-all active:scale-95 shadow-sm disabled:opacity-60 flex items-center justify-center gap-2 min-w-[160px]"
-              >
-                <span v-if="addingAll" class="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"></span>
-                <span class="material-symbols-outlined text-base" v-else>{{ allAdded ? 'check_circle' : 'playlist_add' }}</span>
-                {{ addingAll ? 'Adding...' : allAdded ? 'All Added!' : 'Add All to Trip' }}
+            <!-- Tips Section -->
+            <div v-if="itinerary.tips && itinerary.tips.length" class="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50 rounded-xl p-5">
+              <h4 class="font-bold text-amber-800 dark:text-amber-400 mb-3 flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">lightbulb</span>
+                Practical Tips
+              </h4>
+              <ul class="list-disc list-inside space-y-1 text-sm text-amber-900 dark:text-amber-200/80">
+                <li v-for="(tip, index) in itinerary.tips" :key="index">{{ tip }}</li>
+              </ul>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex justify-between items-center pt-4">
+              <button @click="resetForm" class="text-gray-500 hover:text-primary text-sm font-medium flex items-center gap-1">
+                <span class="material-symbols-outlined text-sm">refresh</span> Try Again
               </button>
-              <button
-                @click="closeModal"
-                class="w-full sm:w-auto px-6 py-2.5 bg-transparent border border-outline-variant dark:border-slate-700 text-on-surface-variant dark:text-slate-300 rounded-lg font-h3 text-h3 hover:bg-surface-variant dark:hover:bg-slate-800 transition-all active:scale-95"
-              >
+              <button @click="closeModal" class="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:opacity-90">
                 Done
               </button>
             </div>
@@ -232,28 +147,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue';
+import { ref, reactive, watch } from 'vue';
 import api from '../api';
 import { usePlacesStore } from '../stores/places';
 import { useToastStore } from '../stores/toast';
 
 const props = defineProps({
-  isOpen: {
-    type: Boolean,
-    required: true
-  },
-  tripId: {
-    type: String,
-    required: true
-  },
-  initialDestination: {
-    type: String,
-    default: ''
-  },
-  tripDaysCount: {
-    type: Number,
-    default: 3
-  }
+  isOpen: { type: Boolean, required: true },
+  tripId: { type: String, required: true }
 });
 
 const emit = defineEmits(['update:isOpen']);
@@ -263,158 +164,83 @@ const toastStore = useToastStore();
 
 const loading = ref(false);
 const itinerary = ref(null);
-const addingAll = ref(false);
-const addedPlaceIndices = ref(new Set());
+const addedPlaces = ref(new Set());
 
 const form = reactive({
-  destination: '',
-  days: 3,
-  budget: '',
-  style: ''
+  budget: 'moderate',
+  interests: ''
 });
 
-const styles = [
-  { value: 'adventure', label: 'Adventure', icon: 'hiking' },
-  { value: 'culture', label: 'Culture', icon: 'museum' },
-  { value: 'food', label: 'Food', icon: 'restaurant' },
-  { value: 'relaxation', label: 'Relaxation', icon: 'spa' }
-];
-
-// Reset state when modal opens
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
-    form.destination = props.initialDestination || '';
-    form.days = props.tripDaysCount || 3;
-    form.budget = '';
-    form.style = '';
-    itinerary.value = null;
-    addedPlaceIndices.value = new Set();
-    addingAll.value = false;
+    resetForm();
   }
 });
 
-const placesByDay = computed(() => {
-  if (!itinerary.value) return {};
-  const grouped = {};
-  const sorted = [...itinerary.value].sort((a, b) =>
-    a.dayNumber === b.dayNumber ? a.orderIndex - b.orderIndex : a.dayNumber - b.dayNumber
-  );
-  sorted.forEach(place => {
-    if (!grouped[place.dayNumber]) grouped[place.dayNumber] = [];
-    grouped[place.dayNumber].push(place);
-  });
-  return grouped;
-});
-
-const allAdded = computed(() => {
-  if (!itinerary.value || itinerary.value.length === 0) return false;
-  return itinerary.value.every(p => addedPlaceIndices.value.has(`${p.dayNumber}-${p.orderIndex}`));
-});
+const resetForm = () => {
+  form.budget = 'moderate';
+  form.interests = '';
+  itinerary.value = null;
+  addedPlaces.value = new Set();
+  loading.value = false;
+};
 
 const closeModal = () => {
   emit('update:isOpen', false);
 };
 
-const resetPlan = () => {
-  itinerary.value = null;
-  addedPlaceIndices.value = new Set();
-  addingAll.value = false;
-};
-
 const generatePlan = async () => {
-  if (!form.style) {
-    toastStore.showToast('Please select a travel style.', 'error');
-    return;
-  }
-
   loading.value = true;
   itinerary.value = null;
+  addedPlaces.value = new Set();
 
   try {
-    const res = await api.post(`/trips/${props.tripId}/ai-plan`, {
-      destination: form.destination,
-      days: form.days,
+    const res = await api.post(`/trips/${props.tripId}/ai-suggestions`, {
       budget: form.budget,
-      style: form.style
+      interests: form.interests
     });
-    itinerary.value = res.data;
-    toastStore.showToast('Itinerary generated! Review and add places to your trip.', 'success');
+    
+    if (res.data.suggestions && res.data.suggestions.error) {
+      toastStore.showToast(res.data.suggestions.error, 'error');
+    } else {
+      itinerary.value = res.data.suggestions;
+      toastStore.showToast('Itinerary generated successfully!', 'success');
+    }
   } catch (err) {
-    toastStore.showToast(err.response?.data?.message || 'Failed to generate plan. Please try again.', 'error');
+    toastStore.showToast(err.response?.data?.message || 'Failed to generate plan.', 'error');
   } finally {
     loading.value = false;
   }
 };
 
-const addSinglePlace = async (place) => {
-  const key = `${place.dayNumber}-${place.orderIndex}`;
-  if (addedPlaceIndices.value.has(key)) return;
+const addPlaceToItinerary = async (place, dayNumber, index) => {
+  const key = `${dayNumber}-${index}`;
+  if (addedPlaces.value.has(key)) return;
 
   try {
     await placesStore.addPlace(props.tripId, {
       name: place.name,
-      address: place.address,
-      lat: place.lat,
-      lng: place.lng,
-      dayNumber: place.dayNumber,
-      orderIndex: place.orderIndex,
-      note: place.note || ''
+      address: place.name, // The AI might not return a full address, using name as fallback
+      lat: 0, // Fallbacks, a proper geocoding should happen or map will handle it
+      lng: 0,
+      dayNumber: dayNumber,
+      orderIndex: index,
+      note: place.description || ''
     });
-    addedPlaceIndices.value = new Set([...addedPlaceIndices.value, key]);
-    toastStore.showToast(`"${place.name}" added to Day ${place.dayNumber}.`, 'success');
+    addedPlaces.value = new Set([...addedPlaces.value, key]);
+    toastStore.showToast(`"${place.name}" added to itinerary.`, 'success');
   } catch (err) {
-    toastStore.showToast(err.response?.data?.message || `Failed to add "${place.name}".`, 'error');
+    toastStore.showToast(`Failed to add "${place.name}".`, 'error');
   }
-};
-
-const addAllPlaces = async () => {
-  if (!itinerary.value || addingAll.value) return;
-  addingAll.value = true;
-
-  const pending = itinerary.value.filter(
-    p => !addedPlaceIndices.value.has(`${p.dayNumber}-${p.orderIndex}`)
-  );
-
-  for (const place of pending) {
-    try {
-      await placesStore.addPlace(props.tripId, {
-        name: place.name,
-        address: place.address,
-        lat: place.lat,
-        lng: place.lng,
-        dayNumber: place.dayNumber,
-        orderIndex: place.orderIndex,
-        note: place.note || ''
-      });
-      addedPlaceIndices.value = new Set([...addedPlaceIndices.value, `${place.dayNumber}-${place.orderIndex}`]);
-    } catch (err) {
-      toastStore.showToast(`Failed to add "${place.name}". Continuing with the rest.`, 'error');
-    }
-  }
-
-  toastStore.showToast('All places added to your trip!', 'success');
-  addingAll.value = false;
 };
 </script>
 
 <style scoped>
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .animate-fade-in-up {
-  animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  animation: fadeInUp 0.3s ease-out forwards;
 }
 </style>

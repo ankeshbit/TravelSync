@@ -14,7 +14,7 @@ export const usePlacesStore = defineStore('places', {
       const grouped = {}
       // Sort by orderIndex first
       const sortedPlaces = [...state.places].sort((a, b) => a.orderIndex - b.orderIndex)
-      
+
       sortedPlaces.forEach(place => {
         if (!grouped[place.dayNumber]) {
           grouped[place.dayNumber] = []

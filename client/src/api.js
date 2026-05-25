@@ -24,17 +24,23 @@ const refreshAccessToken = async () => {
     throw new Error('Auth store is not initialized.');
   }
 
+  const storedRefreshToken = typeof window !== 'undefined'
+    ? localStorage.getItem('refreshToken')
+    : null;
+
   if (!refreshPromise) {
     refreshPromise = api
-      .post('/auth/refresh', {}, {
+      .post('/auth/refresh', { refreshToken: storedRefreshToken }, {
         headers: { [SKIP_REFRESH_HEADER]: '1' }
       })
       .then((response) => {
         const newToken = response.data?.accessToken;
-        if (!newToken) {
-          throw new Error('No access token returned from refresh endpoint.');
-        }
+        const newRefreshToken = response.data?.refreshToken;
+        if (!newToken) throw new Error('No access token returned');
         authStoreRef.setAccessToken(newToken);
+        if (newRefreshToken && typeof window !== 'undefined') {
+          localStorage.setItem('refreshToken', newRefreshToken);
+        }
         return newToken;
       })
       .catch((err) => {

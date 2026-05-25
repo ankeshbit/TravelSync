@@ -250,6 +250,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api'
 import { useExpensesStore } from '../stores/expenses'
+import { useAuthStore } from '../stores/auth'
 import Navbar from '../components/Navbar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import AddExpenseModal from '../components/AddExpenseModal.vue'
@@ -258,6 +259,7 @@ import TripPresence from '../components/TripPresence.vue'
 
 const route = useRoute()
 const expensesStore = useExpensesStore()
+const authStore = useAuthStore()
 const { activeMembers } = useSocket(route.params.tripId)
 
 const trip = ref(null)
@@ -353,19 +355,21 @@ const handleDeleteExpense = async (expenseId) => {
 }
 
 const canDeleteExpense = (expense) => {
-  const userStr = localStorage.getItem('user')
-  if (!userStr) return false
+  const currentUser = authStore.currentUser;
+  if (!currentUser) return false;
 
-  try {
-    const user = JSON.parse(userStr)
-    const isTripOwner = trip.value && ((trip.value.ownerId && trip.value.ownerId._id && trip.value.ownerId._id.toString()) === user.id || (trip.value.ownerId && trip.value.ownerId.toString && trip.value.ownerId.toString() === user.id))
-    const payerId = expense.paidBy && expense.paidBy._id ? expense.paidBy._id.toString() : (expense.paidBy ? expense.paidBy.toString() : null)
-    const isExpensePayer = payerId === user.id
-    return isTripOwner || isExpensePayer
-  } catch (e) {
-    return false
-  }
-}
+  const isTripOwner = trip.value &&
+    (trip.value.ownerId?._id?.toString() === currentUser.id ||
+     trip.value.ownerId?.toString() === currentUser.id);
+
+  const payerId = expense.paidBy?._id
+    ? expense.paidBy._id.toString()
+    : expense.paidBy?.toString();
+
+  const isExpensePayer = payerId === currentUser.id;
+
+  return isTripOwner || isExpensePayer;
+};
 
 const initializeData = async () => {
   try {

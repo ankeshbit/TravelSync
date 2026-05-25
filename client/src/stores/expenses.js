@@ -23,7 +23,7 @@ export const useExpensesStore = defineStore('expenses', {
       this.error = null
       try {
         const response = await api.get(`/trips/${tripId}/expenses`)
-        this.expenses = response.data
+        this.expenses = response.data.expenses ?? response.data
       } catch (err) {
         this.error = err.response?.data?.message || err.message
         throw err

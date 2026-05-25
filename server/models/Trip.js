@@ -36,6 +36,14 @@ const TripSchema = new mongoose.Schema({
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   places: [PlaceSchema],
   expenses: [ExpenseSchema],
+  activity: [
+    {
+      user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      action: { type: String },
+      detail: { type: String },
+      createdAt: { type: Date, default: Date.now }
+    }
+  ],
   createdAt: { type: Date, default: Date.now }
 });
 
