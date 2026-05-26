@@ -6,16 +6,16 @@
       <Sidebar />
 
       <!-- Main Content Canvas -->
-      <main class="flex-1 md:ml-64 p-4 md:p-6 pb-20">
+      <main class="flex-1 md:ml-16 lg:ml-64 p-4 md:p-6 pb-20 transition-all duration-300">
         <!-- Hero Header Section -->
         <section v-if="!loading && trip" class="relative rounded-xl overflow-hidden mb-lg border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 transition-colors duration-200">
           <div class="h-48 md:h-64 w-full relative">
             <img alt="Trip Cover" class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&q=80&w=1000"/>
             <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-            <div class="absolute bottom-0 left-0 p-lg w-full flex justify-between items-end">
+            <div class="absolute bottom-0 left-0 p-4 md:p-6 w-full flex flex-col sm:flex-row justify-between sm:items-end gap-4">
               <div>
-                <h1 class="font-h1 text-h1 text-white mb-xs">{{ trip.name }}</h1>
-                <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-white/90">
+                <h1 class="text-2xl md:text-4xl font-bold text-white mb-2">{{ trip.name }}</h1>
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-white/90">
                   <span class="flex items-center gap-1 font-body-md text-body-md">
                     <span class="material-symbols-outlined text-[18px]" data-icon="location_on">location_on</span>
                     {{ trip.destination }}
@@ -26,7 +26,7 @@
                   </span>
                 </div>
               </div>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-3 self-start sm:self-auto">
                 <button
                   @click="showAiPlanner = true"
                   style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:linear-gradient(135deg,#0ea5e9,#4f46e5);color:#fff;font-size:13px;font-weight:700;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);flex-shrink:0"
@@ -55,7 +55,7 @@
         <!-- Members & Details Bento Grid -->
         <div v-if="!loading && trip" class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
           <!-- Members Section -->
-          <section class="md:col-span-4 bg-white dark:bg-slate-900 p-lg rounded-xl border border-gray-200 dark:border-slate-800 transition-colors duration-200">
+          <section class="md:col-span-4 bg-white dark:bg-slate-950 md:dark:bg-slate-900 p-lg rounded-xl border border-gray-200 dark:border-slate-800 transition-colors duration-200">
             <div class="flex items-center justify-between mb-md">
               <h2 class="font-h2 text-h2 text-primary">Members</h2>
               <span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container rounded-full px-3 py-1">{{ tripsStore.members.length + 1 }} active</span>
@@ -151,7 +151,7 @@
               <span class="material-symbols-outlined text-primary" data-icon="euro">euro</span>
               <div>
                 <p class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Budget</p>
-                <p class="text-sm font-semibold">TBD</p>
+                <p class="text-sm font-semibold">Euro TBD</p>
               </div>
             </div>
             <div class="flex items-start gap-3 p-md bg-surface-container-low dark:bg-slate-800 rounded-lg">

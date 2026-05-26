@@ -9,7 +9,7 @@
 
       <!-- Modal Content -->
       <div 
-        class="relative bg-surface-container-lowest dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up"
+        class="relative bg-surface-container-lowest dark:bg-slate-900 w-[92%] sm:w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up"
         role="dialog"
         aria-modal="true"
       >

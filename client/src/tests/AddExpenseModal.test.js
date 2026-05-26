@@ -6,9 +6,10 @@ describe('AddExpenseModal.vue', () => {
   const defaultProps = {
     isOpen: true,
     members: [
-      { _id: '1', name: 'Alice' },
-      { _id: '2', name: 'Bob' }
+      { _id: '1', name: 'Alice', email: 'alice@example.com' },
+      { _id: '2', name: 'Bob', email: 'bob@example.com' }
     ],
+    tripOwner: { _id: '1', name: 'Alice', email: 'alice@example.com' },
     tripId: 'test-trip-id'
   };
 
@@ -23,55 +24,46 @@ describe('AddExpenseModal.vue', () => {
     expect(wrapper.find('form').exists()).toBe(true);
   });
 
-  it('submit button is disabled when required fields are empty', () => {
+  it('shows validation errors when submitting empty form', async () => {
     const wrapper = mount(AddExpenseModal, {
       props: defaultProps
     });
     
-    // Initially, title and amount should be empty
-    const submitBtn = wrapper.find('button[type="submit"]');
-    expect(submitBtn.element.disabled).toBe(true);
-  });
-
-  it('entering a valid amount and title enables the submit button', async () => {
-    const wrapper = mount(AddExpenseModal, {
-      props: defaultProps
-    });
-
-    await wrapper.find('input[placeholder="e.g. Dinner at Luigi\'s"]').setValue('Dinner');
-    await wrapper.find('input[placeholder="0.00"]').setValue('50.00');
-    // paidBy and splitAmong might be initialized by default, but if not we should set them.
-    // Assuming the component requires paidBy to be set:
-    await wrapper.find('select').setValue('1'); // Select Alice as payer
-
-    // If splitAmong requires manual interaction, we assume it's pre-selected (all members)
+    // Submit the form
+    await wrapper.find('form').trigger('submit.prevent');
     
-    const submitBtn = wrapper.find('button[type="submit"]');
-    // Check if it's enabled now
-    expect(submitBtn.element.disabled).toBe(false);
+    // Check for validation error messages
+    expect(wrapper.text()).toContain('Title is required');
+    expect(wrapper.text()).toContain('Amount must be greater than 0');
   });
 
-  it('emits close event when the cancel button is clicked', async () => {
+  it('emits close event when the close button is clicked', async () => {
     const wrapper = mount(AddExpenseModal, {
       props: defaultProps
     });
 
-    // Find the cancel button (usually contains text "Cancel")
-    const cancelBtn = wrapper.findAll('button').find(w => w.text().includes('Cancel'));
-    await cancelBtn.trigger('click');
+    // Find the header close button by clicking on the close text/icon
+    const closeBtn = wrapper.find('button.text-gray-400');
+    await closeBtn.trigger('click');
 
     expect(wrapper.emitted()).toHaveProperty('close');
   });
 
-  it('emits submit event with correct payload on form submission', async () => {
+  it('emits submit event with correct payload on valid form submission', async () => {
     const wrapper = mount(AddExpenseModal, {
       props: defaultProps
     });
 
-    await wrapper.find('input[placeholder="e.g. Dinner at Luigi\'s"]').setValue('Dinner');
-    await wrapper.find('input[placeholder="0.00"]').setValue('50.00');
+    // Input title
+    await wrapper.find('input[placeholder="e.g., Dinner at restaurant"]').setValue('Dinner');
     
-    // We assume default selection sets paidBy and splitAmong appropriately.
+    // Input amount
+    await wrapper.find('input[placeholder="0.00"]').setValue(50.00);
+
+    // Select payer (the second select is paidBy, the first is currency)
+    const selectElements = wrapper.findAll('select');
+    await selectElements[1].setValue('1');
+
     // Trigger submit
     await wrapper.find('form').trigger('submit.prevent');
 
@@ -80,7 +72,7 @@ describe('AddExpenseModal.vue', () => {
     
     expect(submitEvent).toMatchObject({
       title: 'Dinner',
-      amount: '50.00' // or 50 depending on component logic
+      amount: 50
     });
   });
 });

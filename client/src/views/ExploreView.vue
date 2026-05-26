@@ -3,7 +3,7 @@
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)]">
+    <main class="md:ml-16 lg:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] transition-all duration-300">
       <!-- Header -->
       <section class="mb-lg">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -84,26 +84,26 @@
         <p class="text-outline-variant dark:text-slate-400 text-sm max-w-sm mx-auto">Try searching with different keywords or explore popular destinations above</p>
       </section>
 
-      <!-- Destination Detail Modal -->
-      <div v-if="selectedDestination" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <!-- Destination Detail Modal (Responsive: bottom sheet on mobile, centered dialog on md+) -->
+      <div v-if="selectedDestination" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 p-0 md:p-4 transition-all duration-300">
         <!-- Fix: Applied modal bg (slate-800) and border (white/20) for dark mode -->
-        <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-transparent dark:border-white/20">
-          <div class="h-80 w-full relative bg-surface-variant dark:bg-slate-900">
+        <div class="bg-white dark:bg-slate-800 rounded-t-2xl md:rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-transparent dark:border-white/20 shadow-xl transition-all duration-300">
+          <div class="h-60 md:h-80 w-full relative bg-surface-variant dark:bg-slate-900">
             <!-- Fix: Added dark:brightness-90 and alt text -->
             <img :alt="selectedDestination.alt || selectedDestination.name" :src="selectedDestination.image" class="w-full h-full object-cover dark:brightness-90" />
             <button @click="selectedDestination = null" class="absolute top-4 right-4 bg-white/90 dark:bg-slate-800/90 p-2 rounded-full hover:bg-white dark:hover:bg-slate-700 transition-colors duration-200">
               <span class="material-symbols-outlined dark:text-slate-100">close</span>
             </button>
           </div>
-          <div class="p-6">
+          <div class="p-6 pb-10 md:pb-6">
             <div class="flex items-start justify-between mb-4">
               <div>
                 <!-- Fix: Added dark:text-slate-100 for modal title -->
-                <h2 class="text-h2 text-on-surface dark:text-slate-100 mb-2">{{ selectedDestination.name }}</h2>
+                <h2 class="text-xl md:text-2xl font-bold text-on-surface dark:text-slate-100 mb-2">{{ selectedDestination.name }}</h2>
                 <!-- Fix: Added dark:text-slate-400 for modal region -->
                 <p class="text-outline-variant dark:text-slate-400">{{ selectedDestination.region }}</p>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-shrink-0">
                 <span class="material-symbols-outlined text-lg text-primary dark:text-blue-400">star</span>
                 <!-- Fix: Added dark:text-slate-100 for modal rating -->
                 <span class="font-semibold text-lg dark:text-slate-100">{{ selectedDestination.rating }}</span>
@@ -119,7 +119,7 @@
               <div class="p-4 bg-surface-container dark:bg-slate-700/50 rounded-lg transition-colors duration-200">
                 <p class="text-outline-variant dark:text-slate-400 text-xs mb-1">Best Time to Visit</p>
                 <!-- Fix: Added dark:text-slate-100 for detail value -->
-                <p class="font-semibold text-on-surface dark:text-slate-100">{{ selectedDestination.bestTime }}</p>
+                <p class="font-semibold text-on-surface dark:text-slate-100 text-sm md:text-base">{{ selectedDestination.bestTime }}</p>
               </div>
             </div>
             <button
@@ -172,7 +172,6 @@ const destinations = ref([
     name: 'Tokyo',
     region: 'Asia',
     description: 'A vibrant blend of ancient traditions and cutting-edge technology. Experience temples, street food, and neon lights.',
-    // Fix: Replaced broken Tokyo image with high-quality Unsplash photo as requested
     image: 'https://plus.unsplash.com/premium_photo-1661914240950-b0124f20a5c1?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     alt: 'Tokyo skyline at night',
     rating: 4.7,
@@ -204,7 +203,6 @@ const destinations = ref([
     name: 'Dubai',
     region: 'Middle East',
     description: 'Luxury, innovation, and desert adventures. Shop at world\'s largest malls and enjoy stunning desert safaris.',
-    // Fix: Updated to high-quality Unsplash photo for consistency
     image: 'https://images.unsplash.com/photo-1518684079-3c830dcef090?auto=format&fit=crop&q=80&w=800',
     alt: 'Dubai skyline and Burj Khalifa',
     rating: 4.5,
@@ -216,7 +214,6 @@ const destinations = ref([
     name: 'Bangkok',
     region: 'Asia',
     description: 'Golden temples, bustling markets, and street food heaven. Experience authentic Thai culture and hospitality.',
-    // Fix: Updated to the specific high-quality Unsplash photo requested by the user
     image: 'https://plus.unsplash.com/premium_photo-1661963188068-1bac46e28727?q=80&w=1171&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     alt: 'Bangkok temple at sunset',
     rating: 4.6,

@@ -3,7 +3,7 @@
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-64 pt-24 pb-20 px-6 md:px-10">
+    <main class="md:ml-16 lg:ml-64 pt-24 pb-20 px-6 md:px-10 transition-all duration-300">
       <!-- Header -->
       <header class="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
         <div>
@@ -19,8 +19,16 @@
       </header>
 
       <!-- Loading State -->
-      <div v-if="loading" class="flex justify-center items-center py-20">
-        <p class="text-lg text-on-surface-variant dark:text-slate-400">Loading trips...</p>
+      <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+        <div v-for="n in 6" :key="n" class="bg-white dark:bg-slate-900 rounded-xl border border-gray-150 dark:border-white/10 overflow-hidden flex flex-col h-[380px]">
+          <div class="h-48 w-full bg-gray-200 dark:bg-slate-800"></div>
+          <div class="p-6 flex-1 space-y-4">
+            <div class="h-6 w-3/4 bg-gray-200 dark:bg-slate-800 rounded"></div>
+            <div class="h-4 w-1/2 bg-gray-200 dark:bg-slate-800 rounded"></div>
+            <div class="h-4 w-5/6 bg-gray-200 dark:bg-slate-800 rounded"></div>
+            <div class="h-8 w-24 bg-gray-200 dark:bg-slate-800 rounded mt-auto"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Error State -->
@@ -30,8 +38,8 @@
 
       <!-- Content -->
       <template v-else>
-        <!-- Grid of Trips -->
-        <section v-if="trips.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter">
+        <!-- Grid of Trips (1 col on mobile, 2 on md, 3 on lg+) -->
+        <section v-if="trips.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <TripCard 
             v-for="trip in trips" 
             :key="trip._id" 
@@ -42,12 +50,12 @@
           <!-- Add New Placeholder Card -->
           <!-- Fix: Applied card bg (slate-900) and border (white/10) -->
           <button @click="showCreateModal = true" class="border-2 border-dashed border-gray-200 dark:border-white/10 rounded-xl flex flex-col items-center justify-center p-10 bg-gray-50/50 dark:bg-slate-900/50 hover:bg-gray-50 dark:hover:bg-slate-900 transition-colors group cursor-pointer w-full h-full min-h-[240px]">
-          <div class="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-            <span class="material-symbols-outlined text-blue-900 dark:text-blue-400 text-3xl">add_location_alt</span>
-          </div>
-          <h3 class="font-h3 text-h3 text-blue-900 dark:text-blue-300 mb-2">New Adventure?</h3>
-          <p class="font-body-md text-body-md text-gray-500 dark:text-slate-400 text-center max-w-[200px]">Start planning your next destination with friends.</p>
-        </button>
+            <div class="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <span class="material-symbols-outlined text-blue-900 dark:text-blue-400 text-3xl">add_location_alt</span>
+            </div>
+            <h3 class="font-h3 text-h3 text-blue-900 dark:text-blue-300 mb-2">New Adventure?</h3>
+            <p class="font-body-md text-body-md text-gray-500 dark:text-slate-400 text-center max-w-[200px]">Start planning your next destination with friends.</p>
+          </button>
         </section>
 
         <!-- Empty State -->

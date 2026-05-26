@@ -241,11 +241,15 @@ async function handleResend() {
 /* ── Digit Boxes ── */
 .otp-boxes {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  justify-content: center;
   margin-bottom: 16px;
+  width: 100%;
 }
 .otp-box {
-  width: 48px; height: 56px;
+  width: 100%;
+  max-width: 46px;
+  height: 56px;
   border-radius: 12px;
   border: 2px solid rgba(255,255,255,0.12);
   background: #1e293b;

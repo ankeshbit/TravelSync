@@ -3,17 +3,18 @@
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)]">
+    <main class="md:ml-16 lg:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] transition-all duration-300">
       <!-- Header -->
       <section class="mb-lg">
         <div>
-          <h1 class="text-3xl font-bold text-on-surface">Settings</h1>
+          <!-- Fix: Added dark:text-slate-100 for settings title -->
+          <h1 class="text-3xl font-bold text-on-surface dark:text-slate-100">Settings</h1>
           <p class="text-outline-variant mt-1">Manage your profile and account preferences</p>
         </div>
       </section>
 
       <!-- Settings Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Sidebar Menu -->
         <div class="lg:col-span-1">
           <nav class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 overflow-hidden sticky top-24">
@@ -22,10 +23,10 @@
               :key="tab.id"
               @click="activeTab = tab.id"
               :class="[
-                'w-full text-left px-6 py-4 border-l-4 transition-all duration-200',
+                'w-full text-left px-6 py-4 border-l-4 transition-all duration-200 cursor-pointer',
                 activeTab === tab.id
-                  ? 'bg-primary/10 border-l-primary text-primary font-semibold'
-                  : 'border-l-transparent text-on-surface-variant hover:bg-surface-container'
+                  ? 'bg-primary/10 border-l-primary text-primary font-semibold dark:bg-blue-950/40 dark:border-l-blue-400 dark:text-blue-400'
+                  : 'border-l-transparent text-on-surface-variant hover:bg-surface-container dark:hover:bg-slate-800 dark:text-slate-400'
               ]"
             >
               <div class="flex items-center gap-3">
@@ -37,12 +38,13 @@
         </div>
 
         <!-- Content -->
-        <div class="lg:col-span-2">
+        <div class="lg:col-span-2 min-w-0">
           <!-- Profile Tab -->
-          <section v-if="activeTab === 'profile'" class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
-            <h2 class="text-2xl font-bold text-on-surface mb-6">Profile Information</h2>
+          <section v-if="activeTab === 'profile'" class="w-full bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
+            <!-- Fix: Added dark:text-slate-100 -->
+            <h2 class="text-2xl font-bold text-on-surface dark:text-slate-100 mb-6">Profile Information</h2>
             
-            <!-- Avatar -->
+            <!-- Avatar (Constrained on md+) -->
             <div class="flex flex-col md:flex-row gap-6 mb-8 pb-8 border-b border-gray-200 dark:border-slate-800">
               <div>
                 <!-- Show uploaded photo or initials fallback -->
@@ -57,10 +59,11 @@
                 </div>
               </div>
               <div class="flex-1">
-                <h3 class="font-semibold text-on-surface mb-2">Profile Photo</h3>
+                <!-- Fix: Added dark:text-slate-100 -->
+                <h3 class="font-semibold text-on-surface dark:text-slate-100 mb-2">Profile Photo</h3>
                 <p class="text-outline-variant text-sm mb-4">Upload a profile picture to personalize your account (PNG or JPEG, max 5 MB)</p>
 
-                <!-- Hidden file input —— opacity:0/position:absolute so programmatic .click() still works -->
+                <!-- Hidden file input —— programmatic click -->
                 <input
                   ref="photoInput"
                   type="file"
@@ -82,33 +85,33 @@
               </div>
             </div>
 
-            <!-- Form -->
+            <!-- Profile Form (Constrained and Centered on md+) -->
             <form @submit.prevent="handleProfileUpdate" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
                 <div>
-                  <label class="block text-sm font-medium text-on-surface mb-2">Full Name</label>
+                  <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Full Name</label>
                   <input
                     v-model="profileForm.name"
                     type="text"
-                    class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                    class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                     placeholder="Your full name"
                   />
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-on-surface mb-2">Email</label>
+                  <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Email</label>
                   <input
                     :value="profileForm.email"
                     type="email"
                     disabled
-                    class="w-full px-4 py-2 border border-outline-variant dark:border-slate-700 rounded-lg bg-surface-container dark:bg-slate-800 text-on-surface-variant cursor-not-allowed"
+                    class="w-full px-4 py-2 border border-outline-variant dark:border-slate-700 rounded-lg bg-surface-container dark:bg-slate-800 text-on-surface-variant dark:text-slate-400 cursor-not-allowed"
                   />
                   <p class="text-outline-variant text-xs mt-1">Email cannot be changed</p>
                 </div>
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-on-surface mb-2">Member Since</label>
-                <p class="text-on-surface-variant">{{ formatDate(userJoinDate) }}</p>
+                <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Member Since</label>
+                <p class="text-on-surface-variant dark:text-slate-300">{{ formatDate(userJoinDate) }}</p>
               </div>
 
               <div class="pt-4 flex gap-3">
@@ -124,7 +127,7 @@
                 <button
                   type="button"
                   @click="resetProfileForm"
-                  class="px-6 py-2 border border-outline-variant text-on-surface rounded-lg font-semibold hover:bg-surface-container transition-colors"
+                  class="px-6 py-2 border border-outline-variant text-on-surface dark:text-slate-300 dark:border-slate-700 rounded-lg font-semibold hover:bg-surface-container dark:hover:bg-slate-800 transition-colors"
                 >
                   Cancel
                 </button>
@@ -133,39 +136,41 @@
           </section>
 
           <!-- Security Tab -->
-          <section v-if="activeTab === 'security'" class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
-            <h2 class="text-2xl font-bold text-on-surface mb-6">Security & Password</h2>
+          <section v-if="activeTab === 'security'" class="w-full bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
+            <!-- Fix: Added dark:text-slate-100 -->
+            <h2 class="text-2xl font-bold text-on-surface dark:text-slate-100 mb-6">Security & Password</h2>
 
+            <!-- Password Form (Constrained and Centered on md+) -->
             <form @submit.prevent="handlePasswordChange" class="space-y-6">
               <div>
-                <label class="block text-sm font-medium text-on-surface mb-2">Current Password</label>
+                <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Current Password</label>
                 <input
                   v-model="passwordForm.currentPassword"
                   type="password"
-                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="Enter your current password"
                 />
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-on-surface mb-2">New Password</label>
+                <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">New Password</label>
                 <input
                   v-model="passwordForm.newPassword"
                   type="password"
-                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="Enter new password (min. 8 characters)"
                 />
-                <p class="text-outline-variant text-xs mt-2">
+                <p class="text-outline-variant text-xs mt-2 dark:text-slate-400">
                   {{ passwordForm.newPassword.length }} character{{ passwordForm.newPassword.length !== 1 ? 's' : '' }}
                 </p>
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-on-surface mb-2">Confirm New Password</label>
+                <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Confirm New Password</label>
                 <input
                   v-model="passwordForm.confirmPassword"
                   type="password"
-                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="Confirm your new password"
                 />
               </div>
@@ -187,69 +192,70 @@
               </div>
             </form>
 
-            <!-- Sessions -->
+            <!-- Sessions (Constrained on md+) -->
             <div class="mt-8 pt-8 border-t border-gray-200 dark:border-slate-800">
-              <h3 class="font-semibold text-on-surface mb-4">Active Sessions</h3>
+              <h3 class="font-semibold text-on-surface dark:text-slate-100 mb-4">Active Sessions</h3>
               <div class="bg-surface-container dark:bg-slate-800 rounded-lg p-4 flex items-center justify-between transition-colors duration-200">
                 <div>
-                  <p class="font-medium text-on-surface">Current Device</p>
-                  <p class="text-sm text-on-surface-variant">This browser</p>
+                  <p class="font-medium text-on-surface dark:text-slate-100">Current Device</p>
+                  <p class="text-sm text-on-surface-variant dark:text-slate-400">This browser</p>
                 </div>
-                <span class="text-xs bg-green-100 text-green-900 px-3 py-1 rounded-full">Active</span>
+                <span class="text-xs bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-300 px-3 py-1 rounded-full">Active</span>
               </div>
             </div>
           </section>
 
           <!-- Preferences Tab -->
-          <section v-if="activeTab === 'preferences'" class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
-            <h2 class="text-2xl font-bold text-on-surface mb-6">Preferences</h2>
+          <section v-if="activeTab === 'preferences'" class="w-full bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
+            <!-- Fix: Added dark:text-slate-100 -->
+            <h2 class="text-2xl font-bold text-on-surface dark:text-slate-100 mb-6">Preferences</h2>
 
             <div class="space-y-6">
               <!-- Dark Mode -->
               <div class="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-slate-800">
                 <div>
-                  <h3 class="font-medium text-on-surface">Dark Mode</h3>
-                  <p class="text-sm text-on-surface-variant">Use dark theme for easier viewing</p>
+                  <h3 class="font-medium text-on-surface dark:text-slate-200">Dark Mode</h3>
+                  <p class="text-sm text-on-surface-variant dark:text-slate-400">Use dark theme for easier viewing</p>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="isDarkMode" class="sr-only peer" />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                  <div class="w-11 h-6 relative bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary dark:peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                 </label>
               </div>
 
               <!-- Notifications -->
               <div class="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-slate-800">
                 <div>
-                  <h3 class="font-medium text-on-surface">Email Notifications</h3>
-                  <p class="text-sm text-on-surface-variant">Get updates about your trips and invitations</p>
+                  <h3 class="font-medium text-on-surface dark:text-slate-200">Email Notifications</h3>
+                  <p class="text-sm text-on-surface-variant dark:text-slate-400">Get updates about your trips and invitations</p>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="preferences.emailNotifications" class="sr-only peer" />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                  <div class="w-11 h-6 relative bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary dark:peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                 </label>
               </div>
 
               <!-- Trip Reminders -->
               <div class="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-slate-800">
                 <div>
-                  <h3 class="font-medium text-on-surface">Trip Reminders</h3>
-                  <p class="text-sm text-on-surface-variant">Get notified before upcoming trips</p>
+                  <h3 class="font-medium text-on-surface dark:text-slate-200">Trip Reminders</h3>
+                  <p class="text-sm text-on-surface-variant dark:text-slate-400">Get notified before upcoming trips</p>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="preferences.tripReminders" class="sr-only peer" />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                  <div class="w-11 h-6 relative bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary dark:peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                 </label>
               </div>
 
               <!-- Privacy -->
               <div class="flex items-center justify-between">
                 <div>
-                  <h3 class="font-medium text-on-surface">Profile Visibility</h3>
-                  <p class="text-sm text-on-surface-variant">Allow others to see your profile</p>
+                  <h3 class="font-medium text-on-surface dark:text-slate-200">Profile Visibility</h3>
+                  <p class="text-sm text-on-surface-variant dark:text-slate-400">Allow others to see your profile</p>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="preferences.profileVisible" class="sr-only peer" />
-                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                  <div class="w-11 h-6 relative bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary dark:peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                 </label>
               </div>
 
@@ -262,31 +268,33 @@
           </section>
 
           <!-- Danger Zone Tab -->
-          <section v-if="activeTab === 'danger'" class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
-            <h2 class="text-2xl font-bold text-error mb-6">Danger Zone</h2>
+          <section v-if="activeTab === 'danger'" class="w-full bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
+            <h2 class="text-2xl font-bold text-error dark:text-red-400 mb-6">Danger Zone</h2>
 
-            <!-- Logout -->
-            <div class="mb-6 pb-6 border-b border-gray-200 dark:border-slate-800">
-              <h3 class="font-semibold text-on-surface mb-2">Sign Out</h3>
-              <p class="text-outline-variant text-sm mb-4">End your session on this device</p>
-              <button
-                @click="handleLogout"
-                class="px-6 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity"
-              >
-                Sign Out
-              </button>
-            </div>
+            <div class="space-y-6">
+              <!-- Logout -->
+              <div class="mb-6 pb-6 border-b border-gray-200 dark:border-slate-800">
+                <h3 class="font-semibold text-on-surface dark:text-slate-100 mb-2">Sign Out</h3>
+                <p class="text-outline-variant text-sm mb-4">End your session on this device</p>
+                <button
+                  @click="handleLogout"
+                  class="px-6 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Sign Out
+                </button>
+              </div>
 
-            <!-- Delete Account -->
-            <div>
-              <h3 class="font-semibold text-error mb-2">Delete Account</h3>
-              <p class="text-outline-variant text-sm mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
-              <button
-                @click="showDeleteConfirm = true"
-                class="px-6 py-2 bg-error text-on-error rounded-lg font-semibold hover:opacity-90 transition-opacity"
-              >
-                Delete Account
-              </button>
+              <!-- Delete Account -->
+              <div>
+                <h3 class="font-semibold text-error dark:text-red-400 mb-2">Delete Account</h3>
+                <p class="text-outline-variant text-sm mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
+                <button
+                  @click="showDeleteConfirm = true"
+                  class="px-6 py-2 bg-error dark:bg-red-600 text-on-error dark:text-white rounded-lg font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+                >
+                  Delete Account
+                </button>
+              </div>
             </div>
           </section>
 

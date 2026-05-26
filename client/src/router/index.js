@@ -1,13 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LoginView from '../views/LoginView.vue'
-import RegisterView from '../views/RegisterView.vue'
-import DashboardView from '../views/DashboardView.vue'
-import TripDetailView from '../views/TripDetailView.vue'
-import EditTripView from '../views/EditTripView.vue'
-import ExploreView from '../views/ExploreView.vue'
-import SettingsView from '../views/SettingsView.vue'
-import NotFoundView from '../views/NotFoundView.vue'
 import { useAuthStore } from '../stores/auth'
+
+const LoginView = () => import('../views/LoginView.vue')
+const RegisterView = () => import('../views/RegisterView.vue')
+const DashboardView = () => import('../views/DashboardView.vue')
+const TripDetailView = () => import('../views/TripDetailView.vue')
+const EditTripView = () => import('../views/EditTripView.vue')
+const ExploreView = () => import('../views/ExploreView.vue')
+const SettingsView = () => import('../views/SettingsView.vue')
+const NotFoundView = () => import('../views/NotFoundView.vue')
 
 const routes = [
   { path: '/', redirect: '/login' },
