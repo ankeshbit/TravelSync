@@ -128,11 +128,59 @@ router.post('/', verifyToken, async (req, res) => {
     });
 
     const savedTrip = await newTrip.save();
+
+    // Respond immediately — do not block trip creation on image fetch
     res.status(201).json(savedTrip);
+
+    // Non-blocking: fetch a cover image from Unsplash and patch the trip in the background
+    fetchAndAttachCoverImage(savedTrip._id, destination);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+/**
+ * Fetches the most relevant landscape photo for a destination from Unsplash
+ * and saves the URL to the trip's coverImageUrl field.
+ * Runs entirely in the background — never throws to the caller.
+ */
+async function fetchAndAttachCoverImage(tripId, destination) {
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+  if (!accessKey || accessKey === 'your_unsplash_access_key_here') {
+    return; // Key not configured — skip silently
+  }
+
+  try {
+    const query = encodeURIComponent(destination);
+    const url = `https://api.unsplash.com/search/photos?query=${query}&per_page=1&orientation=landscape`;
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Client-ID ${accessKey}`,
+        'Accept-Version': 'v1'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`[CoverImage] Unsplash returned ${response.status} for "${destination}"`);
+      return;
+    }
+
+    const data = await response.json();
+    const photo = data.results && data.results[0];
+
+    if (!photo || !photo.urls || !photo.urls.regular) {
+      console.warn(`[CoverImage] No photo results for "${destination}"`);
+      return;
+    }
+
+    await Trip.findByIdAndUpdate(tripId, { coverImageUrl: photo.urls.regular });
+  } catch (err) {
+    // Silently swallow — image is non-critical
+    console.warn(`[CoverImage] Failed to fetch cover image for "${destination}":`, err.message);
+  }
+}
+
 
 // --- MEMBERS API ---
 

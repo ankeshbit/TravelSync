@@ -289,9 +289,75 @@ const initMap = async () => {
       importLibrary("places")
     ]);
 
-    // Default center
-    const defaultCenter = { lat: 15.2993, lng: 74.1240 }; // Goa
-    
+    // Geocode the trip destination and return { center, zoom }
+    const geocodeDestination = async (destination) => {
+      const FALLBACK = { center: { lat: 20, lng: 0 }, zoom: 2 };
+
+      if (!destination) return FALLBACK;
+
+      // Uganda-specific override
+      if (/uganda/i.test(destination)) {
+        return { center: { lat: 1.3733, lng: 32.2903 }, zoom: 6 };
+      }
+
+      try {
+        const { Geocoder } = await importLibrary("geocoding");
+        const geocoder = new Geocoder();
+
+        return await new Promise((resolve) => {
+          geocoder.geocode({ address: destination }, (results, status) => {
+            if (status !== "OK" || !results || results.length === 0) {
+              console.warn(`Geocoding failed for "${destination}": ${status}. Falling back.`);
+              resolve(FALLBACK);
+              return;
+            }
+
+            const result = results[0];
+            const location = result.geometry.location;
+            const types = result.types || [];
+
+            // Determine zoom from address component types
+            let zoom = 8; // default for unrecognized types
+            if (types.some(t => ["country"].includes(t))) {
+              zoom = 6;
+            } else if (types.some(t => [
+              "administrative_area_level_1",
+              "administrative_area_level_2",
+              "locality",
+              "sublocality",
+              "postal_code",
+              "colloquial_area"
+            ].includes(t))) {
+              zoom = 12;
+            } else if (types.some(t => [
+              "point_of_interest",
+              "establishment",
+              "route",
+              "street_address",
+              "premise",
+              "natural_feature",
+              "airport",
+              "park"
+            ].includes(t))) {
+              zoom = 15;
+            }
+
+            resolve({
+              center: { lat: location.lat(), lng: location.lng() },
+              zoom
+            });
+          });
+        });
+      } catch (err) {
+        console.warn("Geocoding error:", err);
+        return FALLBACK;
+      }
+    };
+
+    // Resolve initial map center from trip destination
+    const destination = trip.value?.destination || '';
+    const { center: initialCenter, zoom: initialZoom } = await geocodeDestination(destination);
+
     const darkMapStyle = [
       { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
       { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
@@ -314,12 +380,20 @@ const initMap = async () => {
     ];
 
     map = new Map(mapContainer.value, {
-      center: defaultCenter,
-      zoom: 10,
+      center: initialCenter,
+      zoom: initialZoom,
       styles: isDarkMode.value ? darkMapStyle : [],
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false
+    });
+
+    // Re-center map when trip destination changes
+    watch(() => trip.value?.destination, async (newDest) => {
+      if (!map || !newDest) return;
+      const { center, zoom } = await geocodeDestination(newDest);
+      map.setCenter(center);
+      map.setZoom(zoom);
     });
 
     watch(isDarkMode, (newVal) => {

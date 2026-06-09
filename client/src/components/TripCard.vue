@@ -3,7 +3,13 @@
   <article class="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 shadow-sm hover:scale-[1.02] hover:shadow-xl transition-all duration-200 overflow-hidden flex flex-col cursor-pointer group" @click="$emit('click', trip._id)">
     <div class="h-48 w-full relative bg-surface-variant dark:bg-slate-800 overflow-hidden">
       <!-- Fix: Added dark:brightness-90 to image -->
-      <img :alt="trip.destination" loading="lazy" class="w-full h-full object-cover dark:brightness-90 group-hover:scale-105 transition-transform duration-500" src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&q=80&w=600&h=400" />
+      <img
+        :src="trip.coverImageUrl || PLACEHOLDER_URL"
+        :alt="trip.destination"
+        loading="lazy"
+        class="w-full h-full object-cover dark:brightness-90 group-hover:scale-105 transition-transform duration-500"
+        @error="onImgError"
+      />
       <div class="absolute top-4 right-4">
         <span class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-primary dark:text-blue-400 font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider">Upcoming</span>
       </div>
@@ -35,12 +41,20 @@
 </template>
 
 <script setup>
+// Neutral travel placeholder — shown when no coverImageUrl is saved yet
+const PLACEHOLDER_URL = 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&q=80&w=600&h=400';
+
 defineProps({
   trip: {
     type: Object,
     required: true
   }
 });
+
+const onImgError = (e) => {
+  // If the saved image URL breaks (e.g. expired CDN link), fall back to placeholder
+  e.target.src = PLACEHOLDER_URL;
+};
 
 const formatDate = (dateString) => {
   if (!dateString) return '';

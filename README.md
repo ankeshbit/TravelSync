@@ -137,8 +137,12 @@ TravelSync/
 ### Prerequisites
 - **Node.js** (v18+)
 - **MongoDB Atlas** database account
-- **Google Cloud Platform API Key** (with Maps JavaScript API and Places API enabled)
-- **Groq API Key** (for AI suggestions)
+- **Google Cloud Platform API Key** with the following APIs enabled:
+  - Maps JavaScript API
+  - Places API
+  - Geocoding API *(for destination-based map centering)*
+- **Groq API Key** (for AI itinerary suggestions)
+- **Unsplash Access Key** (for trip cover photo auto-generation — free at [unsplash.com/developers](https://unsplash.com/developers))
 - **SMTP Server access** (Gmail App password or similar for email OTP delivery)
 
 ### Setup in Two Commands
@@ -177,13 +181,14 @@ NODE_ENV=development
 GROQ_API_KEY=gsk_your_groq_api_key_here
 SMTP_EMAIL=your-verification-email@gmail.com
 SMTP_PASSWORD=your-gmail-app-password
+UNSPLASH_ACCESS_KEY=your_unsplash_access_key_here
 ```
 
 ### Frontend Environment (`client/.env`)
 Copy `client/.env.example` to `client/.env` and configure:
 ```env
 VITE_API_BASE_URL=http://localhost:3000/api
-VITE_GOOGLE_MAPS_KEY=your-restricted-google-maps-api-key
+VITE_GOOGLE_MAPS_KEY=your_google_maps_api_key_here
 ```
 
 ---
@@ -340,8 +345,13 @@ TravelSync includes system-aware styling that detects theme preferences and stor
 
 ### Google Maps Widget Not Rendering
 - Confirm `VITE_GOOGLE_MAPS_KEY` is present in your active frontend `.env` file (and make sure to avoid using the name `VITE_GOOGLE_MAPS_API_KEY`).
-- Confirm that both **Maps JavaScript API** and **Places API** are explicitly enabled in the Google Cloud Credentials console.
+- Confirm that **Maps JavaScript API**, **Places API**, and **Geocoding API** are all explicitly enabled in the Google Cloud Console.
 - Verify that your API key is allowed to receive calls from your local domain (`http://localhost:5173`).
+
+### Map Shows "For Development Purposes Only" Watermark
+- This watermark means **billing is not enabled** on your Google Cloud project.
+- Go to [console.cloud.google.com/billing](https://console.cloud.google.com/billing) and link a billing account.
+- Google provides a $200/month free credit — standard usage during development will not incur charges.
 
 ### Session Invalidation & Manual Relogin
 - Access tokens expire after 15 minutes.
