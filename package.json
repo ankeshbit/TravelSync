@@ -1,1 +1,16 @@
-{}
+{
+  "name": "travelsync-root",
+  "version": "1.0.0",
+  "description": "Root orchestrator for TravelSync",
+  "scripts": {
+    "install:client": "npm install --prefix client",
+    "install:server": "npm install --prefix server",
+    "install:all": "npm install --prefix client && npm install --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
