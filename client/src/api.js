@@ -4,9 +4,9 @@ const SKIP_REFRESH_HEADER = 'x-skip-auth-refresh';
 const LOGIN_ROUTE = '/login';
 
 const api = axios.create({
-  // Use Vite environment variable, fallback to localhost for development
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api',
-  withCredentials: true,
+  baseURL:
+    import.meta.env.VITE_API_URL ||
+    "https://travelsync-backend-2pm1.onrender.com/api"
 });
 
 let authStoreRef = null;
