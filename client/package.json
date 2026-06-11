@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
+    "@vueuse/core": "^14.3.0",
+    "@vueuse/motion": "^3.0.3",
     "axios": "^1.15.2",
     "install": "^0.13.0",
     "pinia": "^3.0.4",
