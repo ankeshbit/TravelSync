@@ -5,32 +5,38 @@ process.env.NODE_ENV = 'test';
 jest.setTimeout(30000);
 
 const request = require('supertest');
-const mongoose = require('mongoose');
+const { prisma } = require('../db');
 const app = require('../server');
-const User = require('../models/User');
-const Trip = require('../models/Trip');
 
 beforeAll(async () => {
-  // Tests require MONGO_URI to be set in environment
-  // Run with: MONGO_URI=mongodb://localhost:27017/travelsync_test npx jest
-  if (!process.env.MONGO_URI) {
+  // Tests require DATABASE_URL to be set in environment
+  if (!process.env.DATABASE_URL) {
     throw new Error(
-      'MONGO_URI environment variable is required for tests. ' +
+      'DATABASE_URL environment variable is required for tests. ' +
       'Set it to a test database URI, never a production database.'
     );
   }
-  await mongoose.connect(process.env.MONGO_URI);
 
-  // Clear collections once at the start
-  await User.deleteMany({});
-  await Trip.deleteMany({});
+  // Clear all test data in FK-safe order (children first, then parents)
+  await prisma.expenseSplit.deleteMany({});
+  await prisma.expense.deleteMany({});
+  await prisma.place.deleteMany({});
+  await prisma.activity.deleteMany({});
+  await prisma.tripMember.deleteMany({});
+  await prisma.trip.deleteMany({});
+  await prisma.user.deleteMany({});
 });
 
 afterAll(async () => {
-  if (mongoose.connection.readyState === 1) {
-    await mongoose.connection.db.dropDatabase();
-    await mongoose.disconnect();
-  }
+  // Clean up in FK-safe order
+  await prisma.expenseSplit.deleteMany({});
+  await prisma.expense.deleteMany({});
+  await prisma.place.deleteMany({});
+  await prisma.activity.deleteMany({});
+  await prisma.tripMember.deleteMany({});
+  await prisma.trip.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.$disconnect();
 });
 
 describe('TravelSync API Integration Tests', () => {
@@ -85,7 +91,7 @@ describe('TravelSync API Integration Tests', () => {
       });
     
     expect(tripRes.status).toBe(201);
-    testTripId = tripRes.body._id;
+    testTripId = tripRes.body._id || tripRes.body.id;
   });
 
   describe('Auth Routes', () => {
@@ -248,14 +254,18 @@ describe('TravelSync API Integration Tests', () => {
             email: otherUser.email
           });
         expect(res.status).toBe(200);
-        const memberIds = res.body.members.map(m => m._id.toString());
-        expect(memberIds).toContain(testOtherUser.id);
+        const memberIds = res.body.members.map(m => (m._id || m.id).toString());
+        expect(memberIds).toContain(testOtherUser.id || testOtherUser._id);
       });
 
       it('should return 400 if member is already in the trip', async () => {
-        // Try adding them again (since they are already added in the previous test or we add them here to be certain)
-        // First ensure they are in members (in case tests run in different order or isolation, we do it explicitly)
-        await Trip.findByIdAndUpdate(testTripId, { $addToSet: { members: testOtherUser.id } });
+        // Ensure the other user is a member using Prisma upsert (idempotent)
+        const otherUserId = testOtherUser.id || testOtherUser._id;
+        await prisma.tripMember.upsert({
+          where: { tripId_userId: { tripId: testTripId, userId: otherUserId } },
+          update: {},
+          create: { tripId: testTripId, userId: otherUserId }
+        });
 
         const res = await request(app)
           .post(`/api/trips/${testTripId}/members`)
