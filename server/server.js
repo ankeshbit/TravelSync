@@ -4,15 +4,15 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
-const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
 const { errorHandler } = require('./middleware/errorHandler');
 const http = require('http');
 const { Server } = require('socket.io');
+const { prisma } = require('./db');
 
 const isProduction = process.env.NODE_ENV === 'production';
-const mongoUri = process.env.MONGO_URI?.trim();
+const databaseUrl = process.env.DATABASE_URL?.trim();
 
 // Provide safe local defaults in development so the server can boot even when
 // a fresh .env file has not been filled in yet.
@@ -62,20 +62,29 @@ app.use((req, res, next) => {
   next();
 });
 
-// ─── Rate Limiting ───────────────────────────────────────────────────────────
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+// Auth endpoints: 20 requests per 15 minutes per IP
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // 20 requests per windowMs
-  message: 'Too many attempts. Please try again later.',
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: {
+    message: 'Too many authentication attempts, please try again in 15 minutes.'
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use('/api/auth/', authLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api-auth/login', authLimiter);
+app.use('/api-auth/register', authLimiter);
 
+// AI suggestion endpoint: 5 requests per 10 minutes per IP
 const aiLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: 10 * 60 * 1000,
   max: 5,
-  message: 'Too many AI requests. Please wait a minute.',
+  message: {
+    message: 'Too many itinerary requests, please try again in 10 minutes.'
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -86,31 +95,40 @@ app.use('/api/trips', (req, res, next) => {
   next();
 });
 
-// ─── MongoDB Connection ──────────────────────────────────────────────────────
-if (mongoUri && process.env.NODE_ENV !== 'test') {
-  mongoose
-    .connect(mongoUri)
-    .then(() => console.log('✓ MongoDB connected successfully'))
+// ─── Neon PostgreSQL Connection ──────────────────────────────────────────────
+if (databaseUrl && process.env.NODE_ENV !== 'test') {
+  prisma.$connect()
+    .then(() => console.log('✓ Neon PostgreSQL connected successfully'))
     .catch((err) => {
-      console.error('✗ MongoDB connection error:', err.message);
+      console.error('✗ Neon PostgreSQL connection error:', err.message);
 
       if (isProduction) {
         process.exit(1);
         return;
       }
 
-      console.warn('⚠ Starting without a database connection. API routes that need MongoDB will fail until MONGO_URI is configured.');
+      console.warn('⚠ Starting without a database connection. API routes that need Neon DB will fail until DATABASE_URL is configured.');
     });
 } else if (process.env.NODE_ENV !== 'test') {
-  console.warn('⚠ MONGO_URI is not configured. Starting the API without a database connection.');
+  console.warn('⚠ DATABASE_URL is not configured. Starting the API without a database connection.');
 }
 
 // ─── Health Check ────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  if (process.env.DATABASE_URL) {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbStatus = 'connected';
+    } catch {
+      dbStatus = 'error';
+    }
+  }
   res.json({
     message: 'TravelSync server is running',
     timestamp: new Date(),
-    dbStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    database: 'PostgreSQL (Neon)',
+    dbStatus
   });
 });
 
@@ -150,12 +168,15 @@ module.exports = app;
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 const gracefulShutdown = () => {
   console.log('Shutting down gracefully...');
-  server.close(() => {
+  server.close(async () => {
     console.log('Closed out remaining connections');
-    mongoose.connection.close(false).then(() => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    });
+    try {
+      await prisma.$disconnect();
+      console.log('Database connection closed');
+    } catch (e) {
+      console.error('Error disconnecting database:', e);
+    }
+    process.exit(0);
   });
 };
 

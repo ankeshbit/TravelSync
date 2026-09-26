@@ -1,6 +1,6 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const User = require('./models/User');
+const { prisma, formatUser } = require('./db');
 
 let io;
 
@@ -18,13 +18,16 @@ const setupSocket = (server, corsOptions) => {
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.userId).select('-password');
+      const dbUser = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: { id: true, name: true, email: true }
+      });
       
-      if (!user) {
-         return next(new Error('Authentication error: User not found'));
+      if (!dbUser) {
+        return next(new Error('Authentication error: User not found'));
       }
 
-      socket.user = user;
+      socket.user = formatUser(dbUser);
       next();
     } catch (err) {
       next(new Error('Authentication error: Invalid or expired token'));

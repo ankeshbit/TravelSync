@@ -92,19 +92,6 @@ html {
   border-radius: 3px;
 }
 
-/* Page Transitions */
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
-}
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateY(16px);
-}
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-16px);
-}
 
 /* List Item Entry Animations */
 .list-enter-active,

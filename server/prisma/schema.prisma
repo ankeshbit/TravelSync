@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(uuid())
+  name         String
+  email        String         @unique
+  password     String
+  picture      String         @default("")
+  refreshToken String?
+  createdAt    DateTime       @default(now())
+
+  ownedTrips    Trip[]         @relation("TripOwner")
+  memberTrips   TripMember[]
+  expensesPaid  Expense[]      @relation("ExpensePayer")
+  expenseSplits ExpenseSplit[]
+  activities    Activity[]
+
+  @@map("users")
+}
+
+model Trip {
+  id              String       @id @default(uuid())
+  name            String
+  destination     String
+  startDate       DateTime
+  endDate         DateTime
+  status          String       @default("planning")
+  coverImageUrl   String       @default("")
+  budgetPerPerson Float        @default(0)
+  currency        String       @default("INR")
+  ownerId         String
+  createdAt       DateTime     @default(now())
+
+  owner      User         @relation("TripOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members    TripMember[]
+  places     Place[]
+  expenses   Expense[]
+  activities Activity[]
+
+  @@index([ownerId, createdAt])
+  @@map("trips")
+}
+
+model TripMember {
+  id       String   @id @default(uuid())
+  tripId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@index([userId])
+  @@map("trip_members")
+}
+
+model Place {
+  id         String   @id @default(uuid())
+  tripId     String
+  name       String
+  address    String
+  lat        Float
+  lng        Float
+  dayNumber  Int
+  orderIndex Int
+  category   String   @default("attraction")
+  duration   Int      @default(60)
+  note       String   @default("")
+  createdAt  DateTime @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, dayNumber, orderIndex])
+  @@map("places")
+}
+
+model Expense {
+  id         String         @id @default(uuid())
+  tripId     String
+  title      String
+  amount     Float
+  currency   String         @default("INR")
+  category   String         @default("other")
+  receiptUrl String         @default("")
+  paidById   String
+  createdAt  DateTime       @default(now())
+
+  trip   Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  paidBy User           @relation("ExpensePayer", fields: [paidById], references: [id], onDelete: Cascade)
+  splits ExpenseSplit[]
+
+  @@index([tripId])
+  @@map("expenses")
+}
+
+model ExpenseSplit {
+  id        String @id @default(uuid())
+  expenseId String
+  userId    String
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, userId])
+  @@map("expense_splits")
+}
+
+model Activity {
+  id        String   @id @default(uuid())
+  tripId    String
+  userId    String?
+  action    String
+  detail    String
+  createdAt DateTime @default(now())
+
+  trip Trip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tripId, createdAt])
+  @@map("activities")
+}

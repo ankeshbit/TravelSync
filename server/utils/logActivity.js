@@ -1,9 +1,14 @@
-const Trip = require('../models/Trip');
+const { prisma } = require('../db');
 
 module.exports = async function logActivity(tripId, userId, action, detail) {
   try {
-    await Trip.findByIdAndUpdate(tripId, {
-      $push: { activity: { user: userId, action, detail } }
+    await prisma.activity.create({
+      data: {
+        tripId,
+        userId: userId || null,
+        action: action || '',
+        detail: detail || ''
+      }
     });
   } catch (err) {
     console.error('Error logging activity:', err);

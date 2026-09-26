@@ -22,6 +22,10 @@
           <strong class="otp-email">{{ email }}</strong>
         </p>
 
+        <div v-if="devOtp" class="otp-dev-badge" @click="autoFillDevOtp">
+          <span>⚡ Dev Code: <strong>{{ devOtp }}</strong> (click to fill)</span>
+        </div>
+
         <!-- 6 individual digit boxes -->
         <div class="otp-boxes" @paste.prevent="onPaste">
           <input
@@ -89,6 +93,7 @@ const props = defineProps({
   visible:  { type: Boolean, default: false },
   email:    { type: String,  required: true },
   purpose:  { type: String,  required: true }, // 'register' | 'delete'
+  devOtp:   { type: String,  default: '' },
 });
 
 const emit = defineEmits(['verified', 'cancel']);
@@ -104,6 +109,14 @@ const resendCountdown = ref(0);
 let countdownTimer = null;
 
 const otpValue = computed(() => digits.value.join(''));
+
+function autoFillDevOtp() {
+  if (!props.devOtp) return;
+  const chars = props.devOtp.slice(0, 6).split('');
+  chars.forEach((c, idx) => {
+    digits.value[idx] = c;
+  });
+}
 
 // ── Countdown timer ────────────────────────────────────────────────────────────
 function startCountdown(seconds = 60) {
@@ -352,6 +365,24 @@ async function handleResend() {
 }
 .otp-spinner--sm { width: 14px; height: 14px; border-width: 2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.otp-dev-badge {
+  margin: 0 auto 16px;
+  font-size: 13px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.otp-dev-badge:hover {
+  background: rgba(56, 189, 248, 0.22);
+}
 
 /* ── Fade transition ── */
 .otp-fade-enter-active, .otp-fade-leave-active { transition: opacity 0.2s; }

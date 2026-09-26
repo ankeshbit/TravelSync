@@ -61,7 +61,7 @@ A full-stack web application for planning trips with friends, managing itinerari
 ### Backend
 - **Node.js** (v18+) & **Express.js** — Robust RESTful API and routing
 - **Socket.io** — WebSockets connection for real-time collaboration updates
-- **MongoDB Atlas** & **Mongoose ODM** — Schematized document database indexing and modeling
+- **Neon DB (PostgreSQL)** & **Prisma ORM** — Modern serverless relational database and schema migrations
 - **JWT (JsonWebToken)** — Core authorization using rotating tokens (15m Access Token, 7d Refresh Token)
 - **Helmet.js** — Secure HTTP headers configuration
 - **express-rate-limit** — Brute-force protection on authentication and AI suggestions routes
@@ -136,7 +136,7 @@ TravelSync/
 
 ### Prerequisites
 - **Node.js** (v18+)
-- **MongoDB Atlas** database account
+- **Neon PostgreSQL** database account (`DATABASE_URL`)
 - **Google Cloud Platform API Key** with the following APIs enabled:
   - Maps JavaScript API
   - Places API
@@ -172,7 +172,7 @@ npm run dev  # Starts Vite HMR server
 ### Backend Environment (`server/.env`)
 Copy `server/.env.example` to `server/.env` and configure:
 ```env
-MONGO_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/travelsync
+DATABASE_URL=postgresql://user:password@ep-project.neon.tech/neondb?sslmode=require
 JWT_SECRET=your-secure-32-char-access-secret
 REFRESH_SECRET=your-secure-32-char-refresh-secret
 ALLOWED_ORIGIN=http://localhost:5173

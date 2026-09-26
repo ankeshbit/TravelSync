@@ -140,6 +140,7 @@
   <OtpModal
     :visible="showOtp"
     :email="form.email"
+    :dev-otp="devOtp"
     purpose="register"
     @verified="handleOtpVerified"
     @cancel="showOtp = false; loading = false"
@@ -159,6 +160,7 @@ const form    = ref({ name: '', email: '', password: '', confirmPassword: '', te
 const loading = ref(false)
 const error   = ref('')
 const showOtp = ref(false)
+const devOtp  = ref('')
 
 // Step 1: Validate form, send OTP, show modal
 const handleRegister = async () => {
@@ -177,7 +179,8 @@ const handleRegister = async () => {
   }
   loading.value = true
   try {
-    await api.post('/auth/send-otp', { email: form.value.email, purpose: 'register' })
+    const res = await api.post('/auth/send-otp', { email: form.value.email, purpose: 'register' })
+    devOtp.value = res.data?.devOtp || ''
     showOtp.value = true
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to send verification code. Try again.'
