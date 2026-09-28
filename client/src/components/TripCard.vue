@@ -1,64 +1,224 @@
 <template>
-  <!-- Fix: Applied card bg (slate-900) and default border (white/10) -->
-  <article class="bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/10 shadow-sm hover:scale-[1.02] hover:shadow-xl transition-all duration-200 overflow-hidden flex flex-col cursor-pointer group" @click="$emit('click', trip._id)">
-    <div class="h-48 w-full relative bg-surface-variant dark:bg-slate-800 overflow-hidden">
-      <!-- Fix: Added dark:brightness-90 to image -->
+  <article 
+    class="bg-[#0F172A] border border-[#1E2E4E] hover:border-blue-500/50 rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col group"
+    @click="$emit('click', trip.id || trip._id)"
+  >
+    <!-- Cover Image with Dynamic Status Badge -->
+    <div class="h-44 w-full relative bg-[#131F38] overflow-hidden">
       <img
-        :src="trip.coverImageUrl || PLACEHOLDER_URL"
-        :alt="trip.destination"
+        :src="trip.coverImageUrl || DEFAULT_TRIP_COVER_IMAGE"
+        :alt="trip.destination || trip.name"
         loading="lazy"
-        class="w-full h-full object-cover dark:brightness-90 group-hover:scale-105 transition-transform duration-500"
+        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-95"
         @error="onImgError"
       />
-      <div class="absolute top-4 right-4">
-        <span class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-primary dark:text-blue-400 font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider">Upcoming</span>
+      <div class="absolute inset-0 bg-gradient-to-t from-[#0F172A]/70 via-transparent to-black/20"></div>
+      
+      <!-- Status Badge -->
+      <div class="absolute top-3 right-3">
+        <span 
+          :class="statusBadgeClass"
+          class="inline-flex items-center gap-1.5 border text-[11px] font-semibold px-2.5 py-0.5 rounded-full backdrop-blur-md transition-colors"
+        >
+          <span 
+            v-if="tripStatus === 'Ongoing'" 
+            class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
+          ></span>
+          {{ tripStatus }}
+        </span>
       </div>
     </div>
-    <div class="p-6 flex flex-col flex-grow">
-      <!-- Fix: Added dark:text-slate-100 for primary text contrast -->
-      <h3 class="font-h3 text-h3 text-on-background dark:text-slate-100 mb-1 group-hover:text-primary dark:group-hover:text-blue-400 transition-colors">{{ trip.name }}</h3>
-      <!-- Fix: Added dark:text-slate-400 for secondary text contrast -->
-      <div class="flex items-center gap-2 text-on-surface-variant dark:text-slate-400 mb-4">
-        <span class="material-symbols-outlined text-[18px]">location_on</span>
-        <span class="font-body-md text-body-md">{{ trip.destination }}</span>
-      </div>
-      <!-- Fix: Added dark:text-slate-400 for secondary text contrast -->
-      <div class="flex items-center gap-2 text-on-surface-variant dark:text-slate-400 mb-6">
-        <span class="material-symbols-outlined text-[18px]">calendar_today</span>
-        <span class="font-body-md text-body-md">{{ formatDate(trip.startDate) }} - {{ formatDate(trip.endDate) }}</span>
-      </div>
-      <div class="flex items-center justify-between mt-auto">
-        <div class="flex -space-x-3">
-          <!-- Fix: Updated border for avatar -->
-          <div class="w-8 h-8 rounded-full border-2 border-white dark:border-white/10 bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center font-bold text-blue-900 dark:text-blue-300 text-xs shadow-sm">
-            {{ trip.ownerId && trip.ownerId.name ? trip.ownerId.name.substring(0,2).toUpperCase() : 'U' }}
+
+    <!-- Card Content -->
+    <div class="p-5 flex flex-col flex-1 justify-between gap-4">
+      <div>
+        <h3 class="text-lg font-bold text-white group-hover:text-blue-400 transition-colors mb-2.5 truncate" :title="trip.name">
+          {{ trip.name }}
+        </h3>
+
+        <div class="flex flex-col gap-1.5 text-xs text-slate-400">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-[16px] text-slate-500">calendar_today</span>
+            <span>{{ formatDate(trip.startDate) }} - {{ formatDate(trip.endDate) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-[16px] text-slate-500">location_on</span>
+            <span class="truncate">{{ trip.destination }}</span>
           </div>
         </div>
-        <button class="text-primary dark:text-blue-400 font-semibold text-sm hover:underline">View Details</button>
+      </div>
+
+      <!-- Footer: Member Avatars Stack + Options Menu -->
+      <div class="flex items-center justify-between pt-3 border-t border-[#1E2E4E]/60 mt-auto">
+        <!-- Avatar Stack (Up to 3 avatars + "+N" overflow) -->
+        <div class="flex items-center -space-x-2">
+          <div 
+            v-for="(member, idx) in displayMembers" 
+            :key="member.id || idx"
+            class="w-7 h-7 rounded-full border-2 border-[#0F172A] overflow-hidden bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white shadow-sm flex-shrink-0"
+            :title="member.name"
+          >
+            <img 
+              v-if="member.picture && !failedAvatarImages[member.id || idx]" 
+              :src="member.picture" 
+              :alt="member.name" 
+              class="w-full h-full object-cover"
+              @error="failedAvatarImages[member.id || idx] = true"
+            />
+            <span v-else>{{ member.initials }}</span>
+          </div>
+          <div 
+            v-if="extraCount > 0" 
+            class="w-7 h-7 rounded-full border-2 border-[#0F172A] bg-blue-600/30 text-blue-300 flex items-center justify-center text-[10px] font-semibold flex-shrink-0"
+            :title="`+${extraCount} more`"
+          >
+            +{{ extraCount }}
+          </div>
+        </div>
+
+        <!-- 3-Dots Menu -->
+        <button 
+          @click.stop="$emit('options', trip)"
+          class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800/60 transition-colors"
+          title="Trip options"
+        >
+          <span class="material-symbols-outlined text-[18px]">more_vert</span>
+        </button>
       </div>
     </div>
   </article>
 </template>
 
 <script setup>
-// Neutral travel placeholder — shown when no coverImageUrl is saved yet
-const PLACEHOLDER_URL = 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&q=80&w=600&h=400';
+import { computed, reactive } from 'vue';
+import { DEFAULT_TRIP_COVER_IMAGE } from '../constants';
 
-defineProps({
+const props = defineProps({
   trip: {
     type: Object,
     required: true
   }
 });
 
+defineEmits(['click', 'options']);
+
+const failedAvatarImages = reactive({});
+
 const onImgError = (e) => {
-  // If the saved image URL breaks (e.g. expired CDN link), fall back to placeholder
-  e.target.src = PLACEHOLDER_URL;
+  e.target.src = DEFAULT_TRIP_COVER_IMAGE;
 };
 
 const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  if (!dateString) return 'TBD';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
+
+// Compute status (Upcoming, Ongoing, Completed)
+const tripStatus = computed(() => {
+  const statusStr = (props.trip.status || '').toLowerCase();
+  if (statusStr === 'completed') return 'Completed';
+  if (statusStr === 'cancelled') return 'Cancelled';
+  if (statusStr === 'ongoing') return 'Ongoing';
+
+  if (!props.trip.startDate) {
+    return props.trip.status || 'Upcoming';
+  }
+
+  const start = new Date(props.trip.startDate);
+  if (isNaN(start.getTime())) {
+    return props.trip.status || 'Upcoming';
+  }
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startTime = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+
+  if (today < startTime) {
+    return 'Upcoming';
+  }
+
+  if (props.trip.endDate) {
+    const end = new Date(props.trip.endDate);
+    if (!isNaN(end.getTime())) {
+      const endTime = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
+      if (today > endTime) {
+        return 'Completed';
+      }
+      return 'Ongoing';
+    }
+  }
+
+  return 'Ongoing';
+});
+
+// Style badge differently per status
+const statusBadgeClass = computed(() => {
+  switch (tripStatus.value) {
+    case 'Ongoing':
+      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+    case 'Completed':
+      return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
+    case 'Cancelled':
+      return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+    case 'Upcoming':
+    default:
+      return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+  }
+});
+
+const getInitials = (name) => {
+  if (!name || typeof name !== 'string') return '?';
+  const trimmed = name.trim();
+  if (!trimmed) return '?';
+  const parts = trimmed.split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return trimmed.substring(0, 2).toUpperCase();
+};
+
+// Aggregate unique participants (Owner + Members)
+const allMembers = computed(() => {
+  const list = [];
+  const seenIds = new Set();
+
+  // 1. Owner
+  const owner = props.trip.owner || (typeof props.trip.ownerId === 'object' ? props.trip.ownerId : null);
+  if (owner && (owner.id || owner._id || owner.name)) {
+    const id = String(owner.id || owner._id || '');
+    if (id) seenIds.add(id);
+    list.push({
+      id: id || 'owner',
+      name: owner.name || 'Owner',
+      picture: owner.picture || '',
+      initials: getInitials(owner.name || 'Owner')
+    });
+  }
+
+  // 2. Members
+  const rawMembers = Array.isArray(props.trip.members) ? props.trip.members : [];
+  for (const m of rawMembers) {
+    const userObj = m.user || (typeof m === 'object' ? m : null);
+    const id = String(userObj?.id || userObj?._id || (typeof m === 'string' ? m : ''));
+    if (id && seenIds.has(id)) {
+      continue;
+    }
+    if (id) seenIds.add(id);
+
+    const name = userObj?.name || userObj?.email?.split('@')[0] || (typeof m === 'string' ? m : 'Member');
+    list.push({
+      id: id || name,
+      name,
+      picture: userObj?.picture || '',
+      initials: getInitials(name)
+    });
+  }
+
+  return list;
+});
+
+const displayMembers = computed(() => allMembers.value.slice(0, 3));
+const extraCount = computed(() => Math.max(0, allMembers.value.length - 3));
 </script>

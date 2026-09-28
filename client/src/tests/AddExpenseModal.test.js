@@ -6,10 +6,10 @@ describe('AddExpenseModal.vue', () => {
   const defaultProps = {
     isOpen: true,
     members: [
-      { _id: '1', name: 'Alice', email: 'alice@example.com' },
-      { _id: '2', name: 'Bob', email: 'bob@example.com' }
+      { id: '1', _id: '1', name: 'Alice', email: 'alice@example.com' },
+      { id: '2', _id: '2', name: 'Bob', email: 'bob@example.com' }
     ],
-    tripOwner: { _id: '1', name: 'Alice', email: 'alice@example.com' },
+    tripOwner: { id: '1', _id: '1', name: 'Alice', email: 'alice@example.com' },
     tripId: 'test-trip-id'
   };
 

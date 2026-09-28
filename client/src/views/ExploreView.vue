@@ -1,139 +1,152 @@
 <template>
-  <div class="min-h-screen bg-surface dark:bg-slate-950 transition-colors duration-200">
+  <div class="min-h-screen bg-[#080D1A] text-slate-100 font-['Plus_Jakarta_Sans'] flex">
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-16 lg:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] transition-all duration-300">
-      <!-- Header -->
-      <section class="mb-lg">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <!-- Fix: Added dark:text-slate-100 for primary text contrast -->
-            <h1 class="text-3xl font-bold text-on-surface dark:text-slate-100">Explore</h1>
-            <!-- Fix: Added dark:text-slate-400 for muted text contrast -->
-            <p class="text-outline-variant dark:text-slate-400 mt-1">Discover popular destinations and travel inspiration</p>
+    <!-- Main Content Area -->
+    <main class="flex-1 md:pl-64 pt-16 md:pt-8 pb-16 px-6 md:px-10 transition-all duration-300 max-w-7xl mx-auto w-full">
+      <!-- Top Header -->
+      <header class="mb-6">
+        <h1 class="text-3xl font-extrabold text-white tracking-tight">Explore Destinations</h1>
+        <p class="text-sm text-slate-400 mt-1">Discover popular destinations and get inspired for your next trip.</p>
+      </header>
+
+      <!-- Search Input with Search & Clear Icons -->
+      <div class="relative w-full mb-8">
+        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+        <input 
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search destinations (e.g., Paris, Tokyo, Bali, New York)"
+          class="w-full bg-[#111C33] border border-[#1E2E4E] text-sm text-white placeholder-slate-400 pl-12 pr-12 py-3.5 rounded-2xl focus:outline-none focus:border-blue-500 shadow-lg shadow-black/20 transition-all"
+        />
+        <button 
+          v-if="searchQuery"
+          @click="clearSearch"
+          class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-lg"
+          title="Clear search"
+        >
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <!-- Destinations Section -->
+      <section class="mb-10">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-xl font-bold text-white tracking-tight">Destinations</h2>
+          <span v-if="!loading && destinations.length > 0" class="text-xs font-semibold text-slate-400">
+            {{ destinations.length }} {{ destinations.length === 1 ? 'destination' : 'destinations' }} found
+          </span>
+        </div>
+
+        <!-- Loading State -->
+        <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div 
+            v-for="n in 4" 
+            :key="n" 
+            class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl overflow-hidden animate-pulse flex flex-col h-72"
+          >
+            <div class="h-44 bg-[#131F38] w-full"></div>
+            <div class="p-4 flex-1 flex flex-col justify-between">
+              <div class="space-y-2">
+                <div class="h-5 bg-[#1E2E4E] rounded w-3/4"></div>
+                <div class="h-3.5 bg-[#1E2E4E] rounded w-1/2"></div>
+              </div>
+              <div class="h-8 bg-[#1E2E4E] rounded-xl w-full mt-3"></div>
+            </div>
           </div>
         </div>
-      </section>
 
-      <!-- Search Bar -->
-      <section class="mb-lg">
-        <div class="relative w-full max-w-2xl">
-          <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
-          <!-- Fix: Applied dark mode input styles (bg-slate-900, border-slate-700, text-slate-100, focus:ring-slate-500) -->
-          <input 
-            v-model="searchQuery"
-            @keyup.enter="performSearch"
-            class="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-outline dark:border-slate-700 dark:text-slate-100 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/10 dark:focus:ring-slate-500 transition-all font-body-md text-body-md dark:placeholder-slate-500" 
-            placeholder="Search destinations (e.g., Paris, Tokyo, New York)" 
-            type="text"
-          />
-        </div>
-      </section>
-
-      <!-- Featured Destinations -->
-      <section class="mb-lg">
-        <div class="flex items-center justify-between mb-4">
-          <!-- Fix: Added dark:text-slate-100 for section title -->
-          <h2 class="text-2xl font-bold text-on-surface dark:text-slate-100">Popular Destinations</h2>
-          <!-- Fix: Added dark:text-slate-400 for count text -->
-          <span class="text-outline-variant dark:text-slate-400 text-sm">{{ filteredDestinations.length }} places</span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter">
-          <!-- Fix: Applied card bg (slate-900) and border (white/10) for dark mode -->
-          <article
-            v-for="destination in filteredDestinations"
-            :key="destination.id"
-            class="bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-sm hover:shadow-md border border-gray-200 dark:border-white/10 transition-all cursor-pointer hover:border-primary"
-            @click="viewDestination(destination)"
+        <!-- Error State -->
+        <div v-else-if="error" class="bg-red-500/10 border border-red-500/30 rounded-2xl p-8 text-center max-w-lg mx-auto my-12">
+          <span class="material-symbols-outlined text-red-400 text-4xl mb-3">error</span>
+          <h3 class="text-lg font-bold text-white mb-2">Failed to load destinations</h3>
+          <p class="text-sm text-slate-400 mb-6">{{ error }}</p>
+          <button 
+            @click="loadDestinations(searchQuery)" 
+            class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-blue-600/30 active:scale-95"
           >
-            <div class="h-48 w-full relative bg-surface-variant dark:bg-slate-800 overflow-hidden">
-              <!-- Fix: Added dark:brightness-90 to reduce eye strain and used destination.alt -->
-              <img :alt="destination.alt || destination.name" :src="destination.image" class="w-full h-full object-cover hover:scale-105 transition-transform duration-300 dark:brightness-90" />
-              <div class="absolute top-4 right-4">
-                <span class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-primary dark:text-blue-400 font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider">{{ destination.region }}</span>
+            Try Again
+          </button>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else-if="destinations.length === 0" class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-10 text-center max-w-md mx-auto my-12">
+          <span class="material-symbols-outlined text-slate-500 text-5xl mb-3">travel_explore</span>
+          <h3 class="text-lg font-bold text-white mb-1">No destinations found</h3>
+          <p class="text-sm text-slate-400 mb-6">
+            <span v-if="searchQuery">No destinations matching "<span class="text-white">{{ searchQuery }}</span>".</span>
+            <span v-else>No trips have been planned yet. Start by creating the first trip!</span>
+          </p>
+          <div class="flex items-center justify-center gap-3">
+            <button 
+              v-if="searchQuery" 
+              @click="clearSearch"
+              class="px-4 py-2.5 bg-[#1E2E4E] hover:bg-[#2A3E66] text-white text-xs font-semibold rounded-xl transition-all active:scale-95"
+            >
+              Clear Search
+            </button>
+            <button 
+              @click="planNewTrip"
+              class="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-blue-600/30 active:scale-95"
+            >
+              Plan a Trip
+            </button>
+          </div>
+        </div>
+
+        <!-- Destinations Cards Grid -->
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <article 
+            v-for="dest in destinations"
+            :key="dest.name"
+            @click="planTripHere(dest.name)"
+            class="bg-[#0F172A] border border-[#1E2E4E] hover:border-blue-500/50 rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col group justify-between"
+          >
+            <!-- Card Image -->
+            <div class="h-44 w-full relative bg-[#131F38] overflow-hidden">
+              <img 
+                :src="getCoverImage(dest.coverImageUrl)" 
+                :alt="dest.name"
+                @error="handleImageError"
+                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-95" 
+              />
+              <div class="absolute inset-0 bg-gradient-to-t from-[#0F172A]/80 via-transparent to-black/20"></div>
+
+              <!-- Trips Planned Badge -->
+              <div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center gap-1.5 text-xs text-white">
+                <span class="material-symbols-outlined text-[14px] text-blue-400">luggage</span>
+                <span class="font-medium">{{ dest.tripCount }} {{ dest.tripCount === 1 ? 'trip planned' : 'trips planned' }}</span>
               </div>
             </div>
-            <div class="p-6">
-              <!-- Fix: Added dark:text-slate-100 for card title -->
-              <h3 class="font-h3 text-h3 text-on-surface dark:text-slate-100 mb-2">{{ destination.name }}</h3>
-              <!-- Fix: Added dark:text-slate-400 for description contrast -->
-              <p class="text-outline-variant dark:text-slate-400 text-sm mb-4 line-clamp-2">{{ destination.description }}</p>
-              <div class="flex items-center justify-between text-xs">
-                <div class="flex items-center gap-2">
-                  <span class="material-symbols-outlined text-[16px] text-primary dark:text-blue-400">star</span>
-                  <!-- Fix: Added dark:text-slate-100 for rating text -->
-                  <span class="font-semibold dark:text-slate-100">{{ destination.rating }}/5</span>
-                </div>
-                <!-- Fix: Added dark:text-slate-400 for trips text -->
-                <span class="text-outline-variant dark:text-slate-400">{{ destination.trips }} trips planned</span>
+
+            <!-- Card Info -->
+            <div class="p-4 flex flex-col justify-between flex-1">
+              <div>
+                <h3 class="text-base font-bold text-white group-hover:text-blue-400 transition-colors line-clamp-1" :title="dest.name">
+                  {{ dest.name }}
+                </h3>
+                <p v-if="dest.averageBudgetPerPerson > 0" class="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[14px] text-emerald-400">payments</span>
+                  <span>Avg. ₹{{ Number(dest.averageBudgetPerPerson).toLocaleString() }} / person</span>
+                </p>
               </div>
+
+              <!-- Plan a Trip Here Action Button -->
+              <button 
+                @click.stop="planTripHere(dest.name)"
+                class="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-95"
+              >
+                <span class="material-symbols-outlined text-[16px]">add_location_alt</span>
+                <span>Plan a Trip Here</span>
+              </button>
             </div>
           </article>
         </div>
       </section>
-
-      <!-- Empty State -->
-      <section v-if="filteredDestinations.length === 0 && searchQuery" class="py-12 text-center">
-        <div class="w-16 h-16 bg-surface-container dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 transition-colors duration-200">
-          <span class="material-symbols-outlined text-outline-variant dark:text-slate-400 text-3xl">travel_explore</span>
-        </div>
-        <!-- Fix: Added dark:text-slate-100 for empty state header -->
-        <h3 class="text-lg font-semibold text-outline-variant dark:text-slate-100 mb-2">No destinations found</h3>
-        <!-- Fix: Added dark:text-slate-400 for empty state subtext -->
-        <p class="text-outline-variant dark:text-slate-400 text-sm max-w-sm mx-auto">Try searching with different keywords or explore popular destinations above</p>
-      </section>
-
-      <!-- Destination Detail Modal (Responsive: bottom sheet on mobile, centered dialog on md+) -->
-      <div v-if="selectedDestination" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 p-0 md:p-4 transition-all duration-300">
-        <!-- Fix: Applied modal bg (slate-800) and border (white/20) for dark mode -->
-        <div class="bg-white dark:bg-slate-800 rounded-t-2xl md:rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-transparent dark:border-white/20 shadow-xl transition-all duration-300">
-          <div class="h-60 md:h-80 w-full relative bg-surface-variant dark:bg-slate-900">
-            <!-- Fix: Added dark:brightness-90 and alt text -->
-            <img :alt="selectedDestination.alt || selectedDestination.name" :src="selectedDestination.image" class="w-full h-full object-cover dark:brightness-90" />
-            <button @click="selectedDestination = null" class="absolute top-4 right-4 bg-white/90 dark:bg-slate-800/90 p-2 rounded-full hover:bg-white dark:hover:bg-slate-700 transition-colors duration-200">
-              <span class="material-symbols-outlined dark:text-slate-100">close</span>
-            </button>
-          </div>
-          <div class="p-6 pb-10 md:pb-6">
-            <div class="flex items-start justify-between mb-4">
-              <div>
-                <!-- Fix: Added dark:text-slate-100 for modal title -->
-                <h2 class="text-xl md:text-2xl font-bold text-on-surface dark:text-slate-100 mb-2">{{ selectedDestination.name }}</h2>
-                <!-- Fix: Added dark:text-slate-400 for modal region -->
-                <p class="text-outline-variant dark:text-slate-400">{{ selectedDestination.region }}</p>
-              </div>
-              <div class="flex items-center gap-2 flex-shrink-0">
-                <span class="material-symbols-outlined text-lg text-primary dark:text-blue-400">star</span>
-                <!-- Fix: Added dark:text-slate-100 for modal rating -->
-                <span class="font-semibold text-lg dark:text-slate-100">{{ selectedDestination.rating }}</span>
-              </div>
-            </div>
-            <!-- Fix: Added dark:text-slate-300 for description text -->
-            <p class="text-body-md text-on-surface-variant dark:text-slate-300 mb-6">{{ selectedDestination.description }}</p>
-            <div class="grid grid-cols-2 gap-4 mb-6">
-              <div class="p-4 bg-surface-container dark:bg-slate-700/50 rounded-lg transition-colors duration-200">
-                <p class="text-outline-variant dark:text-slate-400 text-xs mb-1">Trips Planned</p>
-                <p class="text-2xl font-bold text-primary dark:text-blue-400">{{ selectedDestination.trips }}</p>
-              </div>
-              <div class="p-4 bg-surface-container dark:bg-slate-700/50 rounded-lg transition-colors duration-200">
-                <p class="text-outline-variant dark:text-slate-400 text-xs mb-1">Best Time to Visit</p>
-                <!-- Fix: Added dark:text-slate-100 for detail value -->
-                <p class="font-semibold text-on-surface dark:text-slate-100 text-sm md:text-base">{{ selectedDestination.bestTime }}</p>
-              </div>
-            </div>
-            <button
-              @click="createTripToDestination"
-              class="w-full bg-primary dark:bg-blue-600 text-on-primary px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-            >
-              <span class="material-symbols-outlined">add</span>
-              Plan a Trip Here
-            </button>
-          </div>
-        </div>
-      </div>
     </main>
 
+    <!-- Create Trip Modal triggered from Destination -->
     <CreateTripModal 
       v-model:isOpen="showCreateModal" 
       :initialDestination="initialDestinationForModal"
@@ -143,110 +156,78 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
+import { useExploreStore } from '../stores/explore';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
 import CreateTripModal from '../components/CreateTripModal.vue';
+import { DEFAULT_TRIP_COVER_IMAGE } from '../constants';
 
 const router = useRouter();
+const exploreStore = useExploreStore();
+const { destinations, loading, error } = storeToRefs(exploreStore);
+
 const searchQuery = ref('');
-const selectedDestination = ref(null);
 const showCreateModal = ref(false);
 const initialDestinationForModal = ref('');
 
-// Popular destinations data
-const destinations = ref([
-  {
-    id: 1,
-    name: 'Paris',
-    region: 'Europe',
-    description: 'The City of Light offers iconic landmarks, world-class museums, and charming cafes. Perfect for romance and culture.',
-    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&q=80&w=600',
-    rating: 4.8,
-    trips: 1249,
-    bestTime: 'April - May, Sept - Oct'
-  },
-  {
-    id: 2,
-    name: 'Tokyo',
-    region: 'Asia',
-    description: 'A vibrant blend of ancient traditions and cutting-edge technology. Experience temples, street food, and neon lights.',
-    image: 'https://plus.unsplash.com/premium_photo-1661914240950-b0124f20a5c1?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-    alt: 'Tokyo skyline at night',
-    rating: 4.7,
-    trips: 892,
-    bestTime: 'March - May, Sept - Nov'
-  },
-  {
-    id: 3,
-    name: 'New York',
-    region: 'North America',
-    description: 'The city that never sleeps. Broadway shows, world-renowned museums, and iconic skyline views await.',
-    image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&q=80&w=600',
-    rating: 4.6,
-    trips: 2103,
-    bestTime: 'April - May, Sept - Oct'
-  },
-  {
-    id: 4,
-    name: 'Barcelona',
-    region: 'Europe',
-    description: 'Gaudí\'s architectural masterpieces, Mediterranean beaches, and vibrant nightlife in a perfect package.',
-    image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?auto=format&fit=crop&q=80&w=600',
-    rating: 4.7,
-    trips: 1156,
-    bestTime: 'April - May, Sept - Oct'
-  },
-  {
-    id: 5,
-    name: 'Dubai',
-    region: 'Middle East',
-    description: 'Luxury, innovation, and desert adventures. Shop at world\'s largest malls and enjoy stunning desert safaris.',
-    image: 'https://images.unsplash.com/photo-1518684079-3c830dcef090?auto=format&fit=crop&q=80&w=800',
-    alt: 'Dubai skyline and Burj Khalifa',
-    rating: 4.5,
-    trips: 743,
-    bestTime: 'Nov - March'
-  },
-  {
-    id: 6,
-    name: 'Bangkok',
-    region: 'Asia',
-    description: 'Golden temples, bustling markets, and street food heaven. Experience authentic Thai culture and hospitality.',
-    image: 'https://plus.unsplash.com/premium_photo-1661963188068-1bac46e28727?q=80&w=1171&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-    alt: 'Bangkok temple at sunset',
-    rating: 4.6,
-    trips: 1034,
-    bestTime: 'Nov - Feb'
+const getCoverImage = (url) => {
+  if (url && typeof url === 'string' && url.trim().length > 0) {
+    return url;
   }
-]);
+  return DEFAULT_TRIP_COVER_IMAGE;
+};
 
-// Filter destinations based on search
-const filteredDestinations = computed(() => {
-  if (!searchQuery.value) return destinations.value;
-  const query = searchQuery.value.toLowerCase();
-  return destinations.value.filter(d => 
-    d.name.toLowerCase().includes(query) || 
-    d.region.toLowerCase().includes(query)
-  );
+const handleImageError = (event) => {
+  event.target.src = DEFAULT_TRIP_COVER_IMAGE;
+};
+
+let debounceTimer = null;
+const loadDestinations = (query = '') => {
+  exploreStore.fetchDestinations(query);
+};
+
+watch(searchQuery, (newVal) => {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  debounceTimer = setTimeout(() => {
+    loadDestinations(newVal);
+  }, 300);
 });
 
-const performSearch = () => {
-  // Search is already reactive
+const clearSearch = () => {
+  searchQuery.value = '';
+  loadDestinations('');
 };
 
-const viewDestination = (destination) => {
-  selectedDestination.value = destination;
-};
-
-const createTripToDestination = () => {
-  initialDestinationForModal.value = selectedDestination.value ? selectedDestination.value.name : '';
+const planTripHere = (destinationName) => {
+  initialDestinationForModal.value = destinationName;
   showCreateModal.value = true;
-  selectedDestination.value = null;
+};
+
+const planNewTrip = () => {
+  initialDestinationForModal.value = '';
+  showCreateModal.value = true;
 };
 
 const onTripCreated = (trip) => {
-  router.push(`/trips/${trip._id}`);
+  router.push(`/trips/${trip._id || trip.id}`);
 };
+
+onMounted(() => {
+  loadDestinations('');
+});
 </script>
+
+<style scoped>
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+</style>

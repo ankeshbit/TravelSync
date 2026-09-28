@@ -56,7 +56,8 @@ lerna-debug.log*
 # ================================
 # UPLOADS & USER DATA
 # ================================
-server/uploads/
+server/uploads/*
+!server/uploads/.gitkeep
 server/tmp/
 public/uploads/
 

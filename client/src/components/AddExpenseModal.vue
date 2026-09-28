@@ -51,10 +51,9 @@
             v-model="form.currency"
             class="w-full px-3 py-2 border border-outline dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:text-white"
           >
-            <option value="INR">INR (₹)</option>
-            <option value="USD">USD ($)</option>
-            <option value="EUR">EUR (€)</option>
-            <option value="GBP">GBP (£)</option>
+            <option v-for="c in currencyOptions" :key="c.code" :value="c.code">
+              {{ c.label }}
+            </option>
           </select>
         </div>
 
@@ -68,7 +67,7 @@
             class="w-full px-3 py-2 border border-outline dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:text-white"
           >
             <option value="">Select a member...</option>
-            <option v-for="member in allMembers" :key="member._id" :value="member._id">
+            <option v-for="member in allMembers" :key="member.id" :value="member.id">
               {{ member.name }}
             </option>
           </select>
@@ -81,10 +80,10 @@
             Split Among <span class="text-error dark:text-red-400">*</span>
           </label>
           <div class="space-y-2 max-h-[200px] overflow-y-auto">
-            <label v-for="member in allMembers" :key="member._id" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low dark:hover:bg-slate-800 transition-colors cursor-pointer">
+            <label v-for="member in allMembers" :key="member.id" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low dark:hover:bg-slate-800 transition-colors cursor-pointer">
               <input
                 type="checkbox"
-                :value="member._id"
+                :value="member.id"
                 v-model="form.splitAmong"
                 class="w-4 h-4 rounded border-gray-300 dark:border-slate-600 text-primary focus:ring-primary cursor-pointer bg-white dark:bg-slate-800"
               />
@@ -117,7 +116,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { CURRENCY_OPTIONS } from '../constants'
 
 const props = defineProps({
   isOpen: {
@@ -132,6 +132,18 @@ const props = defineProps({
     type: Object,
     required: true
   },
+  trip: {
+    type: Object,
+    default: () => ({})
+  },
+  tripCurrency: {
+    type: String,
+    default: ''
+  },
+  currency: {
+    type: String,
+    default: ''
+  },
   error: {
     type: String,
     default: ''
@@ -140,10 +152,23 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'submit'])
 
+const resolvedTripCurrency = computed(() => {
+  return props.currency || props.tripCurrency || props.trip?.currency || 'USD'
+})
+
+const currencyOptions = computed(() => {
+  const options = [...CURRENCY_OPTIONS]
+  const current = resolvedTripCurrency.value
+  if (current && !options.some(o => o.code === current)) {
+    options.unshift({ code: current, label: current })
+  }
+  return options
+})
+
 const form = ref({
   title: '',
   amount: null,
-  currency: 'INR',
+  currency: resolvedTripCurrency.value,
   paidBy: '',
   splitAmong: []
 })
@@ -159,16 +184,23 @@ const errors = ref({
 const loading = ref(false)
 
 const allMembers = computed(() => {
-  // Include owner and all members, ensuring no duplicates by _id
+  // Include owner and all members, ensuring no duplicates by id
   const membersMap = new Map()
-  if (props.tripOwner && props.tripOwner._id) {
-    membersMap.set(props.tripOwner._id, props.tripOwner)
+  const owner = props.tripOwner
+  const ownerId = owner?.id || owner?._id
+  if (owner && ownerId) {
+    membersMap.set(String(ownerId), { ...owner, id: String(ownerId), _id: String(ownerId) })
   }
   props.members.forEach(m => {
-    if (m && m._id) membersMap.set(m._id, m)
+    const userObj = m?.user || m
+    const mId = userObj?.id || userObj?._id
+    if (userObj && mId) {
+      membersMap.set(String(mId), { ...userObj, id: String(mId), _id: String(mId) })
+    }
   })
   return Array.from(membersMap.values())
 })
+
 
 const closeModal = () => {
   resetForm()
@@ -180,9 +212,9 @@ const resetForm = () => {
   form.value = {
     title: '',
     amount: null,
-    currency: 'INR',
+    currency: resolvedTripCurrency.value,
     paidBy: '',
-    splitAmong: allMembers.value.map(m => m._id) // Default all members
+    splitAmong: allMembers.value.map(m => m.id) // Default all members
   }
   errors.value = {
     title: '',
@@ -238,13 +270,13 @@ const handleSubmit = () => {
 
 // Initialize with all members selected by default when modal opens
 const initializeForm = () => {
-  form.value.splitAmong = allMembers.value.map(m => m._id)
+  form.value.splitAmong = allMembers.value.map(m => m.id)
 }
 
 // Watcher to initialize form when modal opens
-import { watch } from 'vue'
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
+    form.value.currency = resolvedTripCurrency.value
     initializeForm()
   } else {
     // Reset loading and form when modal closes

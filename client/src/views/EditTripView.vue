@@ -6,7 +6,12 @@
     <main class="md:ml-16 lg:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] flex items-center justify-center transition-all duration-300">
       <div class="w-full max-w-2xl bg-surface-container-lowest dark:bg-slate-900 border border-outline-variant dark:border-slate-800 rounded-xl shadow-[0_12px_24px_rgba(0,0,0,0.05)] overflow-hidden">
         <div class="relative h-48 w-full">
-          <img class="w-full h-full object-cover dark:brightness-90" src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&q=80&w=1000"/>
+          <img 
+            class="w-full h-full object-cover dark:brightness-90" 
+            :src="coverImageUrl || DEFAULT_TRIP_COVER_IMAGE"
+            :alt="form.name || form.destination || 'Edit Trip'"
+            @error="onImgError"
+          />
           <div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest dark:from-slate-900 via-transparent to-transparent"></div>
           <div class="absolute bottom-6 left-8">
             <h1 class="font-h1 text-h1 text-primary dark:text-blue-400">Edit Trip</h1>
@@ -73,6 +78,7 @@ import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
+import { DEFAULT_TRIP_COVER_IMAGE } from '../constants';
 
 const route = useRoute();
 const router = useRouter();
@@ -80,6 +86,11 @@ const router = useRouter();
 const loading = ref(true);
 const saving = ref(false);
 const error = ref('');
+const coverImageUrl = ref('');
+
+const onImgError = (e) => {
+  e.target.src = DEFAULT_TRIP_COVER_IMAGE;
+};
 
 const form = reactive({
   name: '',
@@ -104,6 +115,7 @@ const fetchTrip = async () => {
     const res = await api.get(`/trips/${route.params.id}`);
     const trip = res.data;
     
+    coverImageUrl.value = trip.coverImageUrl || '';
     form.name = trip.name;
     form.destination = trip.destination;
     form.startDate = formatDateForInput(trip.startDate);

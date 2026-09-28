@@ -1,6 +1,6 @@
 # TravelSync — Collaborative Group Trip Planner
 
-A full-stack web application for planning trips with friends, managing itineraries, splitting expenses, tracking locations on an interactive map, and collaborating in real-time. Built with Vue 3, Express, MongoDB, and Socket.io.
+A full-stack web application for planning trips with friends, managing itineraries, splitting expenses, tracking locations on an interactive map, and collaborating in real-time. Built with Vue 3, Express, PostgreSQL (Prisma), and Socket.io.
 
 **Status**: Phase 5 Complete (Production Ready) ✅
 
@@ -9,12 +9,11 @@ A full-stack web application for planning trips with friends, managing itinerari
 ## 📱 Features
 
 ### Phase 1: Authentication & Foundation ✅
-- **Rotating JWT Authentication** — Secure login and registration returning short-lived access tokens (15m) and rotating, long-lived refresh tokens (7d).
-- **Silent Session Renewal** — Automated background token refreshing via Pinia store coordination and specialized Axios interceptor logic.
-- **Hashed Refresh Tokens** — Refresh tokens are hashed and persisted securely in the MongoDB database, validating against concurrent session hijacking.
-- **Secure Password Hashing** — Uses `bcryptjs` with 10 salt rounds before persisting user credentials.
-- **Token-Based Authorization** — Secure middleware verification guarding all protected backend endpoints.
-- **Axios Auto-Token Interceptors** — Request interceptor automatically attaches the current JWT token; response interceptor automatically handles 401 token expirations and retries failed requests.
+- **Firebase Authentication** — Dual-provider authentication supporting Email & Password and Google OAuth single sign-on via Firebase Web SDK.
+- **Firebase Admin SDK Verification** — Backend Express middleware verifies Firebase ID tokens cryptographically on every protected route.
+- **Automated Profile Synchronization** — Seamlessly links or creates user accounts in the database upon first sign-in using Firebase UID and verified email.
+- **Self-Service Password Reset** — Integrated password recovery flow utilizing Firebase Auth reset links.
+- **Axios Auto-Token Interceptors** — Request interceptor automatically attaches the current Firebase ID token; response interceptor transparently forces token refresh on 401 and retries failed requests.
 
 ### Phase 2: Trip Management ✅
 - **Trip CRUD Operations** — Create, view, edit, and delete trips seamlessly.
@@ -51,22 +50,22 @@ A full-stack web application for planning trips with friends, managing itinerari
 
 ### Frontend
 - **Vue 3** (Composition API, `<script setup>`)
+- **Firebase Web SDK (v11)** — User authentication (Email/Password, Google, GitHub OAuth popups)
 - **Pinia** — Centralized, modular reactive state management
 - **Vue Router** — Client-side SPA routing and navigation guards
 - **Tailwind CSS v4** — High-performance utility styles and Material design principles
 - **Google Maps JavaScript API** — Interactive mapping and location search
-- **Axios** — HTTP client configured with automated request/response interceptors
+- **Axios** — HTTP client configured with automated Firebase token interceptors
 - **Vite** — High-speed build tool and hot module replacement dev server
 
 ### Backend
 - **Node.js** (v18+) & **Express.js** — Robust RESTful API and routing
+- **Firebase Admin SDK** — Cryptographic verification of Firebase ID tokens
 - **Socket.io** — WebSockets connection for real-time collaboration updates
 - **Neon DB (PostgreSQL)** & **Prisma ORM** — Modern serverless relational database and schema migrations
-- **JWT (JsonWebToken)** — Core authorization using rotating tokens (15m Access Token, 7d Refresh Token)
 - **Helmet.js** — Secure HTTP headers configuration
 - **express-rate-limit** — Brute-force protection on authentication and AI suggestions routes
-- **bcryptjs** — High-fidelity password hashing
-- **Nodemailer** — Verification email OTP generation and delivery
+- **Nodemailer** — Verification email OTP generation and delivery (for account deletion verification)
 
 ### DevOps
 - **Docker** — Containerized backend server development configurations
@@ -80,7 +79,9 @@ TravelSync/
 ├── client/                     → Vue 3 Frontend (Vite)
 │   ├── src/
 │   │   ├── views/              → Page level components
-│   │   │   ├── LoginView.vue
+│   │   │   ├── LoginView.vue       → Firebase Email/Password & Social Auth
+│   │   │   ├── RegisterView.vue    → Firebase user registration
+│   │   │   ├── ForgotPasswordView.vue → Firebase password reset
 │   │   │   ├── DashboardView.vue
 │   │   │   ├── MapView.vue
 │   │   │   ├── ExpensesView.vue
@@ -91,14 +92,17 @@ TravelSync/
 │   │   │   ├── Spinner.vue
 │   │   │   ├── ToastNotification.vue
 │   │   │   └── AddExpenseModal.vue
+│   │   ├── services/
+│   │   │   └── authService.js  → Firebase Auth methods wrapper
 │   │   ├── stores/             → Pinia state stores
-│   │   │   ├── auth.js         → JWT access state & silent refresh
+│   │   │   ├── auth.js         → Firebase user state & session sync
 │   │   │   ├── trips.js
 │   │   │   ├── places.js
 │   │   │   ├── expenses.js
 │   │   │   └── toast.js
-│   │   ├── router/index.js     → SPA routes and auth guards
-│   │   ├── api.js              → Axios instance + retry interceptors
+│   │   ├── firebase.js         → Firebase Web SDK initialization
+│   │   ├── router/index.js     → SPA routes and Firebase auth guards
+│   │   ├── api.js              → Axios instance + Firebase token interceptor
 │   │   ├── App.vue             → Root entry UI
 │   │   └── main.js             → JS bootstrap entry point
 │   ├── vercel.json             → Vercel routing configuration
@@ -108,19 +112,26 @@ TravelSync/
 │   └── package.json
 │
 ├── server/                     → Express Backend
+│   ├── config/
+│   │   ├── env.js              → Fail-fast environment variable validation
+│   │   └── firebaseAdmin.js    → Firebase Admin SDK token verification
 │   ├── routes/                 → REST API controllers
-│   │   ├── auth.js             → /api/auth/*
-│   │   └── trips.js            → /api/trips/*
-│   ├── models/                 → Mongoose Schemas
-│   │   ├── User.js
-│   │   └── Trip.js
+│   │   ├── auth.js             → /api/auth/* (profile sync, photo, OTP, delete)
+│   │   ├── trips.js            → /api/trips/* (CRUD, expenses, places, AI suggestions)
+│   │   └── explore.js          → /api/explore/* (public curated feed)
+│   ├── prisma/
+│   │   └── schema.prisma       → Prisma PostgreSQL schema (User, Trip, Place, Expense, Otp)
 │   ├── middleware/             → Request pipelines
-│   │   ├── auth.js             → Token verification middleware
-│   │   └── errorHandler.js     → Centralized global error handling
+│   │   ├── auth.js             → Unified token verification & 503 DB-down handling
+│   │   └── errorHandler.js     → Centralized global error handling & Prisma error mapping
 │   ├── utils/
 │   │   ├── calculateBalances.js → Split and settlement logic
-│   │   └── otpStore.js          → OTP code state and verification
-│   ├── server.js               → Bootstrap, middleware and server setups
+│   │   ├── mailer.js           → Nodemailer SMTP email dispatcher (OTP delivery)
+│   │   ├── otpStore.js          → Prisma-backed OTP store (crypto.randomInt, timingSafeEqual, cooldown)
+│   │   └── verifyAuthToken.js   → Multi-provider auth verifier with Neon session caching
+│   ├── db.js                   → Prisma Client instance and data formatters
+│   ├── socket.js               → WebSocket connection handler and room manager
+│   ├── server.js               → Express app bootstrap, CORS, and rate limiters
 │   ├── Dockerfile              → Container setup guidelines
 │   ├── .env.example
 │   └── package.json
@@ -173,11 +184,16 @@ npm run dev  # Starts Vite HMR server
 Copy `server/.env.example` to `server/.env` and configure:
 ```env
 DATABASE_URL=postgresql://user:password@ep-project.neon.tech/neondb?sslmode=require
-JWT_SECRET=your-secure-32-char-access-secret
-REFRESH_SECRET=your-secure-32-char-refresh-secret
 ALLOWED_ORIGIN=http://localhost:5173
 PORT=3000
 NODE_ENV=development
+
+# Firebase Admin SDK (server-side token verification)
+# Get from Firebase Console → Project Settings → Service accounts → Generate new private key
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n"
+
 GROQ_API_KEY=gsk_your_groq_api_key_here
 SMTP_EMAIL=your-verification-email@gmail.com
 SMTP_PASSWORD=your-gmail-app-password
@@ -189,6 +205,15 @@ Copy `client/.env.example` to `client/.env` and configure:
 ```env
 VITE_API_BASE_URL=http://localhost:3000/api
 VITE_GOOGLE_MAPS_KEY=your_google_maps_api_key_here
+
+# Firebase Web SDK (safe to expose in client browser)
+# Get from Firebase Console → Project Settings → General → Your apps → SDK setup and configuration
+VITE_FIREBASE_API_KEY=AIzaSy...
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=123456789012
+VITE_FIREBASE_APP_ID=1:123456789012:web:abcdef123456
 ```
 
 ---
@@ -202,17 +227,13 @@ VITE_GOOGLE_MAPS_KEY=your_google_maps_api_key_here
 ### Authentication & Profile Endpoints
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/auth/register` | No | Register new user (requires prior OTP email verification) |
-| POST | `/api/auth/login` | No | Authenticate user, returns access JWT and rotating refresh token |
-| POST | `/api/auth/refresh` | No | Renew expired access JWT using rotating refresh token (body parameter) |
-| POST | `/api/auth/logout` | Yes | Securely invalidate user session and clear active refresh token |
-| GET | `/api/auth/me` | Yes | Retrieve profile details of currently authenticated user |
-| PUT | `/api/auth/me` | Yes | Update user profile details (such as display name) |
-| DELETE | `/api/auth/me` | Yes | Cascade-delete user profile, owned trips, and invalidate sessions (requires OTP) |
-| PUT | `/api/auth/me/password` | Yes | Authenticate current password and update to new password |
-| POST | `/api/auth/upload-photo` | Yes | Upload and set profile picture (handled via Multer) |
-| POST | `/api/auth/send-otp` | No/Yes | Dispatches an OTP verification code via email for registering or deleting |
-| POST | `/api/auth/verify-otp` | No | Validate OTP verification token for target email |
+| GET | `/api/auth/me` | Firebase ID Token | Retrieve or initialize user profile in database for authenticated Firebase user |
+| PUT | `/api/auth/me` | Firebase ID Token | Update user display name in database |
+| DELETE | `/api/auth/me` | Firebase ID Token | Cascade-delete user profile, owned trips, and associations (requires OTP verification) |
+| POST | `/api/auth/logout` | Optional | Clear server-side session cookies/state (primary sign-out via Firebase SDK) |
+| POST | `/api/auth/upload-photo` | Firebase ID Token | Upload profile picture to server storage and update user record |
+| POST | `/api/auth/send-otp` | Firebase ID Token | Dispatch email OTP code for sensitive actions (account deletion) |
+| POST | `/api/auth/verify-otp` | No | Validate OTP token before proceeding with account deletion |
 
 ### Trip Management Endpoints
 | Method | Route | Auth | Description |
@@ -334,10 +355,10 @@ TravelSync includes system-aware styling that detects theme preferences and stor
 
 ## 🐛 Troubleshooting
 
-### MongoDB Connectivity Errors
-- Double-check database coordinates in `server/.env` under the `MONGO_URI` field.
-- Verify that your local network IP is explicitly whitelisted in the MongoDB Atlas database console.
-- Confirm connection credentials and user access permissions in your Atlas console.
+### Database Connectivity Errors (PostgreSQL / Neon)
+- Double-check database connection URL in `server/.env` under the `DATABASE_URL` field.
+- Verify that your Neon database is active and `?sslmode=require` is present in the connection string.
+- Run `npm run db:push` in `server/` to ensure your database schema and Prisma Client are in sync.
 
 ### CORS Errors
 - Ensure `ALLOWED_ORIGIN` in your backend `.env` matches the client URI (by default, `http://localhost:5173`).

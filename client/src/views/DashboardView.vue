@@ -1,84 +1,159 @@
 <template>
-  <div class="min-h-screen bg-surface dark:bg-slate-950 transition-colors duration-200">
+  <div class="min-h-screen bg-[#080D1A] text-slate-100 font-['Plus_Jakarta_Sans'] flex">
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-16 lg:ml-64 pt-24 pb-20 px-6 md:px-10 transition-all duration-300">
-      <!-- Header -->
-      <header class="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
+    <!-- Main Content Area -->
+    <main class="flex-1 md:pl-64 pt-16 md:pt-8 pb-16 px-6 md:px-10 transition-all duration-300 max-w-7xl mx-auto w-full">
+      <!-- Top Bar: Title & Actions -->
+      <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <!-- Fix: Added dark:text-slate-100 for primary text contrast -->
-          <h1 class="font-h1 text-h1 text-on-background dark:text-slate-100">My Trips</h1>
-          <!-- Fix: Added dark:text-slate-400 for muted text contrast -->
-          <p class="font-body-md text-body-md text-on-surface-variant dark:text-slate-400 mt-1">Manage and plan your upcoming adventures together.</p>
+          <h1 class="text-3xl font-extrabold text-white tracking-tight">My Trips</h1>
+          <p class="text-sm text-slate-400 mt-1">Manage and plan your upcoming adventures together.</p>
         </div>
-        <button @click="showCreateModal = true" class="bg-primary-container dark:bg-blue-600 text-on-secondary dark:text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-md">
-          <span class="material-symbols-outlined">add</span>
-          Create Trip
-        </button>
+
+        <div class="flex items-center gap-3">
+          <!-- Search Trips Input -->
+          <div class="relative w-full sm:w-64">
+            <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+            <input 
+              v-model="searchQuery" 
+              type="text" 
+              placeholder="Search trips..."
+              class="w-full bg-[#111C33] border border-[#1E2E4E] text-sm text-white placeholder-slate-400 pl-10 pr-4 py-2.5 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+
+          <!-- Create Trip Button -->
+          <button 
+            @click="showCreateModal = true" 
+            class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95 transition-all flex-shrink-0"
+          >
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            <span>Create Trip</span>
+          </button>
+        </div>
       </header>
 
+      <!-- Overview Statistics Summary Row -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <!-- Total Trips -->
+        <div class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-4 sm:p-5 flex items-center gap-4 hover:border-blue-500/40 transition-colors shadow-lg">
+          <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 flex-shrink-0">
+            <span class="material-symbols-outlined text-[24px]">explore</span>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-400">Total Trips</p>
+            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+              <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-slate-800 animate-pulse rounded"></span>
+              <span v-else>{{ summary.totalTrips }}</span>
+            </h3>
+          </div>
+        </div>
+
+        <!-- Upcoming Trips -->
+        <div class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-4 sm:p-5 flex items-center gap-4 hover:border-emerald-500/40 transition-colors shadow-lg">
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
+            <span class="material-symbols-outlined text-[24px]">calendar_month</span>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-400">Upcoming Trips</p>
+            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+              <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-slate-800 animate-pulse rounded"></span>
+              <span v-else>{{ summary.upcomingTrips }}</span>
+            </h3>
+          </div>
+        </div>
+
+        <!-- Total Members -->
+        <div class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-4 sm:p-5 flex items-center gap-4 hover:border-indigo-500/40 transition-colors shadow-lg">
+          <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 flex-shrink-0">
+            <span class="material-symbols-outlined text-[24px]">groups</span>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-400">Total Members</p>
+            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+              <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-slate-800 animate-pulse rounded"></span>
+              <span v-else>{{ summary.totalMembers }}</span>
+            </h3>
+          </div>
+        </div>
+
+        <!-- Total Spent -->
+        <div class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-4 sm:p-5 flex items-center gap-4 hover:border-amber-500/40 transition-colors shadow-lg">
+          <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0">
+            <span class="material-symbols-outlined text-[24px]">payments</span>
+          </div>
+          <div>
+            <p class="text-xs font-medium text-slate-400">Total Spent</p>
+            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+              <span v-if="summaryLoading" class="inline-block w-16 h-6 bg-slate-800 animate-pulse rounded"></span>
+              <span v-else>{{ formatCurrency(summary.totalSpent, summary.currency) }}</span>
+            </h3>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Tabs Row -->
+      <div class="flex items-center gap-2 mb-8">
+        <button 
+          v-for="tab in ['All Trips', 'Upcoming', 'Past']" 
+          :key="tab"
+          @click="activeFilter = tab"
+          :class="activeFilter === tab ? 'bg-[#122347] text-blue-400 font-semibold border border-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-[#111C33] font-medium border border-transparent'"
+          class="px-4 py-1.5 rounded-xl text-xs transition-all duration-200"
+        >
+          {{ tab }}
+        </button>
+      </div>
+
       <!-- Loading State -->
-      <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
-        <div v-for="n in 6" :key="n" class="bg-white dark:bg-slate-900 rounded-xl border border-gray-150 dark:border-white/10 overflow-hidden flex flex-col h-[380px]">
-          <div class="h-48 w-full bg-gray-200 dark:bg-slate-800"></div>
-          <div class="p-6 flex-1 space-y-4">
-            <div class="h-6 w-3/4 bg-gray-200 dark:bg-slate-800 rounded"></div>
-            <div class="h-4 w-1/2 bg-gray-200 dark:bg-slate-800 rounded"></div>
-            <div class="h-4 w-5/6 bg-gray-200 dark:bg-slate-800 rounded"></div>
-            <div class="h-8 w-24 bg-gray-200 dark:bg-slate-800 rounded mt-auto"></div>
+      <div v-if="loading && trips.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+        <div v-for="n in 3" :key="n" class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl h-80 overflow-hidden flex flex-col">
+          <div class="h-44 w-full bg-[#131F38]"></div>
+          <div class="p-5 space-y-3">
+            <div class="h-5 w-3/4 bg-[#1E2E4E] rounded"></div>
+            <div class="h-4 w-1/2 bg-[#1E2E4E] rounded"></div>
           </div>
         </div>
       </div>
 
       <!-- Error State -->
-      <div v-else-if="error" class="bg-error-container text-on-error-container p-4 rounded-xl mb-6">
+      <div v-else-if="error" class="bg-red-950/40 border border-red-900 text-red-300 p-4 rounded-xl mb-6 text-sm">
         {{ error }}
       </div>
 
-      <!-- Content -->
-      <template v-else>
-        <!-- Grid of Trips (1 col on mobile, 2 on md, 3 on lg+) -->
-        <section v-if="trips.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <TripCard 
-            v-for="trip in trips" 
-            :key="trip._id" 
-            :trip="trip" 
-            @click="goToTrip(trip._id)" 
-          />
-          
-          <!-- Add New Placeholder Card -->
-          <!-- Fix: Applied card bg (slate-900) and border (white/10) -->
-          <button @click="showCreateModal = true" class="border-2 border-dashed border-gray-200 dark:border-white/10 rounded-xl flex flex-col items-center justify-center p-10 bg-gray-50/50 dark:bg-slate-900/50 hover:bg-gray-50 dark:hover:bg-slate-900 transition-colors group cursor-pointer w-full h-full min-h-[240px]">
-            <div class="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <span class="material-symbols-outlined text-blue-900 dark:text-blue-400 text-3xl">add_location_alt</span>
-            </div>
-            <h3 class="font-h3 text-h3 text-blue-900 dark:text-blue-300 mb-2">New Adventure?</h3>
-            <p class="font-body-md text-body-md text-gray-500 dark:text-slate-400 text-center max-w-[200px]">Start planning your next destination with friends.</p>
-          </button>
-        </section>
+      <!-- Empty State -->
+      <div v-else-if="displayTrips.length === 0" class="text-center py-16 bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-8 flex flex-col items-center justify-center">
+        <div class="w-16 h-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4">
+          <span class="material-symbols-outlined text-3xl">luggage</span>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-1.5">No trips found</h3>
+        <p class="text-xs text-slate-400 max-w-sm mb-6">
+          {{ searchQuery ? `No trips matching "${searchQuery}"` : "You haven't planned any trips yet. Create your first adventure!" }}
+        </p>
+        <button 
+          v-if="!searchQuery"
+          @click="showCreateModal = true" 
+          class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+        >
+          <span class="material-symbols-outlined text-[16px]">add</span>
+          <span>Create Trip</span>
+        </button>
+      </div>
 
-        <!-- Empty State -->
-        <!-- Fix: Applied border-white/10 for dark mode divider -->
-        <section v-if="!loading && trips.length === 0" class="mt-20 py-20 border-t border-gray-100 dark:border-white/10 transition-colors duration-200">
-          <div class="flex flex-col items-center text-center">
-            <div class="w-32 h-32 bg-surface-container-low dark:bg-slate-900 rounded-full flex items-center justify-center mb-6">
-              <span class="material-symbols-outlined text-6xl text-outline-variant dark:text-slate-600">travel_explore</span>
-            </div>
-            <!-- Fix: Added dark:text-slate-100 for header -->
-            <h2 class="font-h2 text-h2 text-on-background dark:text-slate-100 mb-4">No trips yet</h2>
-            <!-- Fix: Added dark:text-slate-400 for description -->
-            <p class="font-body-lg text-body-lg text-on-surface-variant dark:text-slate-400 max-w-3xl mb-8">
-              Your journey begins here. Create your first trip itinerary and invite your travel companions to collaborate in real-time.
-            </p>
-            <button @click="showCreateModal = true" class="bg-primary-container dark:bg-blue-600 text-on-secondary dark:text-white px-8 py-3 rounded-xl font-bold hover:opacity-90 active:scale-95 transition-all shadow-lg">
-              Start Planning
-            </button>
-          </div>
-        </section>
-      </template>
+      <!-- Trip Cards Grid -->
+      <section v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <TripCard 
+          v-for="trip in displayTrips" 
+          :key="trip.id || trip._id" 
+          :trip="trip" 
+          @click="goToTrip(trip.id || trip._id)" 
+        />
+      </section>
     </main>
 
+    <!-- Create Trip Modal -->
     <CreateTripModal 
       v-model:isOpen="showCreateModal" 
       :initialDestination="initialDestination"
@@ -88,7 +163,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import Navbar from '../components/Navbar.vue';
@@ -96,17 +171,66 @@ import Sidebar from '../components/Sidebar.vue';
 import TripCard from '../components/TripCard.vue';
 import CreateTripModal from '../components/CreateTripModal.vue';
 import { useTripsStore } from '../stores/trips';
+import api from '../api';
+import { formatCurrency } from '../utils/format';
 
 const router = useRouter();
 const route = useRoute();
 const tripsStore = useTripsStore();
 const { trips, loading, error } = storeToRefs(tripsStore);
+
+const activeFilter = ref('Upcoming');
+const searchQuery = ref('');
 const initialDestination = ref('');
 const showCreateModal = ref(false);
 
+const summary = ref({
+  totalTrips: 0,
+  upcomingTrips: 0,
+  totalMembers: 0,
+  totalSpent: 0,
+  currency: 'USD'
+});
+const summaryLoading = ref(true);
+
+const fetchSummary = async () => {
+  try {
+    const res = await api.get('/trips/summary');
+    if (res.data) {
+      summary.value = res.data;
+    }
+  } catch (err) {
+    console.error('Failed to fetch trips summary:', err);
+  } finally {
+    summaryLoading.value = false;
+  }
+};
+
+const displayTrips = computed(() => {
+  let list = Array.isArray(trips.value) ? trips.value : [];
+
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase();
+    list = list.filter(t => 
+      (t.name && t.name.toLowerCase().includes(q)) || 
+      (t.destination && t.destination.toLowerCase().includes(q))
+    );
+  }
+
+  if (activeFilter.value === 'Upcoming') {
+    return list.filter(t => t.status !== 'completed');
+  } else if (activeFilter.value === 'Past') {
+    return list.filter(t => t.status === 'completed');
+  }
+
+  return list;
+});
+
 const onTripCreated = (trip) => {
-  if (trip && !trips.value.some(existingTrip => existingTrip._id === trip._id)) {
+  const newTripId = trip.id || trip._id;
+  if (trip && !trips.value.some(existingTrip => (existingTrip.id || existingTrip._id) === newTripId)) {
     trips.value.unshift(trip);
+    fetchSummary();
   }
 };
 
@@ -116,11 +240,10 @@ const goToTrip = (id) => {
 
 onMounted(() => {
   tripsStore.fetchTrips();
-  // If navigated with ?create=1, open the Create Trip modal and prefill destination
+  fetchSummary();
   if (route.query.create) {
     initialDestination.value = route.query.dest || '';
     showCreateModal.value = true;
-    // remove the query param so reopening doesn't auto-open again
     router.replace({ path: route.path, query: {} }).catch(() => {});
   }
 });

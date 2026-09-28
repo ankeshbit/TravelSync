@@ -24,9 +24,10 @@ function calculateDurationDays(startDate, endDate) {
 
 function formatUser(user) {
   if (!user) return null;
-  const { password, refreshToken, ...safeUser } = user;
+  const { password: _password, refreshToken: _refreshToken, ...safeUser } = user;
   return {
     ...safeUser,
+    id: user.id,
     _id: user.id
   };
 }
@@ -35,6 +36,7 @@ function formatPlace(place) {
   if (!place) return null;
   return {
     ...place,
+    id: place.id,
     _id: place.id
   };
 }
@@ -43,6 +45,7 @@ function formatExpense(expense) {
   if (!expense) return null;
   const formatted = {
     ...expense,
+    id: expense.id,
     _id: expense.id
   };
 
@@ -66,9 +69,9 @@ function formatExpense(expense) {
 function formatActivity(act) {
   if (!act) return null;
   return {
-    _id: act.id,
     id: act.id,
-    user: act.user ? formatUser(act.user) : (act.userId ? { _id: act.userId, id: act.userId } : null),
+    _id: act.id,
+    user: act.user ? formatUser(act.user) : (act.userId ? { id: act.userId, _id: act.userId } : null),
     action: act.action,
     detail: act.detail,
     createdAt: act.createdAt
@@ -79,12 +82,17 @@ function formatTrip(trip) {
   if (!trip) return null;
   const formatted = {
     ...trip,
+    id: trip.id,
     _id: trip.id,
     durationDays: calculateDurationDays(trip.startDate, trip.endDate)
   };
 
   if (trip.owner) {
-    formatted.ownerId = formatUser(trip.owner);
+    formatted.owner = formatUser(trip.owner);
+    formatted.ownerId = trip.ownerId;
+  } else if (trip.ownerId && typeof trip.ownerId === 'object') {
+    formatted.owner = formatUser(trip.ownerId);
+    formatted.ownerId = trip.ownerId.id || trip.ownerId._id;
   } else {
     formatted.ownerId = trip.ownerId;
   }
@@ -93,7 +101,7 @@ function formatTrip(trip) {
     formatted.members = trip.members.map(m => {
       if (m.user) return formatUser(m.user);
       if (m.name || m.email) return formatUser(m);
-      return m.userId || m;
+      return typeof m === 'object' ? formatUser(m) : { id: m, _id: m };
     });
   } else {
     formatted.members = [];
@@ -120,10 +128,9 @@ async function ensureUserSynced(userId) {
   if (user) return user;
 
   try {
-    const neonUsers = await prisma.$queryRawUnsafe(
-      'SELECT id, name, email, image FROM neon_auth.user WHERE id = $1',
-      userId
-    );
+    const neonUsers = await prisma.$queryRaw`
+      SELECT id, name, email, image FROM neon_auth.user WHERE id = ${userId}
+    `;
     if (neonUsers && neonUsers.length > 0) {
       const u = neonUsers[0];
       user = await prisma.user.create({

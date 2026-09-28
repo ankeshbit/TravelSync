@@ -6,8 +6,12 @@ test-balances.js
 test-mongoose.js
 test-mongoose-2.js
 
+# Test coverage
+coverage/
+
 # Uploaded files from users
-uploads/
+uploads/*
+!uploads/.gitkeep
 
 # SSL certificates if added locally
 *.pem

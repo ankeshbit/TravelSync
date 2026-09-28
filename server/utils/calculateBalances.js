@@ -1,27 +1,36 @@
+function getMemberId(m) {
+  if (!m) return null;
+  if (typeof m === 'object') return (m.id || m._id || '').toString();
+  return m.toString();
+}
+
 /**
  * Calculate balances for a trip's expenses
  * @param {Array} expenses - Array of expense objects
- * @param {Array} members - Array of member objects (with _id, name, email)
+ * @param {Array} members - Array of member objects (with id/_id, name, email)
  * @returns {Object} { balanceMap, settlements, membersWithBalance }
  */
 function calculateBalances(expenses, members) {
   // Initialize balance map for all members
   const balanceMap = {};
   members.forEach(member => {
-    balanceMap[member._id.toString()] = 0;
+    const mId = getMemberId(member);
+    if (mId) balanceMap[mId] = 0;
   });
 
   // Process each expense
   expenses.forEach(expense => {
     const amount = Number(expense.amount) || 0;
 
-    // Normalize payer id (handle populated object or raw id)
-    const paidByUserId = expense.paidBy && expense.paidBy._id ? expense.paidBy._id.toString() : (expense.paidBy ? expense.paidBy.toString() : null);
+    // Normalize payer id (handle user object or raw id)
+    const paidByUserId = getMemberId(expense.paidBy) || (expense.paidById ? expense.paidById.toString() : null);
 
-    // Normalize splitAmong to an array of ids (handle populated objects)
+    // Normalize splitAmong to an array of ids (handle user objects or strings)
     const splitIds = Array.isArray(expense.splitAmong)
-      ? expense.splitAmong.map(u => (u && u._id) ? u._id.toString() : (u ? u.toString() : null)).filter(Boolean)
-      : [];
+      ? expense.splitAmong.map(getMemberId).filter(Boolean)
+      : (Array.isArray(expense.splits)
+        ? expense.splits.map(s => getMemberId(s.user) || (s.userId ? s.userId.toString() : null)).filter(Boolean)
+        : []);
 
     const splitCount = splitIds.length;
 
@@ -43,9 +52,11 @@ function calculateBalances(expenses, members) {
 
   // Build members with balance info
   const membersWithBalance = members.map(member => {
-    const balance = balanceMap[member._id.toString()] || 0;
+    const mId = getMemberId(member);
+    const balance = balanceMap[mId] || 0;
     return {
-      _id: member._id,
+      id: mId,
+      _id: mId,
       name: member.name,
       email: member.email,
       balance: parseFloat(balance.toFixed(2))
@@ -67,14 +78,17 @@ function calculateBalances(expenses, members) {
  */
 function generateSettlements(balanceMap, members) {
   const settlements = [];
-  
+
   // Create a copy of balance map for manipulation
   const balances = { ...balanceMap };
-  
+
   // Create member id to name/email mapping
   const memberMap = {};
   members.forEach(m => {
-    memberMap[m._id.toString()] = { name: m.name, email: m.email };
+    const mId = getMemberId(m);
+    if (mId) {
+      memberMap[mId] = { name: m.name, email: m.email };
+    }
   });
 
   // Debtors (negative balance) and creditors (positive balance)

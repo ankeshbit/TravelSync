@@ -38,7 +38,7 @@ export const useTripsStore = defineStore('trips', {
     async deleteTrip(id) {
       try {
         await api.delete(`/trips/${id}`)
-        this.trips = this.trips.filter(trip => trip._id !== id)
+        this.trips = this.trips.filter(trip => (trip.id || trip._id) !== id)
       } catch (err) {
         this.error = err.response?.data?.message || err.message
         throw err
@@ -91,6 +91,18 @@ export const useTripsStore = defineStore('trips', {
     },
     clearMemberError() {
       this.memberError = null
+    },
+    async fetchDestinations(q = '') {
+      try {
+        const params = {};
+        if (q && typeof q === 'string' && q.trim()) {
+          params.q = q.trim();
+        }
+        const response = await api.get('/explore/destinations', { params });
+        return Array.isArray(response.data) ? response.data : (response.data?.destinations || []);
+      } catch (err) {
+        throw err;
+      }
     }
   }
 })

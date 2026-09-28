@@ -1,209 +1,275 @@
 <template>
-  <div class="bg-background dark:bg-slate-950 text-on-surface dark:text-slate-100 min-h-screen flex flex-col">
+  <div class="min-h-screen bg-[#080D1A] text-slate-100 font-['Plus_Jakarta_Sans'] flex">
     <Navbar />
+    <Sidebar />
 
-    <div class="flex flex-1 mt-[64px]">
-      <Sidebar />
+    <!-- Main Content Canvas -->
+    <main class="flex-1 md:pl-64 pt-16 md:pt-8 pb-16 px-6 md:px-10 transition-all duration-300 max-w-7xl mx-auto w-full">
+      <!-- Top Breadcrumb -->
+      <div class="mb-5">
+        <router-link 
+          to="/dashboard" 
+          class="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+        >
+          <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+          <span>Back to My Trips</span>
+        </router-link>
+      </div>
 
-      <!-- Main Content Canvas -->
-      <main class="flex-1 md:ml-16 lg:ml-64 p-4 md:p-6 pb-20 transition-all duration-300">
-        <!-- Hero Header Section -->
-        <section v-if="!loading && trip" class="relative rounded-xl overflow-hidden mb-lg border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 transition-colors duration-200">
-          <div class="h-48 md:h-64 w-full relative">
-            <img alt="Trip Cover" class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&q=80&w=1000"/>
-            <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-            <div class="absolute bottom-0 left-0 p-4 md:p-6 w-full flex flex-col sm:flex-row justify-between sm:items-end gap-4">
-              <div>
-                <h1 class="text-2xl md:text-4xl font-bold text-white mb-2">{{ trip.name }}</h1>
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-white/90">
-                  <span class="flex items-center gap-1 font-body-md text-body-md">
-                    <span class="material-symbols-outlined text-[18px]" data-icon="location_on">location_on</span>
-                    {{ trip.destination }}
-                  </span>
-                  <span class="flex items-center gap-1 font-body-md text-body-md">
-                    <span class="material-symbols-outlined text-[18px]" data-icon="calendar_today">calendar_today</span>
-                    {{ formatDate(trip.startDate) }} - {{ formatDate(trip.endDate) }}
-                  </span>
+      <!-- Loading State -->
+      <div v-if="loading" class="space-y-6 animate-pulse">
+        <div class="h-64 rounded-3xl bg-[#111C33]"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div v-for="n in 4" :key="n" class="h-28 rounded-2xl bg-[#111C33]"></div>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div v-else-if="currentTrip" class="space-y-6">
+        <!-- Hero Cover Banner -->
+        <section class="relative h-64 md:h-72 w-full rounded-3xl overflow-hidden border border-[#1E2E4E] shadow-2xl group">
+          <img 
+            :src="currentTrip.coverImageUrl || DEFAULT_TRIP_COVER_IMAGE"
+            :alt="currentTrip.name" 
+            class="w-full h-full object-cover brightness-90 group-hover:scale-102 transition-transform duration-700" 
+            @error="onImgError"
+          />
+          <div class="absolute inset-0 bg-gradient-to-t from-[#080D1A]/95 via-[#080D1A]/40 to-transparent"></div>
+
+          <!-- 3-Dots Menu Button -->
+          <button 
+            @click="showEditModal = true"
+            class="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors"
+          >
+            <span class="material-symbols-outlined text-[20px]">more_vert</span>
+          </button>
+
+          <!-- Banner Bottom Overlay Content -->
+          <div class="absolute bottom-6 left-6 right-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <h1 class="text-3xl md:text-4xl font-extrabold text-white tracking-tight mb-2">
+                {{ currentTrip.name }}
+              </h1>
+              
+              <div class="flex flex-wrap items-center gap-4 text-xs text-slate-300">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px] text-slate-400">calendar_today</span>
+                  <span>{{ formatDate(currentTrip.startDate) }} - {{ formatDate(currentTrip.endDate) }}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px] text-slate-400">location_on</span>
+                  <span>{{ currentTrip.destination }}</span>
                 </div>
               </div>
-              <div class="flex items-center gap-3 self-start sm:self-auto">
-                <button
-                  @click="showAiPlanner = true"
-                  style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:linear-gradient(135deg,#0ea5e9,#4f46e5);color:#fff;font-size:13px;font-weight:700;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);flex-shrink:0"
-                  title="Generate AI itinerary"
+
+              <!-- Avatar Stack -->
+              <div class="flex items-center -space-x-2 mt-4">
+                <div 
+                  v-for="(member, idx) in displayMembers" 
+                  :key="member.id || member._id || idx"
+                  class="w-7 h-7 rounded-full border-2 border-[#0F172A] overflow-hidden bg-slate-800 flex items-center justify-center text-[10px] font-bold text-white shadow"
+                  :title="member.name || member.email || 'Member'"
                 >
-                  <span class="material-symbols-outlined" style="font-size:18px;line-height:1">auto_awesome</span>
-                  AI Plan
-                </button>
-                <button v-if="isCreator" @click="$router.push(`/trips/${trip._id}/edit`)" class="bg-white dark:bg-slate-800 text-primary dark:text-blue-400 px-6 py-2 rounded-lg font-semibold flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors shadow-lg active:scale-95 duration-150">
-                  <span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span>
-                  Edit
-                </button>
+                  <img v-if="member.picture" :src="member.picture" :alt="member.name" class="w-full h-full object-cover" />
+                  <span v-else>{{ getInitials(member.name || member.email) }}</span>
+                </div>
+                <div v-if="overflowMembersCount > 0" class="w-7 h-7 rounded-full border-2 border-[#0F172A] bg-blue-600/30 text-blue-300 flex items-center justify-center text-[10px] font-semibold">
+                  +{{ overflowMembersCount }}
+                </div>
               </div>
+            </div>
+
+            <!-- Actions: Edit Trip & AI Plan -->
+            <div class="flex items-center gap-3">
+              <button 
+                @click="showAiPlanner = true"
+                class="bg-[#111C33] hover:bg-[#162442] border border-[#1E2E4E] text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-all active:scale-95"
+              >
+                <span class="material-symbols-outlined text-amber-400 text-[18px]">auto_awesome</span>
+                <span>AI Plan</span>
+              </button>
+
+              <button 
+                @click="$router.push(`/trips/${currentTrip.id || currentTrip._id}/edit`)"
+                class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+              >
+                <span class="material-symbols-outlined text-[18px]">edit</span>
+                <span>Edit Trip</span>
+              </button>
             </div>
           </div>
         </section>
 
-        <!-- Loading State -->
-        <div v-if="loading" class="flex justify-center items-center h-64">
-          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </div>
-        <div v-if="error" class="bg-error-container text-on-error-container p-4 rounded-lg text-center font-semibold my-8">
-          {{ error }}
-        </div>
+        <!-- 4 Stat Widgets Row -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Stat 1: Members -->
+          <div class="p-5 rounded-2xl bg-[#0F172A] border border-[#1E2E4E] flex items-center gap-4 shadow-lg">
+            <div class="w-12 h-12 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 flex-shrink-0">
+              <span class="material-symbols-outlined text-2xl">group</span>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 font-medium">Members</p>
+              <h4 class="text-lg font-bold text-white mt-0.5">{{ totalMembersCount }} people</h4>
+            </div>
+          </div>
 
-        <!-- Members & Details Bento Grid -->
-        <div v-if="!loading && trip" class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
-          <!-- Members Section -->
-          <section class="md:col-span-4 bg-white dark:bg-slate-950 md:dark:bg-slate-900 p-lg rounded-xl border border-gray-200 dark:border-slate-800 transition-colors duration-200">
-            <div class="flex items-center justify-between mb-md">
-              <h2 class="font-h2 text-h2 text-primary">Members</h2>
-              <span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container rounded-full px-3 py-1">{{ tripsStore.members.length + 1 }} active</span>
+          <!-- Stat 2: Budget -->
+          <div class="p-5 rounded-2xl bg-[#0F172A] border border-[#1E2E4E] flex items-center gap-4 shadow-lg">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
+              <span class="material-symbols-outlined text-2xl">account_balance_wallet</span>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 font-medium">Budget</p>
+              <h4 class="text-lg font-bold text-white mt-0.5">{{ formatCurrency(tripBudget, currentTrip.currency || 'USD') }}</h4>
+              <p class="text-[11px] text-slate-500">Total expenses</p>
+            </div>
+          </div>
+
+          <!-- Stat 3: Flight -->
+          <div class="p-5 rounded-2xl bg-[#0F172A] border border-[#1E2E4E] flex items-center gap-4 shadow-lg">
+            <div class="w-12 h-12 rounded-xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 flex-shrink-0">
+              <span class="material-symbols-outlined text-2xl">flight</span>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 font-medium">Flight</p>
+              <h4 class="text-lg font-bold text-white mt-0.5">TBD</h4>
+              <p class="text-[11px] text-slate-500">Add flight details</p>
+            </div>
+          </div>
+
+          <!-- Stat 4: Lodging -->
+          <div class="p-5 rounded-2xl bg-[#0F172A] border border-[#1E2E4E] flex items-center gap-4 shadow-lg">
+            <div class="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 flex-shrink-0">
+              <span class="material-symbols-outlined text-2xl">hotel</span>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 font-medium">Lodging</p>
+              <h4 class="text-lg font-bold text-white mt-0.5">TBD</h4>
+              <p class="text-[11px] text-slate-500">Add hotel details</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bottom Split: Trip Highlights (Left) & Quick Actions (Right) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <!-- Left: Trip Highlights -->
+          <section class="lg:col-span-8 bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-6 shadow-xl">
+            <div class="mb-4">
+              <h3 class="text-lg font-bold text-white tracking-tight">Trip Highlights</h3>
+              <p class="text-xs text-slate-400 mt-0.5">A quick overview of your trip</p>
             </div>
 
-            <!-- Members List -->
-            <div class="space-y-2 mb-md max-h-[200px] overflow-y-auto">
-              <!-- Owner -->
-              <div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low dark:bg-slate-800 border border-primary/20 dark:border-blue-900/50">
-                <div class="flex items-center gap-2 flex-1 min-w-0">
-                  <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-900 text-xs flex-shrink-0">
-                    {{ trip.ownerId && trip.ownerId.name ? trip.ownerId.name.substring(0,2).toUpperCase() : 'U' }}
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <p class="text-xs font-semibold text-on-surface truncate">{{ trip.ownerId?.name }}</p>
-                    <p class="text-[11px] text-outline-variant truncate">{{ trip.ownerId?.email }}</p>
-                  </div>
+            <!-- Highlights Row -->
+            <div v-if="highlightsList.length > 0" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div 
+                v-for="(item, idx) in highlightsList"
+                :key="item.id || idx"
+                class="rounded-xl overflow-hidden bg-[#111C33] border border-[#1E2E4E] group cursor-pointer hover:border-blue-500/50 transition-all p-4 flex flex-col justify-between"
+                @click="$router.push(`/trips/${currentTrip.id || currentTrip._id}/map`)"
+              >
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[18px]">location_on</span>
+                  </span>
+                  <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">{{ item.category || 'Spot' }}</span>
                 </div>
-                <span class="text-[10px] font-bold text-primary bg-primary-container px-2 py-0.5 rounded ml-1 flex-shrink-0">Owner</span>
-              </div>
-
-              <!-- Members from store -->
-              <div v-for="member in tripsStore.members" :key="member._id" class="flex items-center justify-between p-2 rounded-lg hover:bg-surface-container-low dark:hover:bg-slate-800 transition-colors">
-                <div class="flex items-center gap-2 flex-1 min-w-0">
-                  <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-700 text-xs flex-shrink-0">
-                    {{ member.name ? member.name.substring(0,2).toUpperCase() : '?' }}
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <p class="text-xs font-semibold text-on-surface truncate">{{ member.name }}</p>
-                    <p class="text-[11px] text-outline-variant truncate">{{ member.email }}</p>
-                  </div>
+                <div>
+                  <h5 class="text-sm font-bold text-white truncate">{{ item.title }}</h5>
+                  <p class="text-[11px] text-slate-400 mt-1 truncate">{{ item.sub }}</p>
                 </div>
-                <button 
-                  v-if="isCreator"
-                  @click="removeMemberConfirm(member._id)"
-                  class="text-outline-variant hover:text-error ml-1 flex-shrink-0 transition-colors"
-                  title="Remove member">
-                  <span class="material-symbols-outlined text-[18px]">close</span>
-                </button>
               </div>
             </div>
-
-            <!-- Add Member (only if creator) -->
-            <div v-if="isCreator" class="space-y-2 border-t border-gray-100 pt-md">
-              <div v-if="tripsStore.memberError" class="bg-error-container text-on-error-container text-xs p-2 rounded-lg">
-                {{ tripsStore.memberError }}
-              </div>
-              <div v-if="memberSuccessMessage" class="bg-success-container text-on-surface text-xs p-2 rounded-lg">
-                {{ memberSuccessMessage }}
-              </div>
-              <div class="flex items-center gap-2">
-                <input 
-                  v-model="inviteEmail"
-                  class="flex-1 text-sm border border-gray-200 dark:border-slate-700 bg-transparent rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary/10 focus:border-primary outline-none transition-all" 
-                  placeholder="name@email.com" 
-                  type="email"
-                  @keyup.enter="handleInvite"
-                />
-                <button 
-                  @click="handleInvite"
-                  :disabled="tripsStore.memberLoading"
-                  class="bg-surface-container-low dark:bg-slate-800 text-primary dark:text-blue-400 p-2 rounded-lg hover:bg-primary dark:hover:bg-blue-600 hover:text-white transition-all duration-200 disabled:opacity-50">
-                  <span class="material-symbols-outlined text-[20px]">{{ tripsStore.memberLoading ? 'hourglass_bottom' : 'person_add' }}</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Delete Trip -->
-            <div v-if="isCreator" class="mt-8 border-t border-gray-100 dark:border-slate-800 pt-4">
-               <button @click="confirmDelete" class="w-full bg-error-container dark:bg-red-900/30 text-on-error-container dark:text-red-400 px-4 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity border border-transparent dark:border-red-800/50">
-                  <span class="material-symbols-outlined">delete</span> Delete Trip
-               </button>
+            <div v-else class="text-center py-8 px-4 rounded-xl bg-[#111C33]/50 border border-dashed border-[#1E2E4E]">
+              <span class="material-symbols-outlined text-slate-500 text-3xl mb-1">map</span>
+              <p class="text-sm font-medium text-slate-300">No itinerary highlights yet</p>
+              <p class="text-xs text-slate-500 mt-1 mb-3">Add places and activities to plan your days.</p>
+              <router-link
+                :to="`/trips/${currentTrip.id || currentTrip._id}/map`"
+                class="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-semibold"
+              >
+                <span>Open Map & Planner</span>
+                <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+              </router-link>
             </div>
           </section>
 
-          <!-- Information Section -->
-          <section class="md:col-span-8 bg-white dark:bg-slate-900 p-lg rounded-xl border border-gray-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4 transition-colors duration-200">
-            <div class="flex items-start gap-3 p-md bg-surface-container-low dark:bg-slate-800 rounded-lg">
-              <span class="material-symbols-outlined text-primary" data-icon="flight_takeoff">flight_takeoff</span>
-              <div>
-                <p class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Flight</p>
-                <p class="text-sm font-semibold">TBD</p>
-              </div>
+          <!-- Right: Quick Actions -->
+          <section class="lg:col-span-4 bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-6 shadow-xl flex flex-col gap-3">
+            <div class="mb-2">
+              <h3 class="text-lg font-bold text-white tracking-tight">Quick Actions</h3>
             </div>
-            <div class="flex items-start gap-3 p-md bg-surface-container-low dark:bg-slate-800 rounded-lg">
-              <span class="material-symbols-outlined text-primary" data-icon="hotel">hotel</span>
-              <div>
-                <p class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Lodging</p>
-                <p class="text-sm font-semibold">TBD</p>
+
+            <!-- Action 1: Manage Itinerary -->
+            <router-link 
+              :to="`/trips/${currentTrip.id || currentTrip._id}/map?tab=itinerary`"
+              class="p-3.5 rounded-xl bg-[#111C33] hover:bg-[#162442] border border-[#1E2E4E] hover:border-blue-500/40 flex items-center justify-between transition-all group"
+            >
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[18px]">calendar_month</span>
+                </div>
+                <span class="text-sm font-semibold text-slate-200 group-hover:text-white">Manage Itinerary</span>
               </div>
-            </div>
-            <div class="flex items-start gap-3 p-md bg-surface-container-low dark:bg-slate-800 rounded-lg">
-              <span class="material-symbols-outlined text-primary" data-icon="euro">euro</span>
-              <div>
-                <p class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Budget</p>
-                <p class="text-sm font-semibold">Euro TBD</p>
+              <span class="material-symbols-outlined text-slate-400 group-hover:text-white text-[18px]">chevron_right</span>
+            </router-link>
+
+            <!-- Action 2: View on Map -->
+            <router-link 
+              :to="`/trips/${currentTrip.id || currentTrip._id}/map`"
+              class="p-3.5 rounded-xl bg-[#111C33] hover:bg-[#162442] border border-[#1E2E4E] hover:border-red-500/40 flex items-center justify-between transition-all group"
+            >
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[18px]">map</span>
+                </div>
+                <span class="text-sm font-semibold text-slate-200 group-hover:text-white">View on Map</span>
               </div>
-            </div>
-            <div class="flex items-start gap-3 p-md bg-surface-container-low dark:bg-slate-800 rounded-lg">
-              <span class="material-symbols-outlined text-primary" data-icon="groups">groups</span>
-              <div>
-                <p class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Split Strategy</p>
-                <p class="text-sm font-semibold">Equal Distribution</p>
+              <span class="material-symbols-outlined text-slate-400 group-hover:text-white text-[18px]">chevron_right</span>
+            </router-link>
+
+            <!-- Action 3: Track Expenses -->
+            <router-link 
+              :to="`/trips/${currentTrip.id || currentTrip._id}/expenses`"
+              class="p-3.5 rounded-xl bg-[#111C33] hover:bg-[#162442] border border-[#1E2E4E] hover:border-emerald-500/40 flex items-center justify-between transition-all group"
+            >
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[18px]">payments</span>
+                </div>
+                <span class="text-sm font-semibold text-slate-200 group-hover:text-white">Track Expenses</span>
               </div>
-            </div>
+              <span class="material-symbols-outlined text-slate-400 group-hover:text-white text-[18px]">chevron_right</span>
+            </router-link>
           </section>
 
-          <!-- Itinerary Link -->
-          <router-link :to="`/trips/${trip._id}/map`" class="md:col-span-6 min-h-[300px] border border-gray-200 dark:border-slate-800 rounded-xl bg-surface-container-low dark:bg-slate-900 flex flex-col items-center justify-center p-xl relative overflow-hidden group hover:border-primary hover:shadow-md transition-all cursor-pointer">
-            <div class="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
-              <span class="bg-primary text-white px-6 py-2 rounded-full text-sm font-bold shadow-md flex items-center gap-2">
-                <span class="material-symbols-outlined text-[18px]">map</span> Open Map & Itinerary
-              </span>
-            </div>
-            <div class="text-center group-hover:scale-95 transition-transform duration-300">
-              <div class="w-16 h-16 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-md shadow-sm border border-gray-100 dark:border-slate-700 text-primary dark:text-blue-400">
-                <span class="material-symbols-outlined text-4xl" data-icon="event_note">event_note</span>
-              </div>
-              <h3 class="font-h3 text-h3 text-primary mb-xs">Map & Itinerary</h3>
-              <p class="font-body-md text-body-md text-outline max-w-[240px]">Drag and drop activities to build your perfect schedule on the interactive map.</p>
-            </div>
-          </router-link>
-
-          <!-- Expenses Link -->
-          <router-link :to="`/trips/${trip._id}/expenses`" class="md:col-span-6 min-h-[300px] border border-gray-200 dark:border-slate-800 rounded-xl bg-surface-container-low dark:bg-slate-900 flex flex-col items-center justify-center p-xl relative overflow-hidden group hover:border-primary hover:shadow-md transition-all cursor-pointer">
-            <div class="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
-              <span class="bg-primary text-white px-6 py-2 rounded-full text-sm font-bold shadow-md flex items-center gap-2">
-                <span class="material-symbols-outlined text-[18px]">account_balance_wallet</span> Manage Expenses
-              </span>
-            </div>
-            <div class="text-center group-hover:scale-95 transition-transform duration-300">
-              <div class="w-16 h-16 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-md shadow-sm border border-gray-100 dark:border-slate-700 text-primary dark:text-blue-400">
-                <span class="material-symbols-outlined text-4xl" data-icon="account_balance_wallet">account_balance_wallet</span>
-              </div>
-              <h3 class="font-h3 text-h3 text-primary mb-xs">Expenses</h3>
-              <p class="font-body-md text-body-md text-outline max-w-[240px]">Track and split expenses for collaborative budgeting and bill settling.</p>
-            </div>
-          </router-link>
         </div>
-      </main>
-    </div>
+      </div>
 
-    <!-- AI Planner Modal -->
+      <!-- Not Found State -->
+      <div v-else class="text-center py-20 rounded-3xl bg-[#0F172A] border border-[#1E2E4E] p-8 max-w-md mx-auto mt-8 shadow-2xl">
+        <span class="material-symbols-outlined text-5xl text-slate-500 mb-3">luggage</span>
+        <h2 class="text-xl font-bold text-white mb-2">Trip Not Found</h2>
+        <p class="text-xs text-slate-400 mb-6">The trip you are looking for does not exist or you don't have access to it.</p>
+        <router-link
+          to="/dashboard"
+          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-600/30 transition-all"
+        >
+          <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+          <span>Back to My Trips</span>
+        </router-link>
+      </div>
+    </main>
+
+    <!-- AI Planner Modal Component -->
     <AiPlannerModal
-      v-model:isOpen="showAiPlanner"
-      :tripId="trip?._id || ''"
-      :initialDestination="trip?.destination || ''"
-      :tripDaysCount="tripDaysCount"
+      v-if="currentTrip"
+      :isOpen="showAiPlanner"
+      :tripId="currentTrip.id || currentTrip._id"
+      :destination="currentTrip.destination"
+      :duration="3"
+      @close="showAiPlanner = false"
+      @itinerary-generated="onItineraryGenerated"
     />
   </div>
 </template>
@@ -211,114 +277,100 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import api from '../api';
-import { useTripsStore } from '../stores/trips';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
 import AiPlannerModal from '../components/AiPlannerModal.vue';
+import { useTripsStore } from '../stores/trips';
+import api from '../api';
+import { DEFAULT_TRIP_COVER_IMAGE } from '../constants';
+import { formatCurrency } from '../utils/format';
 
 const route = useRoute();
 const router = useRouter();
 const tripsStore = useTripsStore();
 
-const trip = ref(null);
 const loading = ref(true);
-const error = ref('');
-const inviteEmail = ref('');
-const memberSuccessMessage = ref('');
+const trip = ref(null);
 const showAiPlanner = ref(false);
+const showEditModal = ref(false);
 
-const tripDaysCount = computed(() => {
-  if (!trip.value) return 3;
-  const start = new Date(trip.value.startDate);
-  const end = new Date(trip.value.endDate);
-  const diff = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24)) + 1;
-  return diff > 0 ? diff : 1;
+const onImgError = (e) => {
+  e.target.src = DEFAULT_TRIP_COVER_IMAGE;
+};
+
+const currentTripId = computed(() => route.params.id || route.params.tripId);
+const currentTrip = computed(() => trip.value);
+
+const allMembers = computed(() => {
+  if (!currentTrip.value) return [];
+  const list = [];
+  if (currentTrip.value.owner) {
+    list.push(currentTrip.value.owner);
+  }
+  if (Array.isArray(currentTrip.value.members)) {
+    for (const m of currentTrip.value.members) {
+      if (!list.some(existing => (existing.id || existing._id) === (m.id || m._id))) {
+        list.push(m);
+      }
+    }
+  }
+  return list;
+});
+
+const displayMembers = computed(() => allMembers.value.slice(0, 3));
+const overflowMembersCount = computed(() => Math.max(0, allMembers.value.length - 3));
+const totalMembersCount = computed(() => allMembers.value.length);
+
+const getInitials = (name) => {
+  if (!name) return 'U';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const tripBudget = computed(() => {
+  if (currentTrip.value?.expenses && Array.isArray(currentTrip.value.expenses) && currentTrip.value.expenses.length > 0) {
+    return currentTrip.value.expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  }
+  return 0;
+});
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'TBD';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const highlightsList = computed(() => {
+  if (!currentTrip.value?.places || !Array.isArray(currentTrip.value.places) || currentTrip.value.places.length === 0) {
+    return [];
+  }
+  return currentTrip.value.places.slice(0, 3).map((p, idx) => ({
+    id: p.id || idx,
+    title: p.name,
+    sub: p.address || `Day ${p.dayNumber} · ${p.category || 'Attraction'}`,
+    category: p.category
+  }));
 });
 
 const fetchTrip = async () => {
+  loading.value = true;
   try {
-    loading.value = true;
-    error.value = '';
-    const res = await api.get(`/trips/${route.params.id}`);
-    trip.value = res.data;
-    
-    // Fetch members
-    await tripsStore.fetchMembers(route.params.id);
+    const res = await api.get(`/trips/${currentTripId.value}`);
+    if (res.data) {
+      trip.value = res.data;
+    }
   } catch (err) {
-    error.value = err.response?.data?.message || 'Failed to fetch trip details.';
+    trip.value = null;
   } finally {
     loading.value = false;
   }
 };
 
-const isCreator = computed(() => {
-  if (!trip.value) return false;
-  const userStr = localStorage.getItem('user');
-  if (userStr) {
-    try {
-      const user = JSON.parse(userStr);
-      return trip.value.ownerId._id === user.id || trip.value.ownerId === user.id;
-    } catch(e) {}
-  }
-  return false;
-});
-
-const handleInvite = async () => {
-  if (!inviteEmail.value.trim()) {
-    tripsStore.memberError = 'Please enter an email address';
-    return;
-  }
-
-  try {
-    tripsStore.clearMemberError();
-    memberSuccessMessage.value = '';
-    await tripsStore.addMember(route.params.id, inviteEmail.value);
-    memberSuccessMessage.value = 'Member added successfully!';
-    inviteEmail.value = '';
-    
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      memberSuccessMessage.value = '';
-    }, 3000);
-  } catch (err) {
-    // Error is already set in store
-  }
-};
-
-const removeMemberConfirm = async (memberId) => {
-  if (confirm('Are you sure you want to remove this member from the trip?')) {
-    try {
-      tripsStore.clearMemberError();
-      memberSuccessMessage.value = '';
-      await tripsStore.removeMember(route.params.id, memberId);
-      memberSuccessMessage.value = 'Member removed successfully!';
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        memberSuccessMessage.value = '';
-      }, 3000);
-    } catch (err) {
-      // Error is already set in store
-    }
-  }
-};
-
-const confirmDelete = async () => {
-  if (confirm('Are you sure you want to delete this trip? This action cannot be undone.')) {
-    try {
-      await api.delete(`/trips/${trip.value._id}`);
-      router.push('/dashboard');
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete trip.');
-    }
-  }
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const onItineraryGenerated = () => {
+  showAiPlanner.value = false;
+  router.push(`/trips/${currentTripId.value}/map?tab=itinerary`);
 };
 
 onMounted(() => {

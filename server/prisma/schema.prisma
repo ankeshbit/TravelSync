@@ -11,9 +11,10 @@ model User {
   id           String         @id @default(uuid())
   name         String
   email        String         @unique
-  password     String
+  password     String         @default("")   // empty for Firebase-auth users
+  firebaseUid  String?        @unique        // Firebase UID — null for legacy users until first Firebase login
   picture      String         @default("")
-  refreshToken String?
+  refreshToken String?        // kept for backward compat; no longer used after Firebase migration
   createdAt    DateTime       @default(now())
 
   ownedTrips    Trip[]         @relation("TripOwner")
@@ -127,3 +128,18 @@ model Activity {
   @@index([tripId, createdAt])
   @@map("activities")
 }
+
+model Otp {
+  id        String   @id @default(uuid())
+  email     String
+  hash      String
+  purpose   String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+  @@map("otps")
+}
+

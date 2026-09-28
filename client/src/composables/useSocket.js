@@ -26,16 +26,17 @@ export function useSocket(tripId) {
     });
 
     socket.value.on('place:added', (place) => {
-      if (!placesStore.places.some(p => p._id === place._id)) {
+      const placeId = place.id || place._id;
+      if (!placesStore.places.some(p => (p.id || p._id) === placeId)) {
         placesStore.places.push(place);
         toastStore.showToast(`A member added a place`, 'info');
       }
     });
 
     socket.value.on('place:deleted', (data) => {
-      const exists = placesStore.places.find(p => p._id === data.placeId);
+      const exists = placesStore.places.find(p => (p.id || p._id) === data.placeId);
       if (exists) {
-        placesStore.places = placesStore.places.filter(p => p._id !== data.placeId);
+        placesStore.places = placesStore.places.filter(p => (p.id || p._id) !== data.placeId);
         toastStore.showToast(`A member deleted a place`, 'info');
       }
     });
@@ -46,7 +47,8 @@ export function useSocket(tripId) {
     });
 
     socket.value.on('place:note_updated', (updatedPlace) => {
-      const index = placesStore.places.findIndex(p => p._id === updatedPlace._id);
+      const placeId = updatedPlace.id || updatedPlace._id;
+      const index = placesStore.places.findIndex(p => (p.id || p._id) === placeId);
       if (index !== -1) {
         placesStore.places[index] = updatedPlace;
         toastStore.showToast('A member updated a note', 'info');
@@ -54,7 +56,8 @@ export function useSocket(tripId) {
     });
 
     socket.value.on('expense:added', (expense) => {
-      if (!expensesStore.expenses.some(e => e._id === expense._id)) {
+      const expenseId = expense.id || expense._id;
+      if (!expensesStore.expenses.some(e => (e.id || e._id) === expenseId)) {
         expensesStore.expenses.push(expense);
         expensesStore.fetchBalances(tripId);
         toastStore.showToast(`A member added an expense`, 'info');
@@ -62,9 +65,9 @@ export function useSocket(tripId) {
     });
 
     socket.value.on('expense:deleted', (data) => {
-      const exists = expensesStore.expenses.find(e => e._id === data.expenseId);
+      const exists = expensesStore.expenses.find(e => (e.id || e._id) === data.expenseId);
       if (exists) {
-        expensesStore.expenses = expensesStore.expenses.filter(e => e._id !== data.expenseId);
+        expensesStore.expenses = expensesStore.expenses.filter(e => (e.id || e._id) !== data.expenseId);
         expensesStore.fetchBalances(tripId);
         toastStore.showToast(`A member deleted an expense`, 'info');
       }

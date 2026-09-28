@@ -1,18 +1,16 @@
 import { ref, watch, onMounted } from 'vue';
 
-const isDarkMode = ref(false);
+const isDarkMode = ref(true);
 
 export function useDarkMode() {
-  // Initialize dark mode from localStorage or system preference
+  // Initialize dark mode from localStorage or default to true (matching reference design)
   onMounted(() => {
     const savedMode = localStorage.getItem('darkMode');
     
     if (savedMode !== null) {
-      // Use saved preference
       isDarkMode.value = savedMode === 'true';
     } else {
-      // Use system preference
-      isDarkMode.value = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      isDarkMode.value = true;
     }
     
     applyDarkMode(isDarkMode.value);

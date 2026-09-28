@@ -1,547 +1,316 @@
 <template>
-  <div class="min-h-screen bg-surface dark:bg-slate-950 transition-colors duration-200">
+  <div class="min-h-screen bg-[#080D1A] text-slate-100 font-['Plus_Jakarta_Sans'] flex">
     <Navbar />
     <Sidebar />
 
-    <main class="md:ml-16 lg:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] transition-all duration-300">
+    <!-- Main Content Area -->
+    <main class="flex-1 md:pl-64 pt-16 md:pt-8 pb-16 px-6 md:px-10 transition-all duration-300 max-w-7xl mx-auto w-full">
       <!-- Header -->
-      <section class="mb-lg">
-        <div>
-          <!-- Fix: Added dark:text-slate-100 for settings title -->
-          <h1 class="text-3xl font-bold text-on-surface dark:text-slate-100">Settings</h1>
-          <p class="text-outline-variant mt-1">Manage your profile and account preferences</p>
-        </div>
-      </section>
+      <header class="mb-8">
+        <h1 class="text-3xl font-extrabold text-white tracking-tight">Settings</h1>
+        <p class="text-sm text-slate-400 mt-1">Manage your profile and account preferences.</p>
+      </header>
 
-      <!-- Settings Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Sidebar Menu -->
-        <div class="lg:col-span-1">
-          <nav class="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 overflow-hidden sticky top-24">
-            <button
-              v-for="tab in settingsTabs"
-              :key="tab.id"
-              @click="activeTab = tab.id"
-              :class="[
-                'w-full text-left px-6 py-4 border-l-4 transition-all duration-200 cursor-pointer',
-                activeTab === tab.id
-                  ? 'bg-primary/10 border-l-primary text-primary font-semibold dark:bg-blue-950/40 dark:border-l-blue-400 dark:text-blue-400'
-                  : 'border-l-transparent text-on-surface-variant hover:bg-surface-container dark:hover:bg-slate-800 dark:text-slate-400'
-              ]"
-            >
-              <div class="flex items-center gap-3">
-                <span class="material-symbols-outlined">{{ tab.icon }}</span>
-                {{ tab.label }}
-              </div>
-            </button>
-          </nav>
-        </div>
+      <!-- Settings 2-Column Layout -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+        
+        <!-- Left Sub-Tabs Navigation -->
+        <nav class="md:col-span-3 flex flex-col gap-1.5">
+          <button
+            v-for="tab in settingsTabs"
+            :key="tab.id"
+            @click="activeTab = tab.id"
+            :class="activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold' : 'text-slate-400 hover:text-white hover:bg-[#111C33] font-medium'"
+            class="px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm transition-all duration-200 text-left"
+          >
+            <span class="material-symbols-outlined text-[20px]">{{ tab.icon }}</span>
+            <span>{{ tab.label }}</span>
+          </button>
+        </nav>
 
-        <!-- Content -->
-        <div class="lg:col-span-2 min-w-0">
-          <!-- Profile Tab -->
-          <section v-if="activeTab === 'profile'" class="w-full bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
-            <!-- Fix: Added dark:text-slate-100 -->
-            <h2 class="text-2xl font-bold text-on-surface dark:text-slate-100 mb-6">Profile Information</h2>
-            
-            <!-- Avatar (Constrained on md+) -->
-            <div class="flex flex-col md:flex-row gap-6 mb-8 pb-8 border-b border-gray-200 dark:border-slate-800">
-              <div>
-                <!-- Show uploaded photo or initials fallback -->
-                <img
-                  v-if="profilePicture"
-                  :src="profilePicture"
-                  alt="Profile photo"
-                  class="w-24 h-24 rounded-full object-cover"
+        <!-- Right Content Card -->
+        <section class="md:col-span-9 bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-6 sm:p-8 shadow-xl">
+          
+          <!-- TAB 1: PROFILE INFORMATION -->
+          <div v-if="activeTab === 'profile'">
+            <div class="mb-6">
+              <h2 class="text-lg font-bold text-white tracking-tight">Profile Information</h2>
+              <p class="text-xs text-slate-400 mt-0.5">Update your personal information</p>
+            </div>
+
+            <!-- Profile Photo Upload -->
+            <div class="flex flex-col sm:flex-row sm:items-center gap-5 p-4 rounded-xl bg-[#111C33]/60 border border-[#1E2E4E] mb-6">
+              <div class="relative w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xl flex-shrink-0 shadow-md">
+                <img 
+                  v-if="profilePicture" 
+                  :src="profilePicture" 
+                  alt="Profile" 
+                  class="w-full h-full object-cover rounded-full" 
                 />
-                <div v-else class="w-24 h-24 rounded-full bg-primary-container flex items-center justify-center text-white text-4xl font-bold">
-                  {{ userInitials }}
-                </div>
+                <span v-else>{{ userInitials }}</span>
+                
+                <button 
+                  @click="triggerPhotoSelect" 
+                  class="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-slate-900 border border-slate-700 text-slate-300 hover:text-white flex items-center justify-center shadow"
+                  title="Change photo"
+                >
+                  <span class="material-symbols-outlined text-[13px]">photo_camera</span>
+                </button>
+                <input ref="photoInput" type="file" accept="image/*" class="hidden" @change="handlePhotoUpload" />
               </div>
+
               <div class="flex-1">
-                <!-- Fix: Added dark:text-slate-100 -->
-                <h3 class="font-semibold text-on-surface dark:text-slate-100 mb-2">Profile Photo</h3>
-                <p class="text-outline-variant text-sm mb-4">Upload a profile picture to personalize your account (PNG or JPEG, max 5 MB)</p>
-
-                <!-- Hidden file input —— programmatic click -->
-                <input
-                  ref="photoInput"
-                  type="file"
-                  accept="image/png, image/jpeg, image/gif, image/webp"
-                  style="opacity:0; position:absolute; pointer-events:none;"
-                  @change="handlePhotoUpload"
-                />
-
-                <button
-                  type="button"
-                  :disabled="loadingPhoto"
-                  class="px-4 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity text-sm disabled:opacity-50 flex items-center gap-2"
-                  @click="photoInput.click()"
-                >
-                  <span v-if="!loadingPhoto" class="material-symbols-outlined text-sm">upload</span>
-                  <span v-else class="material-symbols-outlined text-sm animate-spin">hourglass_bottom</span>
-                  {{ loadingPhoto ? 'Uploading...' : 'Upload Photo' }}
-                </button>
+                <h4 class="text-sm font-semibold text-white">Profile Photo</h4>
+                <p class="text-xs text-slate-400 mt-0.5">Upload a profile picture (PNG or JPEG, max 5MB)</p>
               </div>
+
+              <button 
+                @click="triggerPhotoSelect"
+                type="button" 
+                :disabled="loadingPhoto"
+                class="px-4 py-2 border border-[#1E2E4E] hover:border-slate-600 bg-[#162442] hover:bg-[#1c2e54] text-xs font-semibold text-white rounded-xl transition-all flex items-center gap-2 self-start sm:self-auto"
+              >
+                <span v-if="loadingPhoto" class="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+                <span v-else class="material-symbols-outlined text-[16px]">upload</span>
+                <span>Upload Photo</span>
+              </button>
             </div>
 
-            <!-- Profile Form (Constrained and Centered on md+) -->
-            <form @submit.prevent="handleProfileUpdate" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-                <div>
-                  <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Full Name</label>
-                  <input
-                    v-model="profileForm.name"
-                    type="text"
-                    class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                    placeholder="Your full name"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Email</label>
-                  <input
-                    :value="profileForm.email"
-                    type="email"
-                    disabled
-                    class="w-full px-4 py-2 border border-outline-variant dark:border-slate-700 rounded-lg bg-surface-container dark:bg-slate-800 text-on-surface-variant dark:text-slate-400 cursor-not-allowed"
-                  />
-                  <p class="text-outline-variant text-xs mt-1">Email cannot be changed</p>
-                </div>
-              </div>
-
+            <!-- Profile Inputs Form -->
+            <form @submit.prevent="handleProfileUpdate" class="space-y-5">
+              <!-- Full Name -->
               <div>
-                <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Member Since</label>
-                <p class="text-on-surface-variant dark:text-slate-300">{{ formatDate(userJoinDate) }}</p>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Full Name</label>
+                <input 
+                  v-model="profileForm.name"
+                  type="text" 
+                  required
+                  placeholder="e.g. Rajnish Srivastava"
+                  class="w-full bg-[#111C33] border border-[#1E2E4E] text-sm text-white placeholder-slate-500 px-4 py-2.5 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+                />
               </div>
 
-              <div class="pt-4 flex gap-3">
-                <button
-                  type="submit"
-                  :disabled="!isProfileDirty || loadingProfile"
-                  class="px-6 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+              <!-- Email -->
+              <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Email</label>
+                <input 
+                  v-model="profileForm.email"
+                  type="email" 
+                  disabled
+                  class="w-full bg-[#111C33]/50 border border-[#1E2E4E] text-sm text-slate-400 px-4 py-2.5 rounded-xl cursor-not-allowed opacity-90"
+                />
+                <p class="text-[11px] text-slate-500 mt-1">Email cannot be changed (Firebase)</p>
+              </div>
+
+              <!-- Member Since -->
+              <div v-if="memberSince">
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Member Since</label>
+                <div class="flex items-center gap-2 text-sm text-slate-300 px-1 py-1">
+                  <span class="material-symbols-outlined text-[18px] text-slate-500">calendar_month</span>
+                  <span>{{ memberSinceFormatted }}</span>
+                </div>
+              </div>
+
+              <!-- Save Changes Button -->
+              <div class="pt-2">
+                <button 
+                  type="submit" 
+                  :disabled="loadingProfile"
+                  class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold px-6 py-2.5 rounded-xl shadow-lg shadow-blue-600/30 active:scale-95 transition-all flex items-center gap-2"
                 >
-                  <span v-if="!loadingProfile" class="material-symbols-outlined text-sm">save</span>
-                  <span v-if="loadingProfile" class="material-symbols-outlined text-sm animate-spin">hourglass_bottom</span>
-                  {{ loadingProfile ? 'Saving...' : 'Save Changes' }}
-                </button>
-                <button
-                  type="button"
-                  @click="resetProfileForm"
-                  class="px-6 py-2 border border-outline-variant text-on-surface dark:text-slate-300 dark:border-slate-700 rounded-lg font-semibold hover:bg-surface-container dark:hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
+                  <span v-if="loadingProfile" class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+                  <span v-else class="material-symbols-outlined text-[18px]">save</span>
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>
-          </section>
+          </div>
 
-          <!-- Security Tab -->
-          <section v-if="activeTab === 'security'" class="w-full bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
-            <!-- Fix: Added dark:text-slate-100 -->
-            <h2 class="text-2xl font-bold text-on-surface dark:text-slate-100 mb-6">Security & Password</h2>
-
-            <!-- Password Form (Constrained and Centered on md+) -->
-            <form @submit.prevent="handlePasswordChange" class="space-y-6">
-              <div>
-                <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Current Password</label>
-                <input
-                  v-model="passwordForm.currentPassword"
-                  type="password"
-                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                  placeholder="Enter your current password"
-                />
-              </div>
-
-              <div>
-                <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">New Password</label>
-                <input
-                  v-model="passwordForm.newPassword"
-                  type="password"
-                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                  placeholder="Enter new password (min. 8 characters)"
-                />
-                <p class="text-outline-variant text-xs mt-2 dark:text-slate-400">
-                  {{ passwordForm.newPassword.length }} character{{ passwordForm.newPassword.length !== 1 ? 's' : '' }}
-                </p>
-              </div>
-
-              <div>
-                <label class="block text-sm font-medium text-on-surface dark:text-slate-200 mb-2">Confirm New Password</label>
-                <input
-                  v-model="passwordForm.confirmPassword"
-                  type="password"
-                  class="w-full px-4 py-2 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                  placeholder="Confirm your new password"
-                />
-              </div>
-
-              <div v-if="passwordError" class="p-4 bg-error-container text-on-error-container rounded-lg text-sm">
-                {{ passwordError }}
-              </div>
-
-              <div class="pt-4 flex gap-3">
-                <button
-                  type="submit"
-                  :disabled="!isPasswordFormValid || loadingPassword"
-                  class="px-6 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
-                >
-                  <span v-if="!loadingPassword" class="material-symbols-outlined text-sm">lock</span>
-                  <span v-if="loadingPassword" class="material-symbols-outlined text-sm animate-spin">hourglass_bottom</span>
-                  {{ loadingPassword ? 'Updating...' : 'Update Password' }}
-                </button>
-              </div>
-            </form>
-
-            <!-- Sessions (Constrained on md+) -->
-            <div class="mt-8 pt-8 border-t border-gray-200 dark:border-slate-800">
-              <h3 class="font-semibold text-on-surface dark:text-slate-100 mb-4">Active Sessions</h3>
-              <div class="bg-surface-container dark:bg-slate-800 rounded-lg p-4 flex items-center justify-between transition-colors duration-200">
-                <div>
-                  <p class="font-medium text-on-surface dark:text-slate-100">Current Device</p>
-                  <p class="text-sm text-on-surface-variant dark:text-slate-400">This browser</p>
-                </div>
-                <span class="text-xs bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-300 px-3 py-1 rounded-full">Active</span>
-              </div>
+          <!-- TAB 2: SECURITY -->
+          <div v-else-if="activeTab === 'security'" class="space-y-6">
+            <div>
+              <h2 class="text-lg font-bold text-white tracking-tight">Security & Authentication</h2>
+              <p class="text-xs text-slate-400 mt-0.5">Manage password and account protection</p>
             </div>
-          </section>
 
-          <!-- Preferences Tab -->
-          <section v-if="activeTab === 'preferences'" class="w-full bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
-            <!-- Fix: Added dark:text-slate-100 -->
-            <h2 class="text-2xl font-bold text-on-surface dark:text-slate-100 mb-6">Preferences</h2>
-
-            <div class="space-y-6">
-              <!-- Dark Mode -->
-              <div class="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-slate-800">
-                <div>
-                  <h3 class="font-medium text-on-surface dark:text-slate-200">Dark Mode</h3>
-                  <p class="text-sm text-on-surface-variant dark:text-slate-400">Use dark theme for easier viewing</p>
+            <!-- Google OAuth Status -->
+            <div class="p-5 rounded-2xl bg-[#111C33]/60 border border-[#1E2E4E] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow">
+                  <svg class="w-5 h-5" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
                 </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" v-model="isDarkMode" class="sr-only peer" />
-                  <div class="w-11 h-6 relative bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary dark:peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
-                </label>
-              </div>
-
-              <!-- Notifications -->
-              <div class="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-slate-800">
                 <div>
-                  <h3 class="font-medium text-on-surface dark:text-slate-200">Email Notifications</h3>
-                  <p class="text-sm text-on-surface-variant dark:text-slate-400">Get updates about your trips and invitations</p>
+                  <h4 class="text-sm font-semibold text-white">Google Account Sign-In</h4>
+                  <p class="text-xs text-slate-400">Connected for fast, secure authentication</p>
                 </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" v-model="preferences.emailNotifications" class="sr-only peer" />
-                  <div class="w-11 h-6 relative bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary dark:peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
-                </label>
               </div>
-
-              <!-- Trip Reminders -->
-              <div class="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-slate-800">
-                <div>
-                  <h3 class="font-medium text-on-surface dark:text-slate-200">Trip Reminders</h3>
-                  <p class="text-sm text-on-surface-variant dark:text-slate-400">Get notified before upcoming trips</p>
-                </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" v-model="preferences.tripReminders" class="sr-only peer" />
-                  <div class="w-11 h-6 relative bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary dark:peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
-                </label>
-              </div>
-
-              <!-- Privacy -->
-              <div class="flex items-center justify-between">
-                <div>
-                  <h3 class="font-medium text-on-surface dark:text-slate-200">Profile Visibility</h3>
-                  <p class="text-sm text-on-surface-variant dark:text-slate-400">Allow others to see your profile</p>
-                </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" v-model="preferences.profileVisible" class="sr-only peer" />
-                  <div class="w-11 h-6 relative bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:bg-primary dark:peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
-                </label>
-              </div>
-
-              <div class="pt-4">
-                <button @click="savePreferences" class="px-6 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity">
-                  Save Preferences
-                </button>
-              </div>
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                Active
+              </span>
             </div>
-          </section>
 
-          <!-- Danger Zone Tab -->
-          <section v-if="activeTab === 'danger'" class="w-full bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 p-6">
-            <h2 class="text-2xl font-bold text-error dark:text-red-400 mb-6">Danger Zone</h2>
-
-            <div class="space-y-6">
-              <!-- Logout -->
-              <div class="mb-6 pb-6 border-b border-gray-200 dark:border-slate-800">
-                <h3 class="font-semibold text-on-surface dark:text-slate-100 mb-2">Sign Out</h3>
-                <p class="text-outline-variant text-sm mb-4">End your session on this device</p>
-                <button
-                  @click="handleLogout"
-                  class="px-6 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:opacity-90 transition-opacity"
-                >
-                  Sign Out
-                </button>
+            <!-- Password Reset -->
+            <div class="p-5 rounded-2xl bg-[#111C33]/60 border border-[#1E2E4E] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                  <span class="material-symbols-outlined text-[20px]">lock_reset</span>
+                </div>
+                <div>
+                  <h4 class="text-sm font-semibold text-white">Password Recovery</h4>
+                  <p class="text-xs text-slate-400">Send a password reset email to {{ profileForm.email }}</p>
+                </div>
               </div>
+              <button 
+                @click="sendPasswordReset"
+                type="button" 
+                class="px-4 py-2 border border-[#1E2E4E] hover:border-slate-600 bg-[#162442] hover:bg-[#1c2e54] text-xs font-semibold text-white rounded-xl transition-all"
+              >
+                Send Reset Link
+              </button>
+            </div>
+          </div>
 
-              <!-- Delete Account -->
+          <!-- TAB 3: PREFERENCES -->
+          <div v-else-if="activeTab === 'preferences'" class="space-y-6">
+            <div>
+              <h2 class="text-lg font-bold text-white tracking-tight">Preferences</h2>
+              <p class="text-xs text-slate-400 mt-0.5">Customize your travel and notification settings</p>
+            </div>
+
+            <div class="p-5 rounded-2xl bg-[#111C33]/60 border border-[#1E2E4E] flex items-center justify-between">
               <div>
-                <h3 class="font-semibold text-error dark:text-red-400 mb-2">Delete Account</h3>
-                <p class="text-outline-variant text-sm mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
-                <button
-                  @click="showDeleteConfirm = true"
-                  class="px-6 py-2 bg-error dark:bg-red-600 text-on-error dark:text-white rounded-lg font-semibold hover:opacity-90 transition-opacity cursor-pointer"
-                >
-                  Delete Account
-                </button>
+                <h4 class="text-sm font-semibold text-white">Dark Theme</h4>
+                <p class="text-xs text-slate-400">Immersive dark interface tailored for travel planning</p>
               </div>
+              <span class="text-xs font-semibold px-3 py-1 rounded-full bg-blue-600 text-white">Enabled</span>
             </div>
-          </section>
+          </div>
 
-        </div>
+          <!-- TAB 4 & 5: NOTIFICATIONS / ACCOUNT -->
+          <div v-else class="space-y-6">
+            <div>
+              <h2 class="text-lg font-bold text-white tracking-tight">{{ activeTab.toUpperCase() }}</h2>
+              <p class="text-xs text-slate-400 mt-0.5">Manage your system options</p>
+            </div>
+
+            <div class="p-5 rounded-2xl bg-[#111C33]/60 border border-[#1E2E4E] flex items-center justify-between">
+              <div>
+                <h4 class="text-sm font-semibold text-white">Sign Out</h4>
+                <p class="text-xs text-slate-400">End your current session on this device</p>
+              </div>
+              <button 
+                @click="handleLogout"
+                class="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-400 text-xs font-semibold rounded-xl transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+
+        </section>
       </div>
     </main>
   </div>
-
-  <!-- Delete Confirmation Modal — Teleported to body, inline styles to guarantee centering -->
-  <Teleport to="body">
-    <div
-      v-if="showDeleteConfirm"
-      style="
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(0,0,0,0.65);
-        padding: 16px;
-      "
-      @click.self="showDeleteConfirm = false; deleteError = ''"
-    >
-      <div
-        style="
-          background: var(--color-surface-container, #1e293b);
-          border-radius: 16px;
-          width: 100%;
-          max-width: 440px;
-          padding: 28px;
-          box-shadow: 0 25px 50px rgba(0,0,0,0.5);
-          border: 1px solid rgba(255,255,255,0.12);
-          color: #f1f5f9;
-          position: relative;
-        "
-      >
-        <!-- Title row -->
-        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
-          <span class="material-symbols-outlined" style="color:#ef4444; font-size:32px;">warning</span>
-          <h3 style="font-size:1.25rem; font-weight:700; margin:0;">Delete Account?</h3>
-        </div>
-
-        <!-- Body text -->
-        <p style="font-size:0.875rem; line-height:1.6; margin-bottom:20px; color:#cbd5e1;">
-          This will permanently delete your account and
-          <strong style="color:#f1f5f9;">all your trips and data</strong>.
-          This action <strong style="color:#f1f5f9;">cannot be undone</strong>.
-        </p>
-
-        <!-- Error message -->
-        <div
-          v-if="deleteError"
-          style="background:#fee2e2; color:#991b1b; border-radius:8px; padding:12px; font-size:0.875rem; margin-bottom:16px;"
-        >
-          {{ deleteError }}
-        </div>
-
-        <!-- Action buttons -->
-        <div style="display:flex; gap:12px; justify-content:flex-end; flex-wrap:wrap;">
-          <button
-            @click="showDeleteConfirm = false; deleteError = ''"
-            style="
-              padding: 10px 20px;
-              border: 1px solid rgba(255,255,255,0.2);
-              border-radius: 8px;
-              background: transparent;
-              color: #cbd5e1;
-              font-weight: 600;
-              cursor: pointer;
-              font-size: 0.9rem;
-            "
-          >
-            Cancel
-          </button>
-          <button
-            @click="handleDeleteRequest"
-            :disabled="loadingDelete"
-            style="
-              padding: 10px 20px;
-              border: none;
-              border-radius: 8px;
-              background: #dc2626;
-              color: #fff;
-              font-weight: 600;
-              cursor: pointer;
-              font-size: 0.9rem;
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              opacity: 1;
-            "
-            :style="loadingDelete ? 'opacity:0.6; cursor:not-allowed;' : ''"
-          >
-            <span v-if="loadingDelete" class="material-symbols-outlined" style="font-size:16px; animation: spin 1s linear infinite;">hourglass_bottom</span>
-            {{ loadingDelete ? 'Sending Code...' : 'Yes, Delete My Account' }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
-
-  <!-- OTP Modal for Account Deletion -->
-  <OtpModal
-    :visible="showDeleteOtp"
-    :email="userEmail"
-    purpose="delete"
-    @verified="handleOtpVerifiedDelete"
-    @cancel="showDeleteOtp = false"
-  />
-
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useToastStore } from '../stores/toast';
-import { useAuthStore } from '../stores/auth';
-import { useDarkMode } from '../composables/useDarkMode';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
-import OtpModal from '../components/OtpModal.vue';
 import api from '../api';
-
-// Template ref for the hidden file input
-const photoInput = ref(null);
-const loadingPhoto = ref(false);
-
-// Seed profilePicture immediately from localStorage so avatar shows on first render
-const _base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
-const _storedPicture = (() => {
-  try {
-    const u = JSON.parse(localStorage.getItem('user') || '{}');
-    return u.picture ? `${_base}${u.picture}` : '';
-  } catch { return ''; }
-})();
-const profilePicture = ref(_storedPicture);
+import { useAuthStore } from '../stores/auth';
+import { useToastStore } from '../stores/toast';
 
 const router = useRouter();
-const toastStore = useToastStore();
 const authStore = useAuthStore();
-const { isDarkMode, toggleDarkMode } = useDarkMode();
+const toastStore = useToastStore();
 
 const activeTab = ref('profile');
+const photoInput = ref(null);
+const loadingProfile = ref(false);
+const loadingPhoto = ref(false);
 
 const settingsTabs = [
   { id: 'profile', label: 'Profile', icon: 'person' },
-  { id: 'security', label: 'Security', icon: 'lock' },
+  { id: 'security', label: 'Security', icon: 'shield' },
   { id: 'preferences', label: 'Preferences', icon: 'tune' },
-  { id: 'danger', label: 'Account', icon: 'warning' }
+  { id: 'notifications', label: 'Notifications', icon: 'notifications' },
+  { id: 'account', label: 'Account', icon: 'manage_accounts' },
 ];
 
-// Profile data
-const originalProfile = ref({
-  name: '',
-  email: '',
-  joinDate: new Date()
-});
-
 const profileForm = ref({
-  name: '',
-  email: ''
+  name: authStore.currentUser?.name || '',
+  email: authStore.currentUser?.email || ''
 });
 
-const userJoinDate = ref(new Date());
+const profilePicture = ref(authStore.currentUser?.picture || '');
+const joinDate = ref(authStore.currentUser?.createdAt ? new Date(authStore.currentUser.createdAt) : null);
+const memberSince = joinDate;
 
-const loadingProfile = ref(false);
-const loadingPassword = ref(false);
-const passwordError = ref('');
-const showDeleteConfirm = ref(false);
-const showDeleteOtp = ref(false);   // NEW: show OTP modal for delete
-const loadingDelete = ref(false);
-const deleteError = ref('');
-
-// Password form
-const passwordForm = ref({
-  currentPassword: '',
-  newPassword: '',
-  confirmPassword: ''
+const memberSinceFormatted = computed(() => {
+  if (!joinDate.value) return '';
+  const d = new Date(joinDate.value);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  });
 });
 
-// Preferences
-const preferences = ref({
-  emailNotifications: true,
-  tripReminders: true,
-  profileVisible: true
-});
-
-// Computed properties
 const userInitials = computed(() => {
-  if (!profileForm.value.name) return 'U';
-  return profileForm.value.name
-    .split(' ')
-    .filter(word => word.length > 0)
-    .map(word => word[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const name = profileForm.value.name.trim();
+  if (!name) return 'U';
+  const parts = name.split(' ');
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.substring(0, 2).toUpperCase();
 });
 
-// Email for OTP — read from form (populated by fetchProfile)
-const userEmail = computed(() => profileForm.value.email || '');
+const triggerPhotoSelect = () => {
+  photoInput.value?.click();
+};
 
-const isProfileDirty = computed(() => {
-  return profileForm.value.name !== originalProfile.value.name;
-});
-
-const isPasswordFormValid = computed(() => {
-  return (
-    passwordForm.value.currentPassword &&
-    passwordForm.value.newPassword &&
-    passwordForm.value.confirmPassword &&
-    passwordForm.value.newPassword.length >= 8 &&
-    passwordForm.value.newPassword === passwordForm.value.confirmPassword
-  );
-});
-
-// Methods
-const fetchProfile = async () => {
+const fetchUserProfile = async () => {
   try {
     const res = await api.get('/auth/me');
-    originalProfile.value.name = res.data.name;
-    originalProfile.value.email = res.data.email;
-    profileForm.value.name = res.data.name;
-    profileForm.value.email = res.data.email;
-
-    // Load existing profile picture if any — API is the source of truth
-    if (res.data.picture) {
-      const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
-      profilePicture.value = `${base}${res.data.picture}`;
-      // Keep localStorage in sync with DB
-      try {
-        const u = JSON.parse(localStorage.getItem('user') || '{}');
-        u.picture = res.data.picture;
-        localStorage.setItem('user', JSON.stringify(u));
-      } catch {}
-    }
-
-    if (res.data.createdAt) {
-      userJoinDate.value = new Date(res.data.createdAt);
-    } else if (res.data._id) {
-      // Fallback: extract timestamp from MongoDB ObjectId
-      const timestamp = new Date(parseInt(res.data._id.substring(0, 8), 16) * 1000);
-      userJoinDate.value = timestamp;
+    if (res.data) {
+      if (res.data.name) profileForm.value.name = res.data.name;
+      if (res.data.email) profileForm.value.email = res.data.email;
+      if (res.data.picture) {
+        const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
+        profilePicture.value = res.data.picture.startsWith('http') ? res.data.picture : `${base}${res.data.picture}`;
+      }
+      if (res.data.createdAt) {
+        joinDate.value = new Date(res.data.createdAt);
+      }
     }
   } catch (err) {
-    toastStore.showToast('Failed to load profile', 'error');
+    // If not authenticated or error, use fallback values
+    if (authStore.currentUser) {
+      profileForm.value.name = authStore.currentUser.name || profileForm.value.name;
+      profileForm.value.email = authStore.currentUser.email || profileForm.value.email;
+      if (authStore.currentUser.createdAt) {
+        joinDate.value = new Date(authStore.currentUser.createdAt);
+      }
+    }
+  }
+};
+
+const handleProfileUpdate = async () => {
+  loadingProfile.value = true;
+  try {
+    await api.put('/auth/me', { name: profileForm.value.name });
+    toastStore.showToast('Profile updated successfully!', 'success');
+  } catch (err) {
+    toastStore.showToast(err.response?.data?.message || 'Failed to update profile', 'error');
+  } finally {
+    loadingProfile.value = false;
   }
 };
 
@@ -558,147 +327,32 @@ const handlePhotoUpload = async (event) => {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
 
-    // Build absolute URL from the relative path returned by the server
-    const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
-    profilePicture.value = `${baseUrl}${res.data.pictureUrl}`;
-
-    // Keep localStorage user in sync
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      user.picture = res.data.pictureUrl;
-      localStorage.setItem('user', JSON.stringify(user));
-    }
-
+    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
+    profilePicture.value = `${base}${res.data.pictureUrl}`;
     toastStore.showToast('Profile photo updated!', 'success');
   } catch (err) {
-    toastStore.showToast(err.response?.data?.message || 'Failed to upload photo', 'error');
+    toastStore.showToast('Failed to upload photo', 'error');
   } finally {
     loadingPhoto.value = false;
-    // Reset so the same file can be re-selected if needed
-    if (photoInput.value) photoInput.value.value = '';
   }
 };
 
-const handleProfileUpdate = async () => {
-  loadingProfile.value = true;
+const sendPasswordReset = async () => {
   try {
-    const res = await api.put('/auth/me', { name: profileForm.value.name });
-    originalProfile.value.name = res.data.name;
-    
-    // Update local storage so other components using it stay in sync
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      user.name = res.data.name;
-      localStorage.setItem('user', JSON.stringify(user));
-    }
-    
-    toastStore.showToast('Profile updated successfully', 'success');
+    const { sendResetEmail } = await import('../services/authService');
+    await sendResetEmail(profileForm.value.email);
+    toastStore.showToast(`Password reset email sent to ${profileForm.value.email}`, 'success');
   } catch (err) {
-    toastStore.showToast(err.response?.data?.message || 'Failed to update profile', 'error');
+    toastStore.showToast(err.message || 'Failed to send reset email', 'error');
   }
-  loadingProfile.value = false;
-};
-
-const resetProfileForm = () => {
-  profileForm.value.name = originalProfile.value.name;
-};
-
-const handlePasswordChange = async () => {
-  passwordError.value = '';
-  
-  if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
-    passwordError.value = 'Passwords do not match';
-    return;
-  }
-
-  loadingPassword.value = true;
-  try {
-    await api.put('/auth/me/password', {
-      currentPassword: passwordForm.value.currentPassword,
-      newPassword: passwordForm.value.newPassword
-    });
-    toastStore.showToast('Password changed successfully', 'success');
-    passwordForm.value = {
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: ''
-    };
-  } catch (err) {
-    passwordError.value = err.response?.data?.message || 'Failed to update password';
-  }
-  loadingPassword.value = false;
-};
-
-const savePreferences = () => {
-  toastStore.showToast('Preferences saved', 'success');
 };
 
 const handleLogout = async () => {
-  try {
-    await api.post('/auth/logout');
-  } catch {}
-  authStore.clearAuth();
+  await authStore.logout();
   router.push('/login');
-  toastStore.showToast('You have been logged out', 'info');
-};
-
-const handleDeleteAccount = async () => {
-  deleteError.value = '';
-  loadingDelete.value = true;
-  try {
-    await api.delete('/auth/me', { data: { otpVerified: true } });
-    try {
-      await api.post('/auth/logout');
-    } catch {}
-    authStore.clearAuth();
-    toastStore.showToast('Your account has been deleted.', 'info');
-    router.push('/login');
-  } catch (err) {
-    deleteError.value = err.response?.data?.message || 'Failed to delete account. Please try again.';
-  } finally {
-    loadingDelete.value = false;
-  }
-};
-
-// Step 1: user clicks "Yes, Delete My Account" → send OTP, show OTP modal
-const handleDeleteRequest = async () => {
-  deleteError.value = '';
-  loadingDelete.value = true;
-  try {
-    await api.post('/auth/send-otp', { email: userEmail.value, purpose: 'delete' });
-    showDeleteConfirm.value = false;
-    showDeleteOtp.value = true;
-  } catch (err) {
-    deleteError.value = err.response?.data?.message || 'Failed to send verification code.';
-  } finally {
-    loadingDelete.value = false;
-  }
-};
-
-// Step 2: OTP verified → actually delete account
-const handleOtpVerifiedDelete = async () => {
-  showDeleteOtp.value = false;
-  await handleDeleteAccount();
-};
-
-const formatDate = (date) => {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
 };
 
 onMounted(() => {
-  fetchProfile();
+  fetchUserProfile();
 });
 </script>
-
-<style>
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-</style>

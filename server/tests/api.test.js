@@ -1,6 +1,27 @@
-process.env.JWT_SECRET = 'test-jwt-secret';
-process.env.REFRESH_SECRET = 'test-refresh-secret';
+process.env.JWT_SECRET = 'test-jwt-secret-min-32-chars-long-validation-ok';
+process.env.REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long-validation-ok';
+process.env.ALLOWED_ORIGIN = 'http://localhost:5173';
 process.env.NODE_ENV = 'test';
+
+// Mock Firebase Admin verification before requiring app/routes
+jest.mock('../config/firebaseAdmin', () => ({
+  verifyFirebaseToken: jest.fn().mockImplementation(async (token) => {
+    if (token === 'invalidtoken') throw new Error('Invalid token');
+    if (token === 'other-token') {
+      return {
+        uid: 'test-firebase-uid-other',
+        email: 'jane@example.com',
+        name: 'Jane Smith'
+      };
+    }
+    return {
+      uid: 'test-firebase-uid-primary',
+      email: 'john@example.com',
+      name: 'John Doe'
+    };
+  }),
+  getAdminApp: jest.fn()
+}));
 
 jest.setTimeout(30000);
 
@@ -8,175 +29,107 @@ const request = require('supertest');
 const { prisma } = require('../db');
 const app = require('../server');
 
-beforeAll(async () => {
-  // Tests require DATABASE_URL to be set in environment
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      'DATABASE_URL environment variable is required for tests. ' +
-      'Set it to a test database URI, never a production database.'
-    );
-  }
-
-  // Clear all test data in FK-safe order (children first, then parents)
-  await prisma.expenseSplit.deleteMany({});
-  await prisma.expense.deleteMany({});
-  await prisma.place.deleteMany({});
-  await prisma.activity.deleteMany({});
-  await prisma.tripMember.deleteMany({});
-  await prisma.trip.deleteMany({});
-  await prisma.user.deleteMany({});
-});
-
-afterAll(async () => {
-  // Clean up in FK-safe order
-  await prisma.expenseSplit.deleteMany({});
-  await prisma.expense.deleteMany({});
-  await prisma.place.deleteMany({});
-  await prisma.activity.deleteMany({});
-  await prisma.tripMember.deleteMany({});
-  await prisma.trip.deleteMany({});
-  await prisma.user.deleteMany({});
-  await prisma.$disconnect();
-});
-
 describe('TravelSync API Integration Tests', () => {
-  let userToken;
-  let otherUserToken;
+  let userToken = 'primary-token';
+  let otherUserToken = 'other-token';
   let testTripId;
   let testUser;
   let testOtherUser;
 
-  const validUser = {
-    name: 'John Doe',
-    email: 'john@example.com',
-    password: 'password123',
-    otpVerified: true
-  };
-
-  const otherUser = {
-    name: 'Jane Smith',
-    email: 'jane@example.com',
-    password: 'password123',
-    otpVerified: true
-  };
-
   beforeAll(async () => {
-    // Register primary user
-    const regRes = await request(app)
-      .post('/api/auth/register')
-      .send(validUser);
-    
-    expect(regRes.status).toBe(201);
-    userToken = regRes.body.accessToken;
-    testUser = regRes.body.user;
+    // Upsert test users safely without wiping production/dev data
+    testUser = await prisma.user.upsert({
+      where: { email: 'john@example.com' },
+      update: { firebaseUid: 'test-firebase-uid-primary' },
+      create: {
+        name: 'John Doe',
+        email: 'john@example.com',
+        password: '',
+        firebaseUid: 'test-firebase-uid-primary'
+      }
+    });
 
-    // Register secondary user for member/access tests
-    const otherRegRes = await request(app)
-      .post('/api/auth/register')
-      .send(otherUser);
-    
-    expect(otherRegRes.status).toBe(201);
-    otherUserToken = otherRegRes.body.accessToken;
-    testOtherUser = otherRegRes.body.user;
+    testOtherUser = await prisma.user.upsert({
+      where: { email: 'jane@example.com' },
+      update: { firebaseUid: 'test-firebase-uid-other' },
+      create: {
+        name: 'Jane Smith',
+        email: 'jane@example.com',
+        password: '',
+        firebaseUid: 'test-firebase-uid-other'
+      }
+    });
 
     // Create a base trip owned by primary user
     const tripRes = await request(app)
       .post('/api/trips')
       .set('Authorization', `Bearer ${userToken}`)
       .send({
-        name: 'Summer Vacation',
+        name: 'Hawaii Test Getaway',
         destination: 'Hawaii',
         startDate: '2026-07-01',
         endDate: '2026-07-10'
       });
-    
+
     expect(tripRes.status).toBe(201);
-    testTripId = tripRes.body._id || tripRes.body.id;
+    expect(tripRes.body).toHaveProperty('id');
+    expect(tripRes.body).toHaveProperty('owner');
+    testTripId = tripRes.body.id;
   });
 
-  describe('Auth Routes', () => {
-    describe('POST /api/auth/register', () => {
-      it('should register a new user successfully with valid inputs', async () => {
-        const res = await request(app)
-          .post('/api/auth/register')
-          .send({
-            name: 'Alice',
-            email: 'alice@example.com',
-            password: 'alicepassword',
-            otpVerified: true
-          });
-        expect(res.status).toBe(201);
-        expect(res.body).toHaveProperty('accessToken');
-        expect(res.body).toHaveProperty('refreshToken');
-        expect(res.body.user).toHaveProperty('email', 'alice@example.com');
-      });
+  afterAll(async () => {
+    // Clean up only our test trips
+    if (testTripId) {
+      await prisma.activity.deleteMany({ where: { tripId: testTripId } }).catch(() => {});
+      await prisma.expenseSplit.deleteMany({ where: { expense: { tripId: testTripId } } }).catch(() => {});
+      await prisma.expense.deleteMany({ where: { tripId: testTripId } }).catch(() => {});
+      await prisma.place.deleteMany({ where: { tripId: testTripId } }).catch(() => {});
+      await prisma.tripMember.deleteMany({ where: { tripId: testTripId } }).catch(() => {});
+      await prisma.trip.deleteMany({ where: { name: { in: ['Hawaii Test Getaway', 'Winter Getaway'] } } }).catch(() => {});
+    }
+    await prisma.$disconnect();
+  });
 
-      it('should return 400 if email is already registered', async () => {
-        const res = await request(app)
-          .post('/api/auth/register')
-          .send(validUser);
-        expect(res.status).toBe(400);
-        expect(res.body.message).toMatch(/exists/i);
-      });
-
-      it('should return 400 if required fields are missing', async () => {
-        const res = await request(app)
-          .post('/api/auth/register')
-          .send({
-            email: 'missing@example.com',
-            otpVerified: true
-          });
-        expect(res.status).toBe(400);
-      });
+  describe('Health Check Route', () => {
+    it('GET /api/health should return 200 and dbStatus: connected when healthy', async () => {
+      const res = await request(app).get('/api/health');
+      expect(res.status).toBe(200);
+      expect(res.body.dbStatus).toBe('connected');
+      expect(res.body.database).toBe('PostgreSQL (Neon)');
     });
 
-    describe('POST /api/auth/login', () => {
-      it('should return 200 and a JWT token with correct credentials', async () => {
-        const res = await request(app)
-          .post('/api/auth/login')
-          .send({
-            email: validUser.email,
-            password: validUser.password
-          });
-        expect(res.status).toBe(200);
-        expect(res.body).toHaveProperty('accessToken');
-        expect(res.body).toHaveProperty('refreshToken');
-        expect(res.body.user.email).toBe(validUser.email);
-      });
-
-      it('should return 401 with wrong password', async () => {
-        const res = await request(app)
-          .post('/api/auth/login')
-          .send({
-            email: validUser.email,
-            password: 'wrongpassword'
-          });
-        expect(res.status).toBe(401);
-      });
-
-      it('should return 404 with unregistered email', async () => {
-        const res = await request(app)
-          .post('/api/auth/login')
-          .send({
-            email: 'unregistered@example.com',
-            password: 'password123'
-          });
-        expect(res.status).toBe(404);
-      });
+    it('GET /api/health should return 503 if db query fails', async () => {
+      const spy = jest.spyOn(prisma, '$queryRaw').mockRejectedValueOnce(new Error('Connection lost'));
+      const res = await request(app).get('/api/health');
+      expect(res.status).toBe(503);
+      expect(res.body.dbStatus).toBe('error');
+      spy.mockRestore();
     });
+  });
 
+  describe('Public Stats Route', () => {
+    it('GET /api/stats should return counts for users and trips', async () => {
+      const res = await request(app).get('/api/stats');
+      expect(res.status).toBe(200);
+      expect(typeof res.body.users).toBe('number');
+      expect(typeof res.body.trips).toBe('number');
+    });
+  });
+
+  describe('Auth Routes (Firebase-backed)', () => {
     describe('GET /api/auth/me', () => {
-      it('should return 200 and user object with valid JWT in Authorization header', async () => {
+      it('should return 200 and user object with id and createdAt', async () => {
         const res = await request(app)
           .get('/api/auth/me')
           .set('Authorization', `Bearer ${userToken}`);
         expect(res.status).toBe(200);
-        expect(res.body.email).toBe(validUser.email);
+        expect(res.body.id).toBe(testUser.id);
+        expect(res.body.email).toBe('john@example.com');
+        expect(res.body).toHaveProperty('createdAt');
       });
 
       it('should return 401 with no token provided', async () => {
-        const res = await request(app)
-          .get('/api/auth/me');
+        const res = await request(app).get('/api/auth/me');
         expect(res.status).toBe(401);
       });
 
@@ -191,7 +144,7 @@ describe('TravelSync API Integration Tests', () => {
 
   describe('Trips Routes', () => {
     describe('POST /api/trips', () => {
-      it('should return 201 with valid body when authenticated', async () => {
+      it('should return 201 with id, owner, and members when authenticated', async () => {
         const res = await request(app)
           .post('/api/trips')
           .set('Authorization', `Bearer ${userToken}`)
@@ -202,7 +155,10 @@ describe('TravelSync API Integration Tests', () => {
             endDate: '2026-12-22'
           });
         expect(res.status).toBe(201);
-        expect(res.body.name).toBe('Winter Getaway');
+        expect(res.body).toHaveProperty('id');
+        expect(res.body).toHaveProperty('owner');
+        expect(res.body.owner.id).toBe(testUser.id);
+        expect(Array.isArray(res.body.members)).toBe(true);
       });
 
       it('should return 400 with missing parameters', async () => {
@@ -215,7 +171,7 @@ describe('TravelSync API Integration Tests', () => {
         expect(res.status).toBe(400);
       });
 
-      it('should return 403 (or 401) if unauthenticated', async () => {
+      it('should return 401 if unauthenticated', async () => {
         const res = await request(app)
           .post('/api/trips')
           .send({
@@ -224,17 +180,33 @@ describe('TravelSync API Integration Tests', () => {
             startDate: '2026-06-01',
             endDate: '2026-06-05'
           });
-        expect([401, 403]).toContain(res.status);
+        expect(res.status).toBe(401);
       });
     });
 
-    describe('GET /api/trips/:tripId', () => {
-      it('should return 200 for a trip member', async () => {
+    describe('GET /api/trips/summary', () => {
+      it('should return overview statistics for authenticated user', async () => {
+        const res = await request(app)
+          .get('/api/trips/summary')
+          .set('Authorization', `Bearer ${userToken}`);
+        expect(res.status).toBe(200);
+        expect(typeof res.body.totalTrips).toBe('number');
+        expect(typeof res.body.upcomingTrips).toBe('number');
+        expect(typeof res.body.totalMembers).toBe('number');
+        expect(typeof res.body.totalSpent).toBe('number');
+        expect(res.body).toHaveProperty('currency');
+      });
+    });
+
+    describe('GET /api/trips/:id', () => {
+      it('should return 200 with id, owner, and members for trip participant', async () => {
         const res = await request(app)
           .get(`/api/trips/${testTripId}`)
           .set('Authorization', `Bearer ${userToken}`);
         expect(res.status).toBe(200);
-        expect(res.body._id).toBe(testTripId);
+        expect(res.body.id).toBe(testTripId);
+        expect(res.body.owner.id).toBe(testUser.id);
+        expect(Array.isArray(res.body.members)).toBe(true);
       });
 
       it('should return 403 for a non-member requester', async () => {
@@ -246,32 +218,25 @@ describe('TravelSync API Integration Tests', () => {
     });
 
     describe('POST /api/trips/:tripId/members', () => {
-      it('should add a member by email and return 200 when requested by owner', async () => {
+      it('should add a member by email and return trip with members objects containing id', async () => {
         const res = await request(app)
           .post(`/api/trips/${testTripId}/members`)
           .set('Authorization', `Bearer ${userToken}`)
           .send({
-            email: otherUser.email
+            email: 'jane@example.com'
           });
         expect(res.status).toBe(200);
-        const memberIds = res.body.members.map(m => (m._id || m.id).toString());
-        expect(memberIds).toContain(testOtherUser.id || testOtherUser._id);
+        expect(res.body.id).toBe(testTripId);
+        const memberIds = res.body.members.map(m => m.id);
+        expect(memberIds).toContain(testOtherUser.id);
       });
 
       it('should return 400 if member is already in the trip', async () => {
-        // Ensure the other user is a member using Prisma upsert (idempotent)
-        const otherUserId = testOtherUser.id || testOtherUser._id;
-        await prisma.tripMember.upsert({
-          where: { tripId_userId: { tripId: testTripId, userId: otherUserId } },
-          update: {},
-          create: { tripId: testTripId, userId: otherUserId }
-        });
-
         const res = await request(app)
           .post(`/api/trips/${testTripId}/members`)
           .set('Authorization', `Bearer ${userToken}`)
           .send({
-            email: otherUser.email
+            email: 'jane@example.com'
           });
         expect(res.status).toBe(400);
       });
@@ -284,6 +249,48 @@ describe('TravelSync API Integration Tests', () => {
             email: 'somebody@example.com'
           });
         expect(res.status).toBe(403);
+      });
+    });
+
+    describe('POST /api/trips/:tripId/ai-suggestions rate limiter', () => {
+      it('should return 429 on the 6th AI request in the window', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  summary: 'Sample trip',
+                  days: [],
+                  tips: []
+                })
+              }
+            }]
+          })
+        });
+
+        try {
+          // Send 5 requests within the limit
+          for (let i = 1; i <= 5; i++) {
+            const res = await request(app)
+              .post(`/api/trips/${testTripId}/ai-suggestions`)
+              .set('Authorization', `Bearer ${userToken}`)
+              .send({ budget: 'moderate', interests: 'sightseeing' });
+
+            expect(res.status).not.toBe(429);
+          }
+
+          // The 6th request must be rate limited
+          const res6 = await request(app)
+            .post(`/api/trips/${testTripId}/ai-suggestions`)
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({ budget: 'moderate', interests: 'sightseeing' });
+
+          expect(res6.status).toBe(429);
+          expect(res6.body.message).toMatch(/Too many itinerary requests/i);
+        } finally {
+          global.fetch = originalFetch;
+        }
       });
     });
   });

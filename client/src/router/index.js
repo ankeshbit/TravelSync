@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/auth'
 
 const LoginView = () => import('../views/LoginView.vue')
 const RegisterView = () => import('../views/RegisterView.vue')
+const ForgotPasswordView = () => import('../views/ForgotPasswordView.vue')
 const DashboardView = () => import('../views/DashboardView.vue')
 const TripDetailView = () => import('../views/TripDetailView.vue')
 const EditTripView = () => import('../views/EditTripView.vue')
@@ -14,6 +15,7 @@ const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', component: LoginView },
   { path: '/register', component: RegisterView },
+  { path: '/forgot-password', component: ForgotPasswordView },
   {
     path: '/dashboard',
     component: DashboardView,
@@ -63,17 +65,22 @@ const router = createRouter({
   }
 })
 
-// Navigation guard — protect dashboard
+// Navigation guard — wait for Firebase auth to initialise before deciding
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
+  // waitForAuth() resolves immediately after the first onAuthStateChanged call
+  // so there is no redirect loop even when already initialized
   if (!authStore.initialized) {
-    await authStore.hydrateSession()
+    await authStore.waitForAuth()
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
-  } else if ((to.path === '/login' || to.path === '/register') && authStore.isAuthenticated) {
+  } else if (
+    (to.path === '/login' || to.path === '/register' || to.path === '/forgot-password') &&
+    authStore.isAuthenticated
+  ) {
     next('/dashboard')
   } else {
     next()

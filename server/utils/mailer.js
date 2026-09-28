@@ -12,8 +12,8 @@ if (isConfigured) {
     secure: false, // STARTTLS
     auth: {
       user: smtpUser,
-      pass: smtpPass,
-    },
+      pass: smtpPass
+    }
   });
 }
 
@@ -26,15 +26,20 @@ if (isConfigured) {
 async function sendOtpEmail(to, otp, purpose = 'register') {
   const isDelete = purpose === 'delete';
 
-  // Always log OTP to console in development so registration is never blocked
-  console.log('\n==================================================');
-  console.log(`🔑 [OTP VERIFICATION] ${purpose.toUpperCase()}`);
-  console.log(`📧 Target Email: ${to}`);
-  console.log(`👉 Code: ${otp}`);
-  console.log('==================================================\n');
+  // Only print OTP to console when NODE_ENV !== 'production'
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('\n==================================================');
+    console.log(`🔑 [OTP VERIFICATION] ${purpose.toUpperCase()}`);
+    console.log(`📧 Target Email: ${to}`);
+    console.log(`👉 Code: ${otp}`);
+    console.log('==================================================\n');
+  }
 
   if (!isConfigured || !transporter) {
-    console.warn(`[Mailer] SMTP not configured. OTP printed above.`);
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Email service is not configured.');
+    }
+    console.warn('[Mailer] SMTP not configured. OTP printed above.');
     return { dev: true, otp };
   }
 
@@ -93,7 +98,7 @@ async function sendOtpEmail(to, otp, purpose = 'register') {
       from: process.env.SMTP_FROM || `"TravelSync" <${smtpUser}>`,
       to,
       subject,
-      html,
+      html
     });
     return { success: true };
   } catch (mailErr) {

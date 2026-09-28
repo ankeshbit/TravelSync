@@ -7,8 +7,7 @@
           <span class="brand-text">Travel Sync</span>
         </div>
         <nav class="header-nav">
-          <router-link class="nav-link" to="/login">Login</router-link>
-          <router-link class="nav-link nav-cta" to="/register">Sign Up</router-link>
+          <router-link class="nav-link" to="/login">Sign In</router-link>
         </nav>
       </div>
     </header>
@@ -44,12 +43,38 @@
               <p class="form-sub">Join thousands of travelers planning with Sync.</p>
             </div>
 
+            <!-- Google Sign-Up Button -->
+            <button
+              class="google-btn"
+              type="button"
+              @click="handleGoogleRegister"
+              :disabled="loading"
+            >
+              <span v-if="loadingGoogle" class="spinner-google"></span>
+              <template v-else>
+                <svg viewBox="0 0 24 24" class="google-logo">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                <span>Sign up with Google</span>
+              </template>
+            </button>
+
+            <div class="divider">
+              <div class="divider-line"></div>
+              <span class="divider-text">Or sign up with email</span>
+              <div class="divider-line"></div>
+            </div>
+
+            <!-- Email Registration Form -->
             <form @submit.prevent="handleRegister" class="form">
               <div class="field">
                 <label class="field-label">Full Name</label>
                 <div class="input-wrap">
                   <span class="input-icon material-symbols-outlined">person</span>
-                  <input v-model="form.name" type="text" placeholder="John Doe" class="input" />
+                  <input v-model="form.name" type="text" required placeholder="John Doe" class="input" />
                 </div>
               </div>
 
@@ -57,7 +82,7 @@
                 <label class="field-label">Email Address</label>
                 <div class="input-wrap">
                   <span class="input-icon material-symbols-outlined">mail</span>
-                  <input v-model="form.email" type="email" placeholder="name@example.com" class="input" />
+                  <input v-model="form.email" type="email" required placeholder="name@example.com" class="input" />
                 </div>
               </div>
 
@@ -66,14 +91,14 @@
                   <label class="field-label">Password</label>
                   <div class="input-wrap">
                     <span class="input-icon material-symbols-outlined">lock</span>
-                    <input v-model="form.password" type="password" placeholder="••••••••" class="input" />
+                    <input v-model="form.password" type="password" required placeholder="••••••••" class="input" />
                   </div>
                 </div>
                 <div class="field">
                   <label class="field-label">Confirm</label>
                   <div class="input-wrap">
                     <span class="input-icon material-symbols-outlined">lock_reset</span>
-                    <input v-model="form.confirmPassword" type="password" placeholder="••••••••" class="input" />
+                    <input v-model="form.confirmPassword" type="password" required placeholder="••••••••" class="input" />
                   </div>
                 </div>
               </div>
@@ -88,32 +113,15 @@
               <transition name="fade">
                 <div v-if="error" class="error-msg">
                   <span class="material-symbols-outlined" style="font-size:18px">error</span>
-                  {{ error }}
+                  <span>{{ error }}</span>
                 </div>
               </transition>
 
               <button :disabled="loading" type="submit" class="btn-submit">
-                <span v-if="loading" class="spinner"></span>
+                <span v-if="loadingEmail" class="spinner"></span>
                 <span v-else>Create Account</span>
               </button>
             </form>
-
-            <div class="divider">
-              <div class="divider-line"></div>
-              <span class="divider-text">Or sign up with</span>
-              <div class="divider-line"></div>
-            </div>
-
-            <div class="social-btns">
-              <button class="social-btn" type="button">
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5K6mUPvyXcaiScO-k9s7dFqxwt3ikbub99pZ8dNcoACRhSaCvbmXHqhv52MuBG0DaDlQjhs4PS5-YUWCxpoefsFkXI-1z4hvpsW1LuUHa5BVSY8yoBkn_vdRjVBY-47FEGxP6D2_y4Z_l8iuCRQJkPTX1FqcHQPHTGrugAJHrGiyZlFnrqqDvES14OUWSZoFDAiR9fqQKgIC78kONE5MO5zWpJhH_G3kxk4pi_6khmcpBWVTSlgeCkT41bJ_d6VTs3cEXLBPb1Q" alt="Google" class="social-logo" />
-                Google
-              </button>
-              <button class="social-btn" type="button">
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuB08uDN5YBeII1uRCPnP3P26WplYkOnx2PAgzen5PLN_VVp46KgjKYoUwMVXdU32td59anV7Bl118r_LC6jDwu9sJ3Y7JDlKrw3YB5QhpEfuEO9oiiURpK38e-rvqi7oAPft0Dhymf2BLx-OcIhcQErH9INpQw-FWpp6W3RN-Yr04iM5xoHETRicXxpYscCNUKtmdadp282SbppVDR2tWsuWInAyZPWf2Hig5a4la0XbrrTko4JVbcLsLbqSXM9eTsM_nmT12pHaQ" alt="Apple" class="social-logo" />
-                Apple
-              </button>
-            </div>
 
             <p class="signin-link">
               Already have an account?
@@ -126,7 +134,7 @@
 
     <footer class="footer">
       <div class="footer-inner">
-        <span>© 2024 Travel Sync. All travel rights reserved.</span>
+        <span>© 2024 Travel Sync. All rights reserved.</span>
         <div class="footer-links">
           <a href="#">Help Center</a>
           <a href="#">Security</a>
@@ -135,79 +143,65 @@
       </div>
     </footer>
   </div>
-
-  <!-- OTP Verification Modal -->
-  <OtpModal
-    :visible="showOtp"
-    :email="form.email"
-    :dev-otp="devOtp"
-    purpose="register"
-    @verified="handleOtpVerified"
-    @cancel="showOtp = false; loading = false"
-  />
 </template>
 
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '../api.js'
-import OtpModal from '../components/OtpModal.vue'
 import { useAuthStore } from '../stores/auth'
+import { getFirebaseErrorMessage } from '../services/authService'
 
-const router  = useRouter()
+const router = useRouter()
 const authStore = useAuthStore()
-const form    = ref({ name: '', email: '', password: '', confirmPassword: '', terms: false })
+const form = ref({ name: '', email: '', password: '', confirmPassword: '', terms: false })
 const loading = ref(false)
-const error   = ref('')
-const showOtp = ref(false)
-const devOtp  = ref('')
+const loadingEmail = ref(false)
+const loadingGoogle = ref(false)
+const error = ref('')
 
-// Step 1: Validate form, send OTP, show modal
 const handleRegister = async () => {
   error.value = ''
   if (!form.value.name || !form.value.email || !form.value.password || !form.value.confirmPassword) {
-    error.value = 'Please fill in all fields.'; return
+    error.value = 'Please fill in all fields.'
+    return
   }
   if (form.value.password.length < 6) {
-    error.value = 'Password must be at least 6 characters.'; return
+    error.value = 'Password must be at least 6 characters.'
+    return
   }
   if (form.value.password !== form.value.confirmPassword) {
-    error.value = 'Passwords do not match.'; return
+    error.value = 'Passwords do not match.'
+    return
   }
   if (!form.value.terms) {
-    error.value = 'Please accept the Terms & Conditions.'; return
+    error.value = 'Please accept the Terms & Conditions.'
+    return
   }
   loading.value = true
+  loadingEmail.value = true
   try {
-    const res = await api.post('/auth/send-otp', { email: form.value.email, purpose: 'register' })
-    devOtp.value = res.data?.devOtp || ''
-    showOtp.value = true
+    await authStore.registerWithEmail(form.value.name.trim(), form.value.email.trim(), form.value.password)
+    router.push('/dashboard')
   } catch (err) {
-    error.value = err.response?.data?.message || 'Failed to send verification code. Try again.'
+    error.value = getFirebaseErrorMessage(err)
+  } finally {
     loading.value = false
+    loadingEmail.value = false
   }
 }
 
-// Step 2: OTP verified — now actually create the account
-const handleOtpVerified = async () => {
-  showOtp.value = false
+const handleGoogleRegister = async () => {
+  error.value = ''
+  loading.value = true
+  loadingGoogle.value = true
   try {
-    const res = await api.post('/auth/register', {
-      name: form.value.name,
-      email: form.value.email,
-      password: form.value.password,
-      otpVerified: true,
-    })
-    authStore.setSession({
-      accessToken: res.data.accessToken,
-      refreshToken: res.data.refreshToken,
-      user: res.data.user
-    })
+    await authStore.loginWithGoogle()
     router.push('/dashboard')
   } catch (err) {
-    error.value = err.response?.data?.message || 'Registration failed. Please try again.'
+    error.value = getFirebaseErrorMessage(err)
   } finally {
     loading.value = false
+    loadingGoogle.value = false
   }
 }
 </script>
@@ -290,18 +284,16 @@ const handleOtpVerified = async () => {
 .nav-link {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #475569;
-  padding: 0.5rem 1rem;
+  color: #00355f;
+  padding: 0.5rem 1.25rem;
   border-radius: 0.5rem;
+  border: 1.5px solid #00355f;
   text-decoration: none;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
 }
-.nav-link:hover { background: rgba(219, 234, 254, 0.5); }
-:global(.dark) .nav-link { color: #94a3b8; }
-:global(.dark) .nav-link:hover { background: rgba(30, 41, 59, 0.8); color: #f1f5f9; }
-.nav-cta { background: #00355f; color: #fff; }
-:global(.dark) .nav-cta { background: #0369a1; }
-.nav-cta:hover { opacity: 0.9; }
+.nav-link:hover { background: #00355f; color: #fff; }
+:global(.dark) .nav-link { color: #38bdf8; border-color: #38bdf8; }
+:global(.dark) .nav-link:hover { background: #38bdf8; color: #020617; }
 
 /* ── Main ── */
 .main {
@@ -348,7 +340,7 @@ const handleOtpVerified = async () => {
   background: #00355f;
 }
 @media (min-width: 768px) {
-  .panel-left { display: block; width: 50%; min-height: 600px; }
+  .panel-left { display: block; width: 50%; min-height: 560px; }
 }
 .panel-overlay {
   position: absolute; inset: 0;
@@ -373,19 +365,19 @@ const handleOtpVerified = async () => {
 }
 .panel-title {
   font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 2.25rem;
+  font-size: 2.15rem;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.02em;
   margin-bottom: 1rem;
 }
 .panel-sub {
-  font-size: 1.125rem;
+  font-size: 1.05rem;
   line-height: 1.6;
   opacity: 0.9;
   max-width: 320px;
 }
-.features { margin-top: 3rem; display: flex; flex-direction: column; gap: 1.5rem; }
+.features { margin-top: 2.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
 .feature { display: flex; align-items: center; gap: 1rem; font-size: 0.875rem; font-weight: 600; }
 .feature-icon {
   width: 40px; height: 40px;
@@ -406,12 +398,10 @@ const handleOtpVerified = async () => {
 :global(.dark) .panel-right {
   background: transparent;
 }
-@media (min-width: 768px) { .panel-right { width: 50%; padding: 3.5rem; } }
-@media (min-width: 1024px) { .panel-right { padding: 4rem; } }
+@media (min-width: 768px) { .panel-right { width: 50%; padding: 3rem 2.5rem; } }
 
 .form-wrapper { max-width: 420px; margin: 0 auto; }
-.form-header { margin-bottom: 2.5rem; text-align: center; }
-@media (min-width: 768px) { .form-header { text-align: left; } }
+.form-header { margin-bottom: 1.5rem; text-align: left; }
 
 .form-title {
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -419,23 +409,91 @@ const handleOtpVerified = async () => {
   font-weight: 700;
   color: #00355f;
   letter-spacing: -0.02em;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
 }
 :global(.dark) .form-title { color: #f1f5f9; }
-.form-sub { font-size: 1rem; color: #42474f; }
+.form-sub { font-size: 0.95rem; color: #42474f; }
 :global(.dark) .form-sub { color: #94a3b8; }
 
+/* Google Button */
+.google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: #161c27;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+:global(.dark) .google-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+.google-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+:global(.dark) .google-btn:hover:not(:disabled) {
+  background: #273549;
+  border-color: #475569;
+}
+.google-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.google-logo { width: 20px; height: 20px; flex-shrink: 0; }
+
+.spinner-google {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(2, 132, 199, 0.25);
+  border-top-color: #0284c7;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* Divider */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.divider-line { flex: 1; height: 1px; background: rgba(194, 199, 209, 0.4); }
+:global(.dark) .divider-line { background: rgba(51, 65, 85, 0.4); }
+.divider-text {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  white-space: nowrap;
+}
+:global(.dark) .divider-text { color: #94a3b8; }
+
 /* ── Form ── */
-.form { display: flex; flex-direction: column; gap: 1.25rem; }
-.field { display: flex; flex-direction: column; gap: 0.5rem; }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form { display: flex; flex-direction: column; gap: 1.15rem; }
+.field { display: flex; flex-direction: column; gap: 0.4rem; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 @media (max-width: 480px) { .field-row { grid-template-columns: 1fr; } }
 
 .field-label {
   font-size: 0.875rem;
   font-weight: 600;
   color: #42474f;
-  letter-spacing: 0.01em;
 }
 :global(.dark) .field-label { color: #e2e8f0; }
 
@@ -447,7 +505,6 @@ const handleOtpVerified = async () => {
   color: #727780;
   font-size: 20px;
   pointer-events: none;
-  transition: color 0.2s;
 }
 .input-wrap:focus-within .input-icon { color: #00355f; }
 :global(.dark) .input-wrap:focus-within .input-icon { color: #38bdf8; }
@@ -455,7 +512,7 @@ const handleOtpVerified = async () => {
 .input {
   width: 100%;
   padding: 0.75rem 1rem 0.75rem 2.75rem;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-family: inherit;
   background: #F7FAFC !important;
   border: 2px solid transparent;
@@ -474,19 +531,15 @@ const handleOtpVerified = async () => {
   background: #fff !important;
   border-color: #a0c9ff;
   box-shadow: 0 0 0 4px rgba(160, 201, 255, 0.2);
-  color: #000000 !important;
 }
 :global(.dark) .input:focus {
   background: #0f172a !important;
   border-color: #38bdf8;
   box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
-  color: #ffffff !important;
 }
 
-
-
 /* ── Terms ── */
-.terms { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.5rem 0; }
+.terms { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.25rem 0; }
 .checkbox {
   width: 18px; height: 18px;
   margin-top: 2px;
@@ -494,7 +547,7 @@ const handleOtpVerified = async () => {
   cursor: pointer;
   flex-shrink: 0;
 }
-.terms label { font-size: 0.875rem; color: #42474f; line-height: 1.5; cursor: pointer; }
+.terms label { font-size: 0.85rem; color: #42474f; line-height: 1.4; cursor: pointer; }
 :global(.dark) .terms label { color: #94a3b8; }
 .terms a { color: #00355f; font-weight: 600; text-decoration: none; }
 :global(.dark) .terms a { color: #38bdf8; }
@@ -521,22 +574,21 @@ const handleOtpVerified = async () => {
   width: 100%;
   background: linear-gradient(135deg, #00355f 0%, #006970 100%);
   color: #fff;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   font-family: inherit;
-  padding: 1rem;
+  padding: 0.9rem;
   border: none;
   border-radius: 0.75rem;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0, 53, 95, 0.25);
+  box-shadow: 0 4px 16px rgba(0, 53, 95, 0.2);
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-  transition: opacity 0.2s, transform 0.15s, background 0.2s;
+  transition: opacity 0.2s, transform 0.15s;
 }
 :global(.dark) .btn-submit {
   background: linear-gradient(135deg, #0369a1 0%, #0891b2 100%);
 }
 .btn-submit:hover:not(:disabled) { opacity: 0.95; transform: translateY(-1px); }
-.btn-submit:active:not(:disabled) { transform: scale(0.98); }
 .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* ── Spinner ── */
@@ -550,52 +602,11 @@ const handleOtpVerified = async () => {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Divider ── */
-.divider {
-  display: flex; align-items: center; gap: 1rem;
-  margin: 2rem 0;
-}
-.divider-line { flex: 1; height: 1px; background: rgba(194, 199, 209, 0.4); }
-.divider-text {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #42474f;
-  white-space: nowrap;
-}
-:global(.dark) .divider-text { color: #64748b; }
-:global(.dark) .divider-line { background: rgba(51, 65, 85, 0.4); }
-
-/* ── Social ── */
-.social-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.social-btn {
-  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: #fff;
-  border: 1.5px solid rgba(194, 199, 209, 0.6);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: #161c27;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.15s, box-shadow 0.2s, color 0.2s, border-color 0.2s;
-}
-:global(.dark) .social-btn {
-  background: #1e293b;
-  border-color: #334155;
-  color: #f1f5f9;
-}
-.social-btn:hover { background: #f1f3ff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
-:global(.dark) .social-btn:hover { background: #334155; }
-.social-logo { width: 20px; height: 20px; object-fit: contain; }
-
 /* ── Sign In Link ── */
 .signin-link {
-  margin-top: 2.5rem;
+  margin-top: 1.5rem;
   text-align: center;
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: #42474f;
 }
 :global(.dark) .signin-link { color: #94a3b8; }

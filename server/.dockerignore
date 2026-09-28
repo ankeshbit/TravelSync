@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# User uploads & ephemeral files
+uploads/
+
+# Test coverage & reports
+coverage/
+test-results/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Test suites & fixtures
+tests/
+
+# Git metadata
+.git/
+.gitignore
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS / Editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

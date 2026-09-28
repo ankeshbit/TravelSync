@@ -40,7 +40,8 @@ export const usePlacesStore = defineStore('places', {
     async addPlace(tripId, placeData) {
       try {
         const response = await api.post(`/trips/${tripId}/places`, placeData)
-        if (!this.places.some(p => p._id === response.data._id)) {
+        const newId = response.data.id || response.data._id
+        if (!this.places.some(p => (p.id || p._id) === newId)) {
           this.places.push(response.data)
         }
         return response.data
@@ -52,8 +53,8 @@ export const usePlacesStore = defineStore('places', {
     async deletePlace(tripId, placeId) {
       try {
         await api.delete(`/trips/${tripId}/places/${placeId}`)
-        this.places = this.places.filter(p => p._id !== placeId)
-        if (this.selectedPlace && this.selectedPlace._id === placeId) {
+        this.places = this.places.filter(p => (p.id || p._id) !== placeId)
+        if (this.selectedPlace && (this.selectedPlace.id || this.selectedPlace._id) === placeId) {
           this.closeDetailPanel()
         }
       } catch (err) {
@@ -64,11 +65,11 @@ export const usePlacesStore = defineStore('places', {
     async updateNote(tripId, placeId, note) {
       try {
         const response = await api.patch(`/trips/${tripId}/places/${placeId}/note`, { note })
-        const index = this.places.findIndex(p => p._id === placeId)
+        const index = this.places.findIndex(p => (p.id || p._id) === placeId)
         if (index !== -1) {
           this.places[index].note = response.data.note
         }
-        if (this.selectedPlace && this.selectedPlace._id === placeId) {
+        if (this.selectedPlace && (this.selectedPlace.id || this.selectedPlace._id) === placeId) {
           this.selectedPlace.note = response.data.note
         }
       } catch (err) {

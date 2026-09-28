@@ -14,11 +14,14 @@ app.use(pinia)
 const authStore = useAuthStore()
 const toastStore = useToastStore()
 
-await authStore.hydrateSession()
-
 // Setup API error interceptors with toast store
 setupApiInterceptors({ toastStore, authStore })
 
-app.use(router)
+// Start the Firebase auth listener so onAuthStateChanged fires before any routes load
+authStore.initializeAuth()
 
+// Wait for Firebase to restore the session before mounting — prevents redirect flicker
+await authStore.waitForAuth()
+
+app.use(router)
 app.mount('#app')
