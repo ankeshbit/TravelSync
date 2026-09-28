@@ -5,10 +5,15 @@ const config = require('../config/env');
 const { prisma, formatTrip, formatPlace, formatExpense, formatUser, formatActivity } = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
+const { validate } = require('../middleware/validate');
 const { getIO } = require('../socket');
 const logActivity = require('../utils/logActivity');
 const { calculateBalances } = require('../utils/calculateBalances');
 const logger = require('../utils/logger');
+const { createTripSchema, updateTripSchema, addMemberSchema } = require('../validators/trip');
+const { createPlaceSchema, updatePlaceNoteSchema } = require('../validators/place');
+const { createExpenseSchema } = require('../validators/expense');
+const { tripIdParamSchema, idParamSchema, tripAndPlaceParamSchema } = require('../validators/common');
 
 // AI suggestion limiter: 5 requests per 10 minutes, keyed by authenticated user ID (falls back to IP)
 const aiLimiter = rateLimit({
@@ -242,17 +247,9 @@ router.get('/summary', verifyToken, asyncHandler(async (req, res) => {
  *       400:
  *         description: Bad request (missing fields)
  */
-router.post('/', verifyToken, asyncHandler(async (req, res) => {
-  const { name, destination, startDate, endDate } = req.body;
-  if (!name || !destination || !startDate || !endDate) {
-    return res.status(400).json({ message: 'name, destination, startDate and endDate are all required.' });
-  }
-  if (isNaN(Date.parse(startDate)) || isNaN(Date.parse(endDate))) {
-    return res.status(400).json({ message: 'startDate and endDate must be valid dates.' });
-  }
-  if (new Date(endDate) < new Date(startDate)) {
-    return res.status(400).json({ message: 'endDate must be on or after startDate.' });
-  }
+router.post('/', verifyToken, validate({ body: createTripSchema }), asyncHandler(async (req, res) => {
+  const { name, destination, startDate, endDate, budgetPerPerson, currency, status } = req.body;
+  // Body already validated and coerced by Zod (dates are Date objects)
 
   const savedTrip = await prisma.trip.create({
     data: {
@@ -260,6 +257,9 @@ router.post('/', verifyToken, asyncHandler(async (req, res) => {
       destination: destination.trim(),
       startDate: new Date(startDate),
       endDate: new Date(endDate),
+      budgetPerPerson: budgetPerPerson ?? 0,
+      currency: currency || 'INR',
+      status: status || 'planning',
       ownerId: req.userId,
       members: {
         create: [{ userId: req.userId }]
@@ -403,63 +403,63 @@ router.get('/:tripId/members', verifyToken, asyncHandler(async (req, res) => {
  *       404:
  *         description: User or Trip not found
  */
-router.post('/:tripId/members', verifyToken, asyncHandler(async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ message: 'Email is required' });
-  }
+router.post('/:tripId/members', verifyToken,
+  validate({ params: tripIdParamSchema, body: addMemberSchema }),
+  asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    // email already validated and lowercased by Zod
 
-  const trip = await prisma.trip.findUnique({
-    where: { id: req.params.tripId },
-    include: { members: true }
-  });
-  if (!trip) return res.status(404).json({ message: 'Trip not found' });
+    const trip = await prisma.trip.findUnique({
+      where: { id: req.params.tripId },
+      include: { members: true }
+    });
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
 
-  if (trip.ownerId !== req.userId) {
-    return res.status(403).json({ message: 'Only the trip owner can invite members' });
-  }
-
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
-  if (!user) {
-    return res.status(404).json({ message: 'No user found with this email' });
-  }
-
-  if (trip.members.some(m => m.userId === user.id)) {
-    return res.status(400).json({ message: 'User is already a member' });
-  }
-
-  if (trip.ownerId === user.id) {
-    return res.status(400).json({ message: 'Owner is already part of the trip' });
-  }
-
-  await prisma.tripMember.create({
-    data: {
-      tripId: trip.id,
-      userId: user.id
+    if (trip.ownerId !== req.userId) {
+      return res.status(403).json({ message: 'Only the trip owner can invite members' });
     }
-  });
 
-  await logActivity(req.params.tripId, req.userId, 'invited a member', user.email);
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (!user) {
+      return res.status(404).json({ message: 'No user found with this email' });
+    }
 
-  const updatedTrip = await prisma.trip.findUnique({
-    where: { id: req.params.tripId },
-    include: {
-      owner: { select: { id: true, name: true, email: true } },
-      members: { include: { user: { select: { id: true, name: true, email: true } } } },
-      places: true,
-      expenses: {
-        include: {
-          paidBy: { select: { id: true, name: true, email: true } },
-          splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+    if (trip.members.some(m => m.userId === user.id)) {
+      return res.status(400).json({ message: 'User is already a member' });
+    }
+
+    if (trip.ownerId === user.id) {
+      return res.status(400).json({ message: 'Owner is already part of the trip' });
+    }
+
+    await prisma.tripMember.create({
+      data: {
+        tripId: trip.id,
+        userId: user.id
+      }
+    });
+
+    await logActivity(req.params.tripId, req.userId, 'invited a member', user.email);
+
+    const updatedTrip = await prisma.trip.findUnique({
+      where: { id: req.params.tripId },
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        members: { include: { user: { select: { id: true, name: true, email: true } } } },
+        places: true,
+        expenses: {
+          include: {
+            paidBy: { select: { id: true, name: true, email: true } },
+            splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+          }
         }
       }
-    }
-  });
+    });
 
-  getIO().to(`trip:${req.params.tripId}`).emit('member:joined', formatUser(user));
+    getIO().to(`trip:${req.params.tripId}`).emit('member:joined', formatUser(user));
 
-  res.status(200).json(formatTrip(updatedTrip));
-}));
+    res.status(200).json(formatTrip(updatedTrip));
+  }));
 
 /**
  * @swagger
@@ -607,38 +607,40 @@ router.get('/:tripId/places', verifyToken, checkTripMembership, asyncHandler(asy
  *       201:
  *         description: Place added successfully
  */
-router.post('/:tripId/places', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
-  const { name, address, lat, lng, dayNumber, orderIndex, category, duration, note } = req.body;
-
-  let computedOrder = orderIndex;
-  if (computedOrder === undefined || computedOrder === null) {
-    computedOrder = await prisma.place.count({
-      where: { tripId: req.params.tripId, dayNumber: Number(dayNumber) }
-    });
-  }
-
-  const createdPlace = await prisma.place.create({
-    data: {
-      tripId: req.params.tripId,
-      name,
-      address,
-      lat: Number(lat),
-      lng: Number(lng),
-      dayNumber: Number(dayNumber),
-      orderIndex: Number(computedOrder),
-      category: category || 'attraction',
-      duration: duration !== undefined ? Number(duration) : 60,
-      note: note || ''
+router.post('/:tripId/places', verifyToken, checkTripMembership,
+  validate({ params: tripIdParamSchema, body: createPlaceSchema }),
+  asyncHandler(async (req, res) => {
+    const { name, address, lat, lng, dayNumber, orderIndex, category, duration, note } = req.body;
+    // All values already validated and coerced by Zod
+    let computedOrder = orderIndex;
+    if (computedOrder === undefined || computedOrder === null) {
+      computedOrder = await prisma.place.count({
+        where: { tripId: req.params.tripId, dayNumber: Number(dayNumber) }
+      });
     }
-  });
 
-  await logActivity(req.params.tripId, req.userId, 'added a place', `${createdPlace.name} on Day ${createdPlace.dayNumber}`);
+    const createdPlace = await prisma.place.create({
+      data: {
+        tripId: req.params.tripId,
+        name,
+        address: address || '',
+        lat: lat ?? 0,
+        lng: lng ?? 0,
+        dayNumber: dayNumber ?? 1,
+        orderIndex: computedOrder ?? 0,
+        category: category || 'attraction',
+        duration: duration ?? 60,
+        note: note || ''
+      }
+    });
 
-  const formatted = formatPlace(createdPlace);
-  getIO().to(`trip:${req.params.tripId}`).emit('place:added', formatted);
+    await logActivity(req.params.tripId, req.userId, 'added a place', `${createdPlace.name} on Day ${createdPlace.dayNumber}`);
 
-  res.status(201).json(formatted);
-}));
+    const formatted = formatPlace(createdPlace);
+    getIO().to(`trip:${req.params.tripId}`).emit('place:added', formatted);
+
+    res.status(201).json(formatted);
+  }));
 
 /**
  * @swagger
@@ -718,29 +720,29 @@ router.delete('/:tripId/places/:placeId', verifyToken, checkTripMembership, asyn
  *       200:
  *         description: Note updated successfully
  */
-router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
-  const { note } = req.body;
-  if (note !== undefined && typeof note === 'string' && note.length > 2000) {
-    return res.status(400).json({ message: 'note must be 2000 characters or fewer.' });
-  }
+router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership,
+  validate({ params: tripAndPlaceParamSchema, body: updatePlaceNoteSchema }),
+  asyncHandler(async (req, res) => {
+    const { note } = req.body;
+    // note already validated by Zod
 
-  const place = await prisma.place.findUnique({
-    where: { id: req.params.placeId }
-  });
-  if (!place || place.tripId !== req.params.tripId) {
-    return res.status(404).json({ message: 'Place not found' });
-  }
+    const place = await prisma.place.findUnique({
+      where: { id: req.params.placeId }
+    });
+    if (!place || place.tripId !== req.params.tripId) {
+      return res.status(404).json({ message: 'Place not found' });
+    }
 
-  const updated = await prisma.place.update({
-    where: { id: req.params.placeId },
-    data: { note: note || '' }
-  });
+    const updated = await prisma.place.update({
+      where: { id: req.params.placeId },
+      data: { note: note || '' }
+    });
 
-  const formatted = formatPlace(updated);
-  getIO().to(`trip:${req.params.tripId}`).emit('place:note_updated', formatted);
+    const formatted = formatPlace(updated);
+    getIO().to(`trip:${req.params.tripId}`).emit('place:note_updated', formatted);
 
-  res.json(formatted);
-}));
+    res.json(formatted);
+  }));
 
 /**
  * @swagger
@@ -886,48 +888,47 @@ router.get('/:tripId/expenses', verifyToken, checkTripMembership, asyncHandler(a
  *       400:
  *         description: Bad request (missing fields)
  */
-router.post('/:tripId/expenses', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
-  const { title, amount, currency, category, receiptUrl, paidBy, splitAmong } = req.body;
+router.post('/:tripId/expenses', verifyToken, checkTripMembership,
+  validate({ params: tripIdParamSchema, body: createExpenseSchema }),
+  asyncHandler(async (req, res) => {
+    const { title, amount, currency, category, receiptUrl, paidBy, splitAmong } = req.body;
+    // All fields already validated by Zod
 
-  if (!title || !amount || !paidBy || !splitAmong || splitAmong.length === 0) {
-    return res.status(400).json({ message: 'Missing required fields: title, amount, paidBy, splitAmong' });
-  }
+    const trip = req.trip;
+    const allMemberIds = [trip.ownerId, ...trip.members.map(m => m.userId)];
+    const normalizedSplits = splitAmong.map(u => (typeof u === 'object' && u ? (u._id || u.id) : u));
 
-  const trip = req.trip;
-  const allMemberIds = [trip.ownerId, ...trip.members.map(m => m.userId)];
-  const normalizedSplits = splitAmong.map(u => (typeof u === 'object' && u ? (u._id || u.id) : u));
-
-  const invalidMembers = normalizedSplits.filter(userId => !allMemberIds.includes(userId));
-  if (invalidMembers.length > 0) {
-    return res.status(400).json({ message: 'One or more split members are not trip members' });
-  }
-
-  const createdExpense = await prisma.expense.create({
-    data: {
-      tripId: req.params.tripId,
-      title: title.trim(),
-      amount: parseFloat(amount),
-      currency: currency || trip.currency || 'INR',
-      category: category || 'other',
-      receiptUrl: receiptUrl || '',
-      paidById: paidBy,
-      splits: {
-        create: normalizedSplits.map(userId => ({ userId }))
-      }
-    },
-    include: {
-      paidBy: { select: { id: true, name: true, email: true } },
-      splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+    const invalidMembers = normalizedSplits.filter(userId => !allMemberIds.includes(userId));
+    if (invalidMembers.length > 0) {
+      return res.status(400).json({ message: 'One or more split members are not trip members' });
     }
-  });
 
-  await logActivity(req.params.tripId, req.userId, 'added an expense', `${createdExpense.title} — ${createdExpense.currency} ${createdExpense.amount}`);
+    const createdExpense = await prisma.expense.create({
+      data: {
+        tripId: req.params.tripId,
+        title: title.trim(),
+        amount: parseFloat(amount),
+        currency: currency || trip.currency || 'INR',
+        category: category || 'other',
+        receiptUrl: receiptUrl || '',
+        paidById: paidBy,
+        splits: {
+          create: normalizedSplits.map(userId => ({ userId }))
+        }
+      },
+      include: {
+        paidBy: { select: { id: true, name: true, email: true } },
+        splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+      }
+    });
 
-  const formatted = formatExpense(createdExpense);
-  getIO().to(`trip:${req.params.tripId}`).emit('expense:added', formatted);
+    await logActivity(req.params.tripId, req.userId, 'added an expense', `${createdExpense.title} — ${createdExpense.currency} ${createdExpense.amount}`);
 
-  res.status(201).json(formatted);
-}));
+    const formatted = formatExpense(createdExpense);
+    getIO().to(`trip:${req.params.tripId}`).emit('expense:added', formatted);
+
+    res.status(201).json(formatted);
+  }));
 
 /**
  * @swagger
@@ -1293,74 +1294,54 @@ router.get('/:id', verifyToken, asyncHandler(async (req, res) => {
  *       404:
  *         description: Trip not found
  */
-router.put('/:id', verifyToken, asyncHandler(async (req, res) => {
-  const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
-  if (!trip) return res.status(404).json({ message: 'Trip not found' });
+router.put('/:id', verifyToken,
+  validate({ params: idParamSchema, body: updateTripSchema }),
+  asyncHandler(async (req, res) => {
+    const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
 
-  if (trip.ownerId !== req.userId) {
-    return res.status(403).json({ message: 'Access denied' });
-  }
-
-  const { name, destination, startDate, endDate, budgetPerPerson, currency, status } = req.body;
-  const updateData = {};
-
-  if (name !== undefined) {
-    if (!name || !name.trim()) return res.status(400).json({ message: 'name cannot be empty.' });
-    if (name.trim().length > 200) return res.status(400).json({ message: 'name must be 200 characters or fewer.' });
-    updateData.name = name.trim();
-  }
-  if (destination !== undefined) {
-    if (!destination || !destination.trim()) return res.status(400).json({ message: 'destination cannot be empty.' });
-    updateData.destination = destination.trim();
-  }
-
-  // Validate dates if provided
-  const resolvedStart = startDate ? new Date(startDate) : trip.startDate;
-  const resolvedEnd = endDate ? new Date(endDate) : trip.endDate;
-  if (startDate && isNaN(resolvedStart.getTime())) {
-    return res.status(400).json({ message: 'startDate must be a valid date.' });
-  }
-  if (endDate && isNaN(resolvedEnd.getTime())) {
-    return res.status(400).json({ message: 'endDate must be a valid date.' });
-  }
-  if (resolvedEnd < resolvedStart) {
-    return res.status(400).json({ message: 'endDate must be on or after startDate.' });
-  }
-  if (startDate) updateData.startDate = resolvedStart;
-  if (endDate) updateData.endDate = resolvedEnd;
-
-  if (budgetPerPerson !== undefined) {
-    const budget = Number(budgetPerPerson);
-    if (isNaN(budget) || budget < 0) return res.status(400).json({ message: 'budgetPerPerson must be a non-negative number.' });
-    updateData.budgetPerPerson = budget;
-  }
-  if (currency) updateData.currency = currency.trim().toUpperCase().slice(0, 3);
-  if (status) {
-    const validStatuses = ['planning', 'upcoming', 'active', 'completed', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: `status must be one of: ${validStatuses.join(', ')}.` });
+    if (trip.ownerId !== req.userId) {
+      return res.status(403).json({ message: 'Access denied' });
     }
-    updateData.status = status;
-  }
 
-  const updatedTrip = await prisma.trip.update({
-    where: { id: req.params.id },
-    data: updateData,
-    include: {
-      owner: { select: { id: true, name: true, email: true, picture: true } },
-      members: { include: { user: { select: { id: true, name: true, email: true, picture: true } } } },
-      places: true,
-      expenses: {
-        include: {
-          paidBy: { select: { id: true, name: true, email: true } },
-          splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+    const { name, destination, startDate, endDate, budgetPerPerson, currency, status } = req.body;
+    // Body already validated and coerced by Zod
+    const updateData = {};
+
+    if (name !== undefined) updateData.name = name.trim();
+    if (destination !== undefined) updateData.destination = destination.trim();
+
+    // Cross-check dates against existing trip values when only one is provided
+    const resolvedStart = startDate ? new Date(startDate) : trip.startDate;
+    const resolvedEnd   = endDate   ? new Date(endDate)   : trip.endDate;
+    if (resolvedEnd < resolvedStart) {
+      return res.status(400).json({ message: 'endDate must be on or after startDate.' });
+    }
+    if (startDate) updateData.startDate = resolvedStart;
+    if (endDate)   updateData.endDate   = resolvedEnd;
+
+    if (budgetPerPerson !== undefined) updateData.budgetPerPerson = budgetPerPerson;
+    if (currency) updateData.currency = currency.trim().toUpperCase();
+    if (status)   updateData.status   = status;
+
+    const updatedTrip = await prisma.trip.update({
+      where: { id: req.params.id },
+      data: updateData,
+      include: {
+        owner: { select: { id: true, name: true, email: true, picture: true } },
+        members: { include: { user: { select: { id: true, name: true, email: true, picture: true } } } },
+        places: true,
+        expenses: {
+          include: {
+            paidBy: { select: { id: true, name: true, email: true } },
+            splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+          }
         }
       }
-    }
-  });
+    });
 
-  res.json(formatTrip(updatedTrip));
-}));
+    res.json(formatTrip(updatedTrip));
+  }));
 
 /**
  * @swagger
