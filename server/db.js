@@ -1,8 +1,10 @@
 const { PrismaClient } = require('@prisma/client');
+const logger = require('./utils/logger');
+const config = require('./config/env');
 
 let prisma;
 
-if (process.env.NODE_ENV === 'production') {
+if (config.isProduction) {
   prisma = new PrismaClient();
 } else {
   if (!global.__prisma) {
@@ -145,7 +147,7 @@ async function ensureUserSynced(userId) {
       return user;
     }
   } catch (e) {
-    console.error('Error syncing user from neon_auth.user:', e.message);
+    logger.error({ err: e }, 'Error syncing user from neon_auth.user');
   }
   return null;
 }

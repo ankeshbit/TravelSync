@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const config = require('../config/env');
 const { prisma, formatTrip, formatPlace, formatExpense, formatUser, formatActivity } = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { getIO } = require('../socket');
 const logActivity = require('../utils/logActivity');
 const { calculateBalances } = require('../utils/calculateBalances');
+const logger = require('../utils/logger');
 
 // AI suggestion limiter: 5 requests per 10 minutes, keyed by authenticated user ID (falls back to IP)
 const aiLimiter = rateLimit({
@@ -283,7 +285,7 @@ router.post('/', verifyToken, asyncHandler(async (req, res) => {
  * Runs entirely in the background — never throws to the caller.
  */
 async function fetchAndAttachCoverImage(tripId, destination) {
-  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+  const accessKey = config.UNSPLASH_ACCESS_KEY;
   if (!accessKey || accessKey === 'your_unsplash_access_key_here') {
     return; // Key not configured — skip silently
   }
@@ -300,7 +302,7 @@ async function fetchAndAttachCoverImage(tripId, destination) {
     });
 
     if (!response.ok) {
-      console.warn(`[CoverImage] Unsplash returned ${response.status} for "${destination}"`);
+      logger.warn({ status: response.status, destination }, '[CoverImage] Unsplash returned non-OK status');
       return;
     }
 
@@ -308,7 +310,7 @@ async function fetchAndAttachCoverImage(tripId, destination) {
     const photo = data.results && data.results[0];
 
     if (!photo || !photo.urls || !photo.urls.regular) {
-      console.warn(`[CoverImage] No photo results for "${destination}"`);
+      logger.warn({ destination }, '[CoverImage] No photo results');
       return;
     }
 
@@ -318,7 +320,7 @@ async function fetchAndAttachCoverImage(tripId, destination) {
     });
   } catch (err) {
     // Silently swallow — image is non-critical
-    console.warn(`[CoverImage] Failed to fetch cover image for "${destination}":`, err.message);
+    logger.warn({ err, destination }, '[CoverImage] Failed to fetch cover image');
   }
 }
 
@@ -717,6 +719,11 @@ router.delete('/:tripId/places/:placeId', verifyToken, checkTripMembership, asyn
  *         description: Note updated successfully
  */
 router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
+  const { note } = req.body;
+  if (note !== undefined && typeof note === 'string' && note.length > 2000) {
+    return res.status(400).json({ message: 'note must be 2000 characters or fewer.' });
+  }
+
   const place = await prisma.place.findUnique({
     where: { id: req.params.placeId }
   });
@@ -726,7 +733,7 @@ router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership, 
 
   const updated = await prisma.place.update({
     where: { id: req.params.placeId },
-    data: { note: req.body.note || '' }
+    data: { note: note || '' }
   });
 
   const formatted = formatPlace(updated);
@@ -1109,7 +1116,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) in this exact form
   const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+      'Authorization': `Bearer ${config.GROQ_API_KEY}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -1296,13 +1303,45 @@ router.put('/:id', verifyToken, asyncHandler(async (req, res) => {
 
   const { name, destination, startDate, endDate, budgetPerPerson, currency, status } = req.body;
   const updateData = {};
-  if (name) updateData.name = name.trim();
-  if (destination) updateData.destination = destination.trim();
-  if (startDate) updateData.startDate = new Date(startDate);
-  if (endDate) updateData.endDate = new Date(endDate);
-  if (budgetPerPerson !== undefined) updateData.budgetPerPerson = Number(budgetPerPerson);
-  if (currency) updateData.currency = currency;
-  if (status) updateData.status = status;
+
+  if (name !== undefined) {
+    if (!name || !name.trim()) return res.status(400).json({ message: 'name cannot be empty.' });
+    if (name.trim().length > 200) return res.status(400).json({ message: 'name must be 200 characters or fewer.' });
+    updateData.name = name.trim();
+  }
+  if (destination !== undefined) {
+    if (!destination || !destination.trim()) return res.status(400).json({ message: 'destination cannot be empty.' });
+    updateData.destination = destination.trim();
+  }
+
+  // Validate dates if provided
+  const resolvedStart = startDate ? new Date(startDate) : trip.startDate;
+  const resolvedEnd = endDate ? new Date(endDate) : trip.endDate;
+  if (startDate && isNaN(resolvedStart.getTime())) {
+    return res.status(400).json({ message: 'startDate must be a valid date.' });
+  }
+  if (endDate && isNaN(resolvedEnd.getTime())) {
+    return res.status(400).json({ message: 'endDate must be a valid date.' });
+  }
+  if (resolvedEnd < resolvedStart) {
+    return res.status(400).json({ message: 'endDate must be on or after startDate.' });
+  }
+  if (startDate) updateData.startDate = resolvedStart;
+  if (endDate) updateData.endDate = resolvedEnd;
+
+  if (budgetPerPerson !== undefined) {
+    const budget = Number(budgetPerPerson);
+    if (isNaN(budget) || budget < 0) return res.status(400).json({ message: 'budgetPerPerson must be a non-negative number.' });
+    updateData.budgetPerPerson = budget;
+  }
+  if (currency) updateData.currency = currency.trim().toUpperCase().slice(0, 3);
+  if (status) {
+    const validStatuses = ['planning', 'upcoming', 'active', 'completed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: `status must be one of: ${validStatuses.join(', ')}.` });
+    }
+    updateData.status = status;
+  }
 
   const updatedTrip = await prisma.trip.update({
     where: { id: req.params.id },

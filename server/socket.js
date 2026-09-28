@@ -2,6 +2,7 @@ const { Server } = require('socket.io');
 const config = require('./config/env');
 const { prisma, formatUser } = require('./db');
 const { verifyAuthToken } = require('./utils/verifyAuthToken');
+const logger = require('./utils/logger');
 
 let io;
 
@@ -70,9 +71,8 @@ const setupSocket = (server, corsOptions) => {
       const roomName = `trip:${tripId}`;
       socket.join(roomName);
 
-      // Never log usernames in production
       if (!config.isProduction) {
-        console.log(`Socket ${socket.id} joined room ${roomName} as ${socket.user.name}`);
+        logger.debug(`Socket ${socket.id} joined room ${roomName} as ${socket.user.name}`);
       }
 
       // Notify other members in room using socket.user.id consistently
@@ -85,7 +85,7 @@ const setupSocket = (server, corsOptions) => {
       // Handle disconnect cleanup
       socket.on('disconnect', (reason) => {
         if (!config.isProduction) {
-          console.log(`Socket disconnected: ${socket.id} (${reason})`);
+          logger.debug(`Socket disconnected: ${socket.id} (${reason})`);
         }
         socket.to(roomName).emit('user:left', {
           userId: socket.user.id
@@ -94,7 +94,7 @@ const setupSocket = (server, corsOptions) => {
       });
     } catch (err) {
       if (!config.isProduction) {
-        console.error('Socket trip membership verification error:', err);
+        logger.error({ err }, 'Socket trip membership verification error');
       }
       socket.emit('error', { message: 'Failed to verify trip membership' });
       socket.disconnect(true);

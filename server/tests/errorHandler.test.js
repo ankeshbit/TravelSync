@@ -245,4 +245,107 @@ describe('errorHandler middleware', () => {
       expect(mockRes.status).toHaveBeenCalledWith(200);
     });
   });
+
+  describe('Additional Error Mappings', () => {
+    const { AppError } = require('../middleware/errorHandler');
+
+    it('maps AppError with custom status and code', () => {
+      const err = new AppError('Resource unavailable', 422, 'UNPROCESSABLE_ENTITY');
+      errorHandler(err, mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(422);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'UNPROCESSABLE_ENTITY',
+          message: 'Resource unavailable'
+        })
+      );
+    });
+
+    it('maps P2024 to 503 (pool timeout)', () => {
+      const err = new Error('Pool timeout');
+      err.code = 'P2024';
+      errorHandler(err, mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(503);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Database connection timed out.'
+        })
+      );
+    });
+
+    it('maps P1001/P1002/P1017 to 503 (DB unreachable)', () => {
+      const err = new Error('Unreachable');
+      err.code = 'P1001';
+      errorHandler(err, mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(503);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Database service is currently unreachable.'
+        })
+      );
+    });
+
+    it('maps body-parser SyntaxError to 400', () => {
+      const err = new SyntaxError('Unexpected token in JSON');
+      err.status = 400;
+      err.body = '{ bad json';
+      errorHandler(err, mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'INVALID_JSON',
+          message: 'Invalid JSON in request body.'
+        })
+      );
+    });
+
+    it('maps entity.too.large to 413', () => {
+      const err = new Error('Too big');
+      err.type = 'entity.too.large';
+      errorHandler(err, mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(413);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'PAYLOAD_TOO_LARGE',
+          message: 'Request payload exceeds allowable limit.'
+        })
+      );
+    });
+
+    it('maps Multer LIMIT_FILE_SIZE to 400', () => {
+      const err = new Error('File too large');
+      err.name = 'MulterError';
+      err.code = 'LIMIT_FILE_SIZE';
+      errorHandler(err, mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'LIMIT_FILE_SIZE',
+          message: 'File exceeds the maximum allowed size (5MB).'
+        })
+      );
+    });
+
+    it('maps CORS rejection to 403', () => {
+      const err = new Error('Not allowed by CORS');
+      errorHandler(err, mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'CORS_ERROR',
+          message: 'Not allowed by CORS'
+        })
+      );
+    });
+  });
 });
+

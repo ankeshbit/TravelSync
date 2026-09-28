@@ -1,20 +1,36 @@
 const nodemailer = require('nodemailer');
+const config = require('../config/env');
+const logger = require('./logger');
 
-const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+const smtpUser = config.SMTP_USER;
+const smtpPass = config.SMTP_PASS;
 const isConfigured = Boolean(smtpUser && smtpPass && smtpUser !== 'your-email@gmail.com');
 
 let transporter = null;
 if (isConfigured) {
   transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT) || 587,
+    host: config.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(config.SMTP_PORT) || 587,
     secure: false, // STARTTLS
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 10000,
     auth: {
       user: smtpUser,
       pass: smtpPass
     }
   });
+
+  // Verify connection configuration on boot (log only, never throw)
+  if (!config.isTest) {
+    transporter.verify((error) => {
+      if (error) {
+        logger.warn({ err: error }, '[Mailer] SMTP verification failed');
+      } else {
+        logger.info('✓ [Mailer] SMTP transporter configured and verified');
+      }
+    });
+  }
 }
 
 /**
@@ -25,21 +41,21 @@ if (isConfigured) {
  */
 async function sendOtpEmail(to, otp, purpose = 'register') {
   const isDelete = purpose === 'delete';
+  const isProd = config.isProduction;
 
-  // Only print OTP to console when NODE_ENV !== 'production'
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('\n==================================================');
-    console.log(`🔑 [OTP VERIFICATION] ${purpose.toUpperCase()}`);
-    console.log(`📧 Target Email: ${to}`);
-    console.log(`👉 Code: ${otp}`);
-    console.log('==================================================\n');
+  // Only print OTP to console when not in production
+  if (!isProd) {
+    logger.info({ to, purpose }, '[OTP] Verification code generated');
   }
 
   if (!isConfigured || !transporter) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('Email service is not configured.');
+    if (isProd) {
+      const err = new Error('Email service is not configured.');
+      err.statusCode = 503;
+      err.code = 'MAIL_SERVICE_UNAVAILABLE';
+      throw err;
     }
-    console.warn('[Mailer] SMTP not configured. OTP printed above.');
+    logger.warn('[Mailer] SMTP not configured. OTP logged for dev use.');
     return { dev: true, otp };
   }
 
@@ -95,19 +111,22 @@ async function sendOtpEmail(to, otp, purpose = 'register') {
 
   try {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"TravelSync" <${smtpUser}>`,
+      from: config.SMTP_FROM || `"TravelSync" <${smtpUser}>`,
       to,
       subject,
       html
     });
     return { success: true };
   } catch (mailErr) {
-    console.error(`[Mailer] Failed to send email via SMTP: ${mailErr.message}`);
+    logger.error({ err: mailErr }, '[Mailer] Failed to send email via SMTP');
     // If SMTP fails in non-production, don't crash — let the user use the console code!
-    if (process.env.NODE_ENV !== 'production') {
+    if (!config.isProduction) {
       return { dev: true, otp };
     }
-    throw mailErr;
+    const err = new Error('Failed to deliver email through mail service.');
+    err.statusCode = 502;
+    err.code = 'MAIL_DELIVERY_FAILED';
+    throw err;
   }
 }
 

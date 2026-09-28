@@ -31,6 +31,7 @@ const { sendOtpEmail } = require('../utils/mailer');
 const { verifyToken } = require('../middleware/auth');
 const { prisma } = require('../db');
 const { setupPrismaMock } = require('./mockPrisma');
+const logger = require('../utils/logger');
 
 describe('OTP System and Auth Hardening', () => {
   const originalEnv = process.env.NODE_ENV;
@@ -202,9 +203,12 @@ describe('OTP System and Auth Hardening', () => {
   });
 
   describe('6. Mailer & Production Security', () => {
-    it('should NOT log OTP to console when NODE_ENV is production', async () => {
-      process.env.NODE_ENV = 'production';
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    it('should NOT log OTP when in production mode', async () => {
+      // Temporarily set production flag on config
+      const envConfig = require('../config/env');
+      const origProd = envConfig.isProduction;
+      Object.defineProperty(envConfig, 'isProduction', { value: true, writable: true, configurable: true });
+      const loggerInfoSpy = jest.spyOn(logger, 'info').mockImplementation(() => {});
 
       try {
         await sendOtpEmail('test@example.com', '123456', 'register');
@@ -212,14 +216,20 @@ describe('OTP System and Auth Hardening', () => {
         // expected in test environment without SMTP
       }
 
-      // Expect that none of the console.log calls contain the OTP
-      const allLoggedText = consoleLogSpy.mock.calls.map(args => args.join(' ')).join('\n');
-      expect(allLoggedText).not.toContain('123456');
+      // When isProd is true, sendOtpEmail should NOT emit the OTP info log
+      const otpLogCall = loggerInfoSpy.mock.calls.find(
+        (args) => JSON.stringify(args).includes('123456')
+      );
+      expect(otpLogCall).toBeUndefined();
+
+      Object.defineProperty(envConfig, 'isProduction', { value: origProd, writable: true, configurable: true });
     });
 
-    it('should log OTP to console when NODE_ENV is development', async () => {
-      process.env.NODE_ENV = 'development';
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    it('should log OTP info when not in production mode', async () => {
+      const envConfig = require('../config/env');
+      const origProd = envConfig.isProduction;
+      Object.defineProperty(envConfig, 'isProduction', { value: false, writable: true, configurable: true });
+      const loggerInfoSpy = jest.spyOn(logger, 'info').mockImplementation(() => {});
 
       try {
         await sendOtpEmail('test@example.com', '654321', 'register');
@@ -227,8 +237,13 @@ describe('OTP System and Auth Hardening', () => {
         // expected in test environment without SMTP
       }
 
-      const allLoggedText = consoleLogSpy.mock.calls.map(args => args.join(' ')).join('\n');
-      expect(allLoggedText).toContain('654321');
+      // logger.info should have been called with a payload containing the purpose
+      const otpLogCall = loggerInfoSpy.mock.calls.find(
+        (args) => JSON.stringify(args).includes('[OTP]')
+      );
+      expect(otpLogCall).toBeDefined();
+
+      Object.defineProperty(envConfig, 'isProduction', { value: origProd, writable: true, configurable: true });
     });
   });
 
@@ -236,7 +251,6 @@ describe('OTP System and Auth Hardening', () => {
     let mockReq;
     let mockRes;
     let mockNext;
-    let consoleErrorSpy;
 
     beforeEach(() => {
       mockReq = {
@@ -256,7 +270,6 @@ describe('OTP System and Auth Hardening', () => {
         })
       };
       mockNext = jest.fn();
-      consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     });
 
     it('should return 401 for an invalid or expired token when DB is healthy', async () => {
@@ -275,11 +288,12 @@ describe('OTP System and Auth Hardening', () => {
       dbDownError.name = 'PrismaClientInitializationError';
 
       jest.spyOn(prisma, '$queryRaw').mockRejectedValueOnce(dbDownError);
+      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
 
       await verifyToken(mockReq, mockRes, mockNext);
 
-      // Verify DB error was logged
-      expect(consoleErrorSpy).toHaveBeenCalled();
+      // Verify DB error was logged via structured logger
+      expect(loggerErrorSpy).toHaveBeenCalled();
 
       // Verify HTTP 503 is returned, NOT 401
       expect(mockRes.status).toHaveBeenCalledWith(503);

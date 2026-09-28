@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const config = require('../config/env');
 const { verifyFirebaseToken } = require('../config/firebaseAdmin');
 const { prisma, ensureUserSynced } = require('../db');
+const logger = require('./logger');
 
 // In-memory Neon session cache: token -> { userId, expiresAt, cachedAt }
 const neonSessionCache = new Map();
@@ -44,7 +45,7 @@ function isDatabaseDownError(err) {
  */
 function handleDatabaseError(err, context) {
   // Always log real DB errors instead of silently swallowing them
-  console.error(`[Auth] Database error in ${context}:`, err.message || err);
+  logger.error({ err }, `[Auth] Database error in ${context}`);
 
   if (isDatabaseDownError(err)) {
     const serviceError = new Error('Database service unavailable.');

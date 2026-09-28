@@ -24,6 +24,17 @@ function setupPrismaMock() {
     activities.clear();
   }
 
+  // ── prisma.$transaction ────────────────────────────────────────────────────
+  prisma.$transaction = jest.fn(async (arg) => {
+    if (typeof arg === 'function') {
+      return arg(prisma);
+    }
+    if (Array.isArray(arg)) {
+      return Promise.all(arg);
+    }
+    return arg;
+  });
+
   // ── prisma.user ────────────────────────────────────────────────────────────
   prisma.user.upsert = jest.fn(async ({ where, update, create }) => {
     let user = null;
@@ -97,6 +108,18 @@ function setupPrismaMock() {
     };
     users.set(newUser.id, newUser);
     return { ...newUser };
+  });
+
+  prisma.user.update = jest.fn(async ({ where, data }) => {
+    let user = null;
+    if (where.id) {
+      user = users.get(where.id);
+    } else if (where.email) {
+      user = Array.from(users.values()).find(u => u.email.toLowerCase() === where.email.toLowerCase());
+    }
+    if (!user) return null;
+    Object.assign(user, data);
+    return { ...user };
   });
 
   // ── prisma.trip ────────────────────────────────────────────────────────────
@@ -257,6 +280,36 @@ function setupPrismaMock() {
 
   prisma.trip.count = jest.fn(async () => trips.size || 12);
 
+  prisma.trip.update = jest.fn(async ({ where, data, include }) => {
+    const trip = trips.get(where.id);
+    if (!trip) return null;
+    Object.assign(trip, data);
+    if (include) return populateTrip(trip);
+    return { ...trip };
+  });
+
+  prisma.trip.groupBy = jest.fn(async ({ by: _by, _count, _avg, orderBy: _orderBy, where: _where } = {}) => {
+    const results = Array.from(trips.values());
+    const grouped = {};
+    for (const t of results) {
+      const key = t.destination || '';
+      if (!key) continue;
+      if (!grouped[key]) {
+        grouped[key] = { destination: key, count: 0, budgetSum: 0, budgetCount: 0 };
+      }
+      grouped[key].count++;
+      if (t.budgetPerPerson) {
+        grouped[key].budgetSum += t.budgetPerPerson;
+        grouped[key].budgetCount++;
+      }
+    }
+    return Object.values(grouped).map(g => ({
+      destination: g.destination,
+      _count: { destination: g.count },
+      _avg: { budgetPerPerson: g.budgetCount ? g.budgetSum / g.budgetCount : 0 }
+    }));
+  });
+
   // ── prisma.tripMember ──────────────────────────────────────────────────────
   prisma.tripMember.create = jest.fn(async ({ data }) => {
     const member = {
@@ -293,10 +346,100 @@ function setupPrismaMock() {
   });
 
   // ── prisma.place ───────────────────────────────────────────────────────────
+  prisma.place.findMany = jest.fn(async ({ where } = {}) => {
+    let results = Array.from(places.values());
+    if (where?.tripId) results = results.filter(p => p.tripId === where.tripId);
+    return results;
+  });
+
+  prisma.place.count = jest.fn(async ({ where } = {}) => {
+    let results = Array.from(places.values());
+    if (where?.tripId) results = results.filter(p => p.tripId === where.tripId);
+    if (where?.dayNumber !== undefined) results = results.filter(p => p.dayNumber === where.dayNumber);
+    return results.length;
+  });
+
+  prisma.place.create = jest.fn(async ({ data }) => {
+    const place = {
+      id: data.id || `place-${crypto.randomUUID()}`,
+      tripId: data.tripId,
+      name: data.name || '',
+      address: data.address || '',
+      lat: data.lat || 0,
+      lng: data.lng || 0,
+      dayNumber: data.dayNumber || 1,
+      orderIndex: data.orderIndex || 0,
+      category: data.category || 'attraction',
+      duration: data.duration || 60,
+      note: data.note || '',
+      createdAt: new Date()
+    };
+    places.set(place.id, place);
+    return { ...place };
+  });
+
+  prisma.place.findUnique = jest.fn(async ({ where }) => {
+    return places.get(where.id) || null;
+  });
+
+  prisma.place.update = jest.fn(async ({ where, data }) => {
+    const place = places.get(where.id);
+    if (!place) return null;
+    Object.assign(place, data);
+    return { ...place };
+  });
+
+  prisma.place.delete = jest.fn(async ({ where }) => {
+    const place = places.get(where.id);
+    if (place) places.delete(where.id);
+    return place || null;
+  });
+
   prisma.place.deleteMany = jest.fn(async () => ({ count: 0 }));
 
   // ── prisma.expense & expenseSplit ──────────────────────────────────────────
-  prisma.expense.findMany = jest.fn(async () => Array.from(expenses.values()));
+  prisma.expense.create = jest.fn(async ({ data, include: _include }) => {
+    const expense = {
+      id: data.id || `expense-${crypto.randomUUID()}`,
+      tripId: data.tripId,
+      title: data.title || '',
+      amount: data.amount || 0,
+      currency: data.currency || 'INR',
+      category: data.category || 'other',
+      receiptUrl: data.receiptUrl || '',
+      paidById: data.paidById,
+      createdAt: new Date()
+    };
+    expenses.set(expense.id, expense);
+    if (data.splits?.create) {
+      expense.splits = data.splits.create.map(s => ({ userId: s.userId, user: users.get(s.userId) || { id: s.userId, name: '', email: '' } }));
+    }
+    const paidByUser = users.get(expense.paidById) || { id: expense.paidById, name: '', email: '' };
+    return { ...expense, paidBy: { id: paidByUser.id, name: paidByUser.name, email: paidByUser.email }, splits: expense.splits || [] };
+  });
+
+  prisma.expense.findMany = jest.fn(async ({ where } = {}) => {
+    let results = Array.from(expenses.values());
+    if (where?.tripId) results = results.filter(e => e.tripId === where.tripId);
+    return results;
+  });
+
+  prisma.expense.count = jest.fn(async ({ where } = {}) => {
+    let results = Array.from(expenses.values());
+    if (where?.tripId) results = results.filter(e => e.tripId === where.tripId);
+    return results.length;
+  });
+
+  prisma.expense.findUnique = jest.fn(async ({ where }) => {
+    return expenses.get(where.id) || null;
+  });
+
+  prisma.expense.delete = jest.fn(async ({ where }) => {
+    const expense = expenses.get(where.id);
+    if (expense) expenses.delete(where.id);
+    return expense || null;
+  });
+
   prisma.expense.deleteMany = jest.fn(async () => ({ count: 0 }));
   prisma.expenseSplit.deleteMany = jest.fn(async () => ({ count: 0 }));
 
@@ -313,6 +456,13 @@ function setupPrismaMock() {
     activities.set(act.id, act);
     return { ...act };
   });
+
+  prisma.activity.findMany = jest.fn(async ({ where } = {}) => {
+    let results = Array.from(activities.values());
+    if (where?.tripId) results = results.filter(a => a.tripId === where.tripId);
+    return results;
+  });
+
   prisma.activity.deleteMany = jest.fn(async () => ({ count: 0 }));
 
   // ── prisma.otp ─────────────────────────────────────────────────────────────

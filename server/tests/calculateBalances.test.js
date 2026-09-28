@@ -109,4 +109,26 @@ describe('calculateBalances', () => {
 
     expect(result.settlements.length).toBeGreaterThan(0);
   });
+
+  test('3-way split of 100.00 must sum exactly to 0 without floating-point loss', () => {
+    const members = [
+      { id: '1', name: 'Alice' },
+      { id: '2', name: 'Bob' },
+      { id: '3', name: 'Charlie' }
+    ];
+
+    const expenses = [
+      { amount: 100.00, paidBy: '1', splitAmong: ['1', '2', '3'] }
+    ];
+
+    const result = calculateBalances(expenses, members);
+
+    // Sum of net balances must equal 0 exactly
+    const sum = result.membersWithBalance.reduce((acc, curr) => acc + curr.balance, 0);
+    expect(sum).toBe(0);
+
+    // Sum of settlements must cover exactly the owed amount (33.33 + 33.33 = 66.66)
+    const settlementTotal = result.settlements.reduce((acc, s) => acc + s.amount, 0);
+    expect(Math.round(settlementTotal * 100)).toBe(6666);
+  });
 });

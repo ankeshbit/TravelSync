@@ -13,6 +13,7 @@
 const crypto = require('crypto');
 const config = require('../config/env');
 const { prisma } = require('../db');
+const logger = require('./logger');
 
 const EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const RESEND_COOLDOWN_MS = 60 * 1000; // 60 seconds
@@ -59,7 +60,7 @@ async function cleanupExpiredOtps() {
     });
     return result.count;
   } catch (err) {
-    console.error('[OtpStore] Error cleaning up expired OTPs:', err.message);
+    logger.error({ err }, '[OtpStore] Error cleaning up expired OTPs');
     return 0;
   }
 }

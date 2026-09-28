@@ -1,6 +1,7 @@
 // Authentication middleware — uses shared verifyAuthToken
 // Reusable across both Express REST routes and Socket.IO
 const { verifyAuthToken, isDatabaseDownError } = require('../utils/verifyAuthToken');
+const logger = require('../utils/logger');
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -17,7 +18,7 @@ const verifyToken = async (req, res, next) => {
     next();
   } catch (err) {
     if (err.statusCode === 503 || isDatabaseDownError(err)) {
-      console.error('[verifyToken] Database unavailable error:', err.message || err);
+      logger.error({ err }, '[verifyToken] Database unavailable error');
       return res.status(503).json({ message: 'Database service unavailable. Please try again later.' });
     }
     const statusCode = err.statusCode || 401;

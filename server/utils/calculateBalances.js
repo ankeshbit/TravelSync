@@ -5,22 +5,25 @@ function getMemberId(m) {
 }
 
 /**
- * Calculate balances for a trip's expenses
+ * Calculate balances for a trip's expenses using integer minor units (paise/cents)
+ * to avoid floating-point drift, rounding only at the edges.
+ *
  * @param {Array} expenses - Array of expense objects
  * @param {Array} members - Array of member objects (with id/_id, name, email)
  * @returns {Object} { balanceMap, settlements, membersWithBalance }
  */
 function calculateBalances(expenses, members) {
-  // Initialize balance map for all members
-  const balanceMap = {};
+  // Initialize balance map in integer minor units (e.g. cents/paise)
+  const minorBalanceMap = {};
   members.forEach(member => {
     const mId = getMemberId(member);
-    if (mId) balanceMap[mId] = 0;
+    if (mId) minorBalanceMap[mId] = 0;
   });
 
-  // Process each expense
+  // Process each expense in integer minor units
   expenses.forEach(expense => {
-    const amount = Number(expense.amount) || 0;
+    const rawAmount = Number(expense.amount) || 0;
+    const amountMinor = Math.round(rawAmount * 100);
 
     // Normalize payer id (handle user object or raw id)
     const paidByUserId = getMemberId(expense.paidBy) || (expense.paidById ? expense.paidById.toString() : null);
@@ -33,33 +36,41 @@ function calculateBalances(expenses, members) {
         : []);
 
     const splitCount = splitIds.length;
-
     if (splitCount === 0 || !paidByUserId) return; // Skip if invalid
 
-    const sharePerPerson = amount / splitCount;
+    // Base share and remainder distributed evenly to ensure total sum equals amountMinor exactly
+    const baseShareMinor = Math.floor(amountMinor / splitCount);
+    const remainderMinor = amountMinor - (baseShareMinor * splitCount);
 
-    // Payer's balance increases (they are owed the total amount)
-    balanceMap[paidByUserId] = (balanceMap[paidByUserId] || 0) + amount;
+    // Payer's balance increases by total amount in minor units
+    minorBalanceMap[paidByUserId] = (minorBalanceMap[paidByUserId] || 0) + amountMinor;
 
-    // Each split member's balance decreases (they owe their share)
-    splitIds.forEach(userIdStr => {
-      balanceMap[userIdStr] = (balanceMap[userIdStr] || 0) - sharePerPerson;
+    // Each participant owes their share
+    splitIds.forEach((userIdStr, idx) => {
+      const participantShare = baseShareMinor + (idx < remainderMinor ? 1 : 0);
+      minorBalanceMap[userIdStr] = (minorBalanceMap[userIdStr] || 0) - participantShare;
     });
   });
 
-  // Generate settlements array (minimum transactions needed)
-  const settlements = generateSettlements(balanceMap, members);
+  // Convert minor balances back to currency units (2 decimal places)
+  const balanceMap = {};
+  Object.entries(minorBalanceMap).forEach(([userId, minorBal]) => {
+    balanceMap[userId] = minorBal / 100;
+  });
+
+  // Generate settlements array using minor units
+  const settlements = generateSettlements(minorBalanceMap, members);
 
   // Build members with balance info
   const membersWithBalance = members.map(member => {
     const mId = getMemberId(member);
-    const balance = balanceMap[mId] || 0;
+    const balanceMinor = minorBalanceMap[mId] || 0;
     return {
       id: mId,
       _id: mId,
       name: member.name,
       email: member.email,
-      balance: parseFloat(balance.toFixed(2))
+      balance: balanceMinor / 100
     };
   });
 
@@ -71,16 +82,13 @@ function calculateBalances(expenses, members) {
 }
 
 /**
- * Generate minimum transactions to settle all debts
- * @param {Object} balanceMap - Map of userId to net balance
+ * Generate minimum transactions to settle all debts using minor units
+ * @param {Object} minorBalanceMap - Map of userId to net balance in minor units
  * @param {Array} members - Array of member objects
  * @returns {Array} Array of settlement transactions
  */
-function generateSettlements(balanceMap, members) {
+function generateSettlements(minorBalanceMap, members) {
   const settlements = [];
-
-  // Create a copy of balance map for manipulation
-  const balances = { ...balanceMap };
 
   // Create member id to name/email mapping
   const memberMap = {};
@@ -91,22 +99,19 @@ function generateSettlements(balanceMap, members) {
     }
   });
 
-  // Debtors (negative balance) and creditors (positive balance)
+  // Debtors (negative balance) and creditors (positive balance) in minor units
   const debtors = [];
   const creditors = [];
 
-  Object.entries(balances).forEach(([userId, balance]) => {
-    const amount = Math.abs(balance);
-    if (amount > 0.01) { // Ignore very small amounts due to rounding
-      if (balance < 0) {
-        debtors.push({ userId, amount });
-      } else {
-        creditors.push({ userId, amount });
-      }
+  Object.entries(minorBalanceMap).forEach(([userId, minorBal]) => {
+    if (minorBal < 0) {
+      debtors.push({ userId, amountMinor: Math.abs(minorBal) });
+    } else if (minorBal > 0) {
+      creditors.push({ userId, amountMinor: minorBal });
     }
   });
 
-  // Match debtors with creditors
+  // Match debtors with creditors greedily
   let debtorIdx = 0;
   let creditorIdx = 0;
 
@@ -114,24 +119,27 @@ function generateSettlements(balanceMap, members) {
     const debtor = debtors[debtorIdx];
     const creditor = creditors[creditorIdx];
 
-    const transferAmount = Math.min(debtor.amount, creditor.amount);
+    const transferMinor = Math.min(debtor.amountMinor, creditor.amountMinor);
 
-    settlements.push({
-      from: debtor.userId,
-      fromName: memberMap[debtor.userId]?.name || 'Unknown',
-      to: creditor.userId,
-      toName: memberMap[creditor.userId]?.name || 'Unknown',
-      amount: parseFloat(transferAmount.toFixed(2))
-    });
+    if (transferMinor > 0) {
+      settlements.push({
+        from: debtor.userId,
+        fromName: memberMap[debtor.userId]?.name || 'Unknown',
+        to: creditor.userId,
+        toName: memberMap[creditor.userId]?.name || 'Unknown',
+        amount: transferMinor / 100
+      });
 
-    debtor.amount -= transferAmount;
-    creditor.amount -= transferAmount;
+      debtor.amountMinor -= transferMinor;
+      creditor.amountMinor -= transferMinor;
+    }
 
-    if (debtor.amount < 0.01) debtorIdx++;
-    if (creditor.amount < 0.01) creditorIdx++;
+    if (debtor.amountMinor === 0) debtorIdx++;
+    if (creditor.amountMinor === 0) creditorIdx++;
   }
 
   return settlements;
 }
 
 module.exports = { calculateBalances };
+

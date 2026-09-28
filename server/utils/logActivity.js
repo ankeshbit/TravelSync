@@ -1,4 +1,5 @@
 const { prisma } = require('../db');
+const logger = require('./logger');
 
 module.exports = async function logActivity(tripId, userId, action, detail) {
   try {
@@ -11,6 +12,6 @@ module.exports = async function logActivity(tripId, userId, action, detail) {
       }
     });
   } catch (err) {
-    console.error('Error logging activity:', err);
+    logger.error({ err }, 'Error logging activity');
   }
 };

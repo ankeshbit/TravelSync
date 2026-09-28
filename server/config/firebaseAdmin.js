@@ -4,6 +4,8 @@
 
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
+const config = require('./env');
+const logger = require('../utils/logger');
 
 let adminApp;
 
@@ -14,14 +16,14 @@ function getAdminApp() {
     return adminApp;
   }
 
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const projectId = config.FIREBASE_PROJECT_ID;
+  const clientEmail = config.FIREBASE_CLIENT_EMAIL;
   // Render / env files store multi-line private keys with literal \n — replace them back
-  const privateKey = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  const privateKey = (config.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
   if (!projectId || !clientEmail || !privateKey) {
-    if (process.env.NODE_ENV !== 'test') {
-      console.warn(
+    if (!config.isTest) {
+      logger.warn(
         '⚠ Firebase Admin: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY ' +
         'must all be set. Firebase token verification will fail until they are configured.'
       );

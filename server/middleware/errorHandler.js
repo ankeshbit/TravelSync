@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const config = require('../config/env');
+const logger = require('../utils/logger');
 
 /**
  * Custom AppError class for consistent operational error handling
@@ -25,7 +27,7 @@ const asyncHandler = (fn) => (req, res, next) => {
  * Should be the LAST middleware registered in the Express app
  */
 const errorHandler = (err, req, res, _next) => {
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = config.isProduction || process.env.NODE_ENV === 'production';
 
   // Request ID extraction or generation
   const requestId = req.id || req.headers?.['x-request-id'] || crypto.randomUUID();
@@ -36,7 +38,7 @@ const errorHandler = (err, req, res, _next) => {
   const path = req.originalUrl || req.url || 'UNKNOWN';
 
   // Default error values
-  let statusCode = err.statusCode || 500;
+  let statusCode = err.statusCode || err.status || 500;
   let message = err.message || 'Internal server error';
   let code = err.code || 'INTERNAL_ERROR';
 
@@ -66,6 +68,18 @@ const errorHandler = (err, req, res, _next) => {
       ? 'Invalid reference or related record does not exist.'
       : `Foreign key constraint failed${err.meta?.field_name ? ` on field: ${err.meta.field_name}` : ''}.`;
   }
+  // P2024: Connection pool timeout
+  else if (err.code === 'P2024') {
+    statusCode = 503;
+    code = 'SERVICE_UNAVAILABLE';
+    message = 'Database connection timed out.';
+  }
+  // P1001, P1002, P1017: Database unreachable
+  else if (['P1001', 'P1002', 'P1017'].includes(err.code)) {
+    statusCode = 503;
+    code = 'SERVICE_UNAVAILABLE';
+    message = 'Database service is currently unreachable.';
+  }
   // PrismaClientValidationError: Invalid payload / schema mismatch
   else if (err.name === 'PrismaClientValidationError') {
     statusCode = 400;
@@ -90,6 +104,32 @@ const errorHandler = (err, req, res, _next) => {
       message = 'A database error occurred.';
     }
   }
+  // JSON parse errors (body-parser SyntaxError)
+  else if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    statusCode = 400;
+    code = 'INVALID_JSON';
+    message = 'Invalid JSON in request body.';
+  }
+  // Payload too large
+  else if (err.type === 'entity.too.large' || statusCode === 413) {
+    statusCode = 413;
+    code = 'PAYLOAD_TOO_LARGE';
+    message = 'Request payload exceeds allowable limit.';
+  }
+  // Multer errors (LIMIT_FILE_SIZE, etc.)
+  else if (err.name === 'MulterError') {
+    statusCode = 400;
+    code = err.code || 'UPLOAD_ERROR';
+    message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'File exceeds the maximum allowed size (5MB).'
+      : (err.message || 'File upload failed.');
+  }
+  // CORS rejection
+  else if (err.message === 'Not allowed by CORS') {
+    statusCode = 403;
+    code = 'CORS_ERROR';
+    message = 'Not allowed by CORS';
+  }
   // JWT errors
   else if (err.name === 'JsonWebTokenError') {
     statusCode = 401;
@@ -105,16 +145,21 @@ const errorHandler = (err, req, res, _next) => {
     message = 'Internal server error';
   }
 
-  // Log error with method, path, and userId
-  console.error(`[ERROR] [${requestId}] ${method} ${path} - User: ${userId} - ${statusCode} ${code}: ${err.message}`);
-  if (!isProduction && err.stack) {
-    console.error(err.stack);
-  }
+  // Log error with requestId, method, path, and userId
+  logger.error(`[${requestId}] ${method} ${path} - User: ${userId} - ${statusCode} ${code}: ${err.message}`, {
+    requestId,
+    method,
+    path,
+    userId,
+    statusCode,
+    code,
+    ...(err.stack && !isProduction ? { stack: err.stack } : {})
+  });
 
   // Ensure response header carries request ID
   res.setHeader('X-Request-Id', requestId);
 
-  // Send response (Never leak raw Prisma messages or stack traces in production)
+  // Send response
   res.status(statusCode).json({
     success: false,
     message,

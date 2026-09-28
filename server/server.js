@@ -10,9 +10,15 @@ const fs = require('fs');
 const { errorHandler } = require('./middleware/errorHandler');
 const http = require('http');
 const { prisma } = require('./db');
+const logger = require('./utils/logger');
 
 const app = express();
 const server = http.createServer(app);
+
+// ─── Trust Proxy ─────────────────────────────────────────────────────────────
+if (config.TRUST_PROXY !== false) {
+  app.set('trust proxy', config.TRUST_PROXY);
+}
 
 // ─── Security Middleware ─────────────────────────────────────────────────────
 app.use(helmet({
@@ -119,25 +125,48 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
-// ─── Neon PostgreSQL Connection ──────────────────────────────────────────────
-if (config.DATABASE_URL && !config.isTest) {
-  prisma.$connect()
-    .then(() => console.log('✓ Neon PostgreSQL connected successfully'))
-    .catch((err) => {
-      console.error('✗ Neon PostgreSQL connection error:', err.message);
-
-      if (config.isProduction) {
-        process.exit(1);
-        return;
+// ─── Neon PostgreSQL Connection with Backoff ─────────────────────────────────
+async function connectWithRetry(retries = 5, delayMs = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await prisma.$connect();
+      logger.info('✓ Neon PostgreSQL connected successfully');
+      return;
+    } catch (err) {
+      logger.error({ err }, `✗ Neon PostgreSQL connection attempt ${attempt}/${retries} failed`);
+      if (attempt < retries) {
+        const backoff = delayMs * Math.pow(2, attempt - 1);
+        logger.info(`Retrying DB connection in ${backoff}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+      } else {
+        if (config.isProduction) {
+          logger.error('Fatal: Exhausted database connection retries in production.');
+          process.exit(1);
+        } else {
+          logger.warn('⚠ Starting without a database connection. API routes that need Neon DB will fail until DATABASE_URL is configured.');
+        }
       }
-
-      console.warn('⚠ Starting without a database connection. API routes that need Neon DB will fail until DATABASE_URL is configured.');
-    });
-} else if (!config.isTest) {
-  console.warn('⚠ DATABASE_URL is not configured. Starting the API without a database connection.');
+    }
+  }
 }
 
-// ─── Health Check ────────────────────────────────────────────────────────────
+const { cleanupExpiredOtps } = require('./utils/otpStore');
+
+if (config.DATABASE_URL && !config.isTest) {
+  connectWithRetry();
+} else if (!config.isTest) {
+  logger.warn('⚠ DATABASE_URL is not configured. Starting the API without a database connection.');
+}
+
+
+// ─── Scheduled Expired OTP Cleanup Job ───────────────────────────────────────
+if (!config.isTest) {
+  setTimeout(() => cleanupExpiredOtps().catch(() => {}), 5000).unref();
+  setInterval(() => cleanupExpiredOtps().catch(() => {}), 15 * 60 * 1000).unref();
+}
+
+// ─── Health Checks ───────────────────────────────────────────────────────────
+// Liveness probe (always cheap)
 app.get('/api/health', async (req, res) => {
   let dbStatus = 'disconnected';
   if (config.DATABASE_URL) {
@@ -158,6 +187,32 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// Readiness probe
+app.get('/api/health/ready', async (req, res) => {
+  try {
+    if (!config.DATABASE_URL) {
+      return res.status(503).json({
+        status: 'not ready',
+        database: 'not configured',
+        timestamp: new Date()
+      });
+    }
+    await prisma.$queryRaw`SELECT 1`;
+    return res.status(200).json({
+      status: 'ready',
+      database: 'connected',
+      timestamp: new Date()
+    });
+  } catch (err) {
+    return res.status(503).json({
+      status: 'not ready',
+      database: 'disconnected',
+      error: err.message,
+      timestamp: new Date()
+    });
+  }
+});
+
 // ─── Public App Statistics ───────────────────────────────────────────────────
 app.get('/api/stats', async (req, res) => {
   try {
@@ -167,7 +222,7 @@ app.get('/api/stats', async (req, res) => {
     ]);
     res.json({ users, trips });
   } catch (err) {
-    console.error('Error fetching stats:', err);
+    logger.error({ err }, 'Error fetching stats');
     res.status(500).json({ message: 'Failed to fetch statistics' });
   }
 });
@@ -198,27 +253,58 @@ app.use(errorHandler);
 if (require.main === module) {
   const PORT = config.PORT;
   server.listen(PORT, () => {
-    console.log(`✓ Server running on http://localhost:${PORT}`);
-    console.log(`✓ CORS allowed origins: ${config.isProduction ? allowedOrigins.join(', ') : allowedOrigins.join(', ') + ' (+ localhost in dev)'}`);
+    logger.info(`✓ Server running on http://localhost:${PORT}`);
+    logger.info(`✓ CORS allowed origins: ${config.isProduction ? allowedOrigins.join(', ') : allowedOrigins.join(', ') + ' (+ localhost in dev)'}`);
   });
 }
 
-module.exports = app;
-
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
-const gracefulShutdown = () => {
-  console.log('Shutting down gracefully...');
+let isShuttingDown = false;
+const gracefulShutdown = (signalOrCode = 'SIGTERM') => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  logger.info(`Received ${signalOrCode}. Shutting down gracefully...`);
+
+  // Force exit after 10s timeout
+  const forceTimer = setTimeout(() => {
+    logger.error('Graceful shutdown timed out after 10s, forcing exit');
+    process.exit(typeof signalOrCode === 'number' ? signalOrCode : 1);
+  }, 10000);
+  forceTimer.unref();
+
+  if (io) {
+    try {
+      io.close();
+      logger.info('Socket.IO closed');
+    } catch (e) {
+      logger.error({ err: e }, 'Error closing Socket.IO');
+    }
+  }
+
   server.close(async () => {
-    console.log('Closed out remaining connections');
+    logger.info('Closed out remaining HTTP connections');
     try {
       await prisma.$disconnect();
-      console.log('Database connection closed');
+      logger.info('Database connection closed');
     } catch (e) {
-      console.error('Error disconnecting database:', e);
+      logger.error({ err: e }, 'Error disconnecting database');
     }
-    process.exit(0);
+    clearTimeout(forceTimer);
+    process.exit(typeof signalOrCode === 'number' ? signalOrCode : 0);
   });
 };
 
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled Promise Rejection');
+  gracefulShutdown(1);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'Uncaught Exception');
+  gracefulShutdown(1);
+});
+
+module.exports = app;
