@@ -30,9 +30,14 @@ const {
 const { sendOtpEmail } = require('../utils/mailer');
 const { verifyToken } = require('../middleware/auth');
 const { prisma } = require('../db');
+const { setupPrismaMock } = require('./mockPrisma');
 
 describe('OTP System and Auth Hardening', () => {
   const originalEnv = process.env.NODE_ENV;
+
+  beforeEach(() => {
+    setupPrismaMock();
+  });
 
   afterEach(() => {
     process.env.NODE_ENV = originalEnv;

@@ -27,6 +27,10 @@ jest.setTimeout(30000);
 
 const request = require('supertest');
 const { prisma } = require('../db');
+const { setupPrismaMock } = require('./mockPrisma');
+
+setupPrismaMock();
+
 const app = require('../server');
 
 describe('TravelSync API Integration Tests', () => {
@@ -99,11 +103,10 @@ describe('TravelSync API Integration Tests', () => {
     });
 
     it('GET /api/health should return 503 if db query fails', async () => {
-      const spy = jest.spyOn(prisma, '$queryRaw').mockRejectedValueOnce(new Error('Connection lost'));
+      prisma.$queryRaw.mockRejectedValueOnce(new Error('Connection lost'));
       const res = await request(app).get('/api/health');
       expect(res.status).toBe(503);
       expect(res.body.dbStatus).toBe('error');
-      spy.mockRestore();
     });
   });
 

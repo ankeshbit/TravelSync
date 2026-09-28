@@ -6,6 +6,9 @@ const config = require('../config/env');
 const { setupSocket } = require('../socket');
 const { verifyAuthToken } = require('../utils/verifyAuthToken');
 const { prisma } = require('../db');
+const { setupPrismaMock } = require('./mockPrisma');
+
+setupPrismaMock();
 
 jest.setTimeout(30000);
 
