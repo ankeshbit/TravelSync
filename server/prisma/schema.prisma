@@ -97,7 +97,7 @@ model Expense {
   createdAt  DateTime       @default(now())
 
   trip   Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  paidBy User           @relation("ExpensePayer", fields: [paidById], references: [id], onDelete: Cascade)
+  paidBy User           @relation("ExpensePayer", fields: [paidById], references: [id], onDelete: Restrict)
   splits ExpenseSplit[]
 
   @@index([tripId])
@@ -110,7 +110,7 @@ model ExpenseSplit {
   userId    String
 
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([expenseId, userId])
   @@map("expense_splits")

@@ -36,6 +36,33 @@ const setupSocket = (server, corsOptions) => {
   // ─── Socket Connection Handler ──────────────────────────────────────────────
   io.on('connection', async (socket) => {
     const tripId = socket.handshake.query?.tripId;
+    let currentRoom = null;
+
+    // Register disconnect handler BEFORE any await in the connection handler
+    socket.on('disconnect', async (reason) => {
+      if (!config.isProduction) {
+        logger.debug(`Socket disconnected: ${socket.id} (${reason})`);
+      }
+      if (currentRoom) {
+        socket.leave(currentRoom);
+        try {
+          const remainingSockets = await io.in(currentRoom).fetchSockets();
+          const userStillPresent = remainingSockets.some(
+            s => s.userId === socket.userId || s.data?.userId === socket.userId || s.user?.id === socket.userId
+          );
+          if (!userStillPresent) {
+            io.to(currentRoom).emit('user:left', {
+              userId: socket.user ? socket.user.id : socket.userId
+            });
+          }
+        } catch (discErr) {
+          if (!config.isProduction) {
+            logger.error({ err: discErr }, 'Error during socket disconnect cleanup');
+          }
+        }
+      }
+    });
+
     if (!tripId) {
       socket.emit('error', { message: 'tripId query parameter is required' });
       socket.disconnect(true);
@@ -71,28 +98,39 @@ const setupSocket = (server, corsOptions) => {
       }
 
       const roomName = `trip:${tripId}`;
+      currentRoom = roomName;
       socket.join(roomName);
 
       if (!config.isProduction) {
         logger.debug(`Socket ${socket.id} joined room ${roomName} as ${socket.user.name}`);
       }
 
+      // Build current online list and send presence:list to the connected socket
+      const socketsInRoom = await io.in(roomName).fetchSockets();
+      const onlineMap = new Map();
+      for (const s of socketsInRoom) {
+        const u = s.user || (s.data && s.data.user);
+        const uid = s.userId || (s.data && s.data.userId) || (u && u.id);
+        if (uid) {
+          onlineMap.set(uid, {
+            userId: uid,
+            id: uid,
+            name: u?.name || 'Member',
+            email: u?.email || '',
+            picture: u?.picture || ''
+          });
+        }
+      }
+
+      socket.emit('presence:list', Array.from(onlineMap.values()));
+
       // Notify other members in room using socket.user.id consistently
       socket.to(roomName).emit('user:joined', {
         userId: socket.user.id,
+        id: socket.user.id,
         name: socket.user.name,
-        email: socket.user.email
-      });
-
-      // Handle disconnect cleanup
-      socket.on('disconnect', (reason) => {
-        if (!config.isProduction) {
-          logger.debug(`Socket disconnected: ${socket.id} (${reason})`);
-        }
-        socket.to(roomName).emit('user:left', {
-          userId: socket.user.id
-        });
-        socket.leave(roomName);
+        email: socket.user.email,
+        picture: socket.user.picture || ''
       });
     } catch (err) {
       if (!config.isProduction) {

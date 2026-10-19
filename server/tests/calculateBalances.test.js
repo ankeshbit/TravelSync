@@ -131,4 +131,56 @@ describe('calculateBalances', () => {
     const settlementTotal = result.settlements.reduce((acc, s) => acc + s.amount, 0);
     expect(Math.round(settlementTotal * 100)).toBe(6666);
   });
+
+  test('groups expenses and settlements per currency', () => {
+    const members = [
+      { id: '1', name: 'Alice' },
+      { id: '2', name: 'Bob' }
+    ];
+
+    const expenses = [
+      { amount: 100, currency: 'USD', paidBy: '1', splitAmong: ['1', '2'] },
+      { amount: 200, currency: 'EUR', paidBy: '2', splitAmong: ['1', '2'] }
+    ];
+
+    const result = calculateBalances(expenses, members);
+    expect(result.byCurrency).toBeDefined();
+    expect(result.byCurrency.USD).toBeDefined();
+    expect(result.byCurrency.EUR).toBeDefined();
+
+    expect(result.byCurrency.USD.balanceMap['1']).toBe(50);
+    expect(result.byCurrency.USD.balanceMap['2']).toBe(-50);
+    expect(result.byCurrency.USD.settlements).toEqual([
+      expect.objectContaining({ from: '2', to: '1', amount: 50 })
+    ]);
+
+    expect(result.byCurrency.EUR.balanceMap['2']).toBe(100);
+    expect(result.byCurrency.EUR.balanceMap['1']).toBe(-100);
+    expect(result.byCurrency.EUR.settlements).toEqual([
+      expect.objectContaining({ from: '1', to: '2', amount: 100 })
+    ]);
+  });
+
+  test('sorts splits deterministically so leftover cent assignment is stable regardless of input order', () => {
+    const members = [
+      { id: 'u-charlie', name: 'Charlie' },
+      { id: 'u-alice', name: 'Alice' },
+      { id: 'u-bob', name: 'Bob' }
+    ];
+
+    // 100 / 3 = 33.33 with 1 remainder cent
+    // When sorted alphabetically, 'u-alice' comes first and gets the +0.01 cent share (33.34)
+    const expenseUnsorted = {
+      amount: 100,
+      currency: 'USD',
+      paidBy: 'u-alice',
+      splitAmong: ['u-charlie', 'u-alice', 'u-bob']
+    };
+
+    const res1 = calculateBalances([expenseUnsorted], members);
+    // Alice paid 100, owes 33.34 -> balance is 66.66
+    expect(res1.balanceMap['u-alice']).toBe(66.66);
+    expect(res1.balanceMap['u-bob']).toBe(-33.33);
+    expect(res1.balanceMap['u-charlie']).toBe(-33.33);
+  });
 });

@@ -49,11 +49,14 @@ function validateEnv(env = process.env) {
   const UNSPLASH_ACCESS_KEY = (env.UNSPLASH_ACCESS_KEY || '').trim();
 
   // Optional: Email credentials
-  const SMTP_USER = (env.SMTP_USER || env.EMAIL_USER || '').trim();
-  const SMTP_PASS = (env.SMTP_PASS || env.EMAIL_PASS || '').trim();
+  const SMTP_USER = (env.SMTP_USER || env.EMAIL_USER || env.SMTP_EMAIL || '').trim();
+  const SMTP_PASS = (env.SMTP_PASS || env.EMAIL_PASS || env.SMTP_PASSWORD || '').trim();
   if ((SMTP_USER && !SMTP_PASS) || (!SMTP_USER && SMTP_PASS)) {
     errors.push('Both SMTP_USER/EMAIL_USER and SMTP_PASS/EMAIL_PASS must be provided together.');
   }
+
+  // Optional: NEON_AUTH_ENABLED (default false)
+  const NEON_AUTH_ENABLED = env.NEON_AUTH_ENABLED === 'true';
 
   // Optional: NEON_AUTH_JWKS_URL
   const NEON_AUTH_JWKS_URL = (env.NEON_AUTH_JWKS_URL || '').trim();
@@ -134,6 +137,7 @@ function validateEnv(env = process.env) {
     SMTP_HOST: (env.SMTP_HOST || 'smtp.gmail.com').trim(),
     SMTP_PORT: parseInt(env.SMTP_PORT, 10) || 587,
     SMTP_FROM: (env.SMTP_FROM || '').trim(),
+    NEON_AUTH_ENABLED,
     NEON_AUTH_JWKS_URL,
     FIREBASE_PROJECT_ID,
     FIREBASE_CLIENT_EMAIL,

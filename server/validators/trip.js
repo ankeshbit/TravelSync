@@ -43,12 +43,11 @@ const addMemberSchema = z.object({
 });
 
 const aiSuggestionsSchema = z.object({
-  destination: z.string().trim().min(1).max(150).optional(),
-  durationDays: z.coerce.number().int().min(1).max(30).optional(),
-  budgetPerPerson: z.coerce.number().min(0).max(100000000).optional(),
-  currency: z.string().trim().max(10).optional(),
-  interests: z.array(z.string().trim().max(50)).max(10).optional(),
-  pace: z.string().trim().max(50).optional()
+  budget: z.string().trim().max(100, 'Budget must be 100 characters or fewer').optional().default('moderate'),
+  interests: z.union([
+    z.string().trim().max(500, 'Interests must be 500 characters or fewer'),
+    z.array(z.string().trim().max(100)).max(20)
+  ]).optional().default('')
 });
 
 module.exports = {

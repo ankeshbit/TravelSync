@@ -5,8 +5,11 @@ const logger = require('../utils/logger');
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'No token provided. Authorization denied.' });
+  }
 
+  const token = authHeader.slice(7).trim();
   if (!token) {
     return res.status(401).json({ message: 'No token provided. Authorization denied.' });
   }

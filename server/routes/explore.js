@@ -42,67 +42,76 @@ const { exploreQuerySchema } = require('../validators/explore');
  *         description: Unauthorized
  */
 router.get('/destinations', verifyToken, validate({ query: exploreQuerySchema }), asyncHandler(async (req, res) => {
-  const { q, limit, page } = req.query;
+  const { q, limit = 50, page = 1 } = req.validatedQuery || req.query;
 
-  const where = {
-    destination: {
-      not: ''
-    }
-  };
-
-  if (q && typeof q === 'string' && q.trim()) {
-    where.destination = {
-      not: '',
-      contains: q.trim(),
-      mode: 'insensitive'
-    };
-  }
-
-  const groups = await prisma.trip.groupBy({
-    by: ['destination'],
-    take: limit || 50,
-    skip: ((page || 1) - 1) * (limit || 50),
-    where,
-    _count: {
-      destination: true
+  const userTrips = await prisma.trip.findMany({
+    where: {
+      destination: { not: '' },
+      OR: [
+        { ownerId: req.userId },
+        { members: { some: { userId: req.userId } } }
+      ]
     },
-    _avg: {
-      budgetPerPerson: true
+    select: {
+      id: true,
+      destination: true,
+      coverImageUrl: true,
+      budgetPerPerson: true,
+      createdAt: true
     },
     orderBy: {
-      _count: {
-        destination: 'desc'
-      }
+      createdAt: 'desc'
     }
   });
 
-  const destinations = await Promise.all(
-    groups.map(async (group) => {
-      const recentTripWithImage = await prisma.trip.findFirst({
-        where: {
-          destination: group.destination,
-          coverImageUrl: {
-            not: ''
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        select: {
-          coverImageUrl: true
-        }
+  const searchFilter = q && typeof q === 'string' ? q.trim().toLowerCase() : '';
+  const groupMap = new Map();
+
+  for (const trip of userTrips) {
+    const rawDest = (trip.destination || '').trim();
+    if (!rawDest) continue;
+    const normKey = rawDest.toLowerCase();
+
+    if (searchFilter && !normKey.includes(searchFilter)) {
+      continue;
+    }
+
+    if (!groupMap.has(normKey)) {
+      groupMap.set(normKey, {
+        name: rawDest,
+        tripCount: 0,
+        coverImageUrl: trip.coverImageUrl || '',
+        budgetSum: 0,
+        budgetCount: 0
       });
+    }
 
-      return {
-        name: group.destination,
-        tripCount: group._count?.destination || 0,
-        coverImageUrl: recentTripWithImage?.coverImageUrl || '',
-        averageBudgetPerPerson: Math.round((group._avg?.budgetPerPerson || 0) * 100) / 100
-      };
-    })
-  );
+    const group = groupMap.get(normKey);
+    group.tripCount += 1;
+    if (!group.coverImageUrl && trip.coverImageUrl) {
+      group.coverImageUrl = trip.coverImageUrl;
+    }
+    if (typeof trip.budgetPerPerson === 'number' && trip.budgetPerPerson > 0) {
+      group.budgetSum += trip.budgetPerPerson;
+      group.budgetCount += 1;
+    }
+  }
 
-  res.json(destinations);
+  const allDestinations = Array.from(groupMap.values()).map(g => ({
+    name: g.name,
+    tripCount: g.tripCount,
+    coverImageUrl: g.coverImageUrl,
+    averageBudgetPerPerson: g.budgetCount > 0 ? Math.round((g.budgetSum / g.budgetCount) * 100) / 100 : 0
+  }));
+
+  allDestinations.sort((a, b) => b.tripCount - a.tripCount || a.name.localeCompare(b.name));
+
+  const pageNum = Number(page) || 1;
+  const limitNum = Number(limit) || 50;
+  const startIndex = (pageNum - 1) * limitNum;
+  const paginated = allDestinations.slice(startIndex, startIndex + limitNum);
+
+  res.json(paginated);
 }));
 
 module.exports = router;

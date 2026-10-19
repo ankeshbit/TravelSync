@@ -122,6 +122,25 @@ function setupPrismaMock() {
     return { ...user };
   });
 
+  prisma.user.findMany = jest.fn(async ({ where, select } = {}) => {
+    let results = Array.from(users.values());
+    if (where?.id?.in) {
+      results = results.filter(u => where.id.in.includes(u.id));
+    } else if (where?.id) {
+      results = results.filter(u => u.id === where.id);
+    }
+    if (select) {
+      return results.map(u => {
+        const item = {};
+        for (const k of Object.keys(select)) {
+          if (select[k]) item[k] = u[k];
+        }
+        return item;
+      });
+    }
+    return results.map(u => ({ ...u }));
+  });
+
   // ── prisma.trip ────────────────────────────────────────────────────────────
   function populateTrip(trip) {
     if (!trip) return null;
@@ -423,12 +442,24 @@ function setupPrismaMock() {
   prisma.expense.findMany = jest.fn(async ({ where } = {}) => {
     let results = Array.from(expenses.values());
     if (where?.tripId) results = results.filter(e => e.tripId === where.tripId);
-    return results;
+    if (where?.paidById) results = results.filter(e => e.paidById === where.paidById);
+    return results.map(exp => {
+      const paidByUser = users.get(exp.paidById) || { id: exp.paidById, name: '', email: '' };
+      return {
+        ...exp,
+        paidBy: { id: paidByUser.id, name: paidByUser.name, email: paidByUser.email },
+        splits: (exp.splits || []).map(s => ({
+          ...s,
+          user: users.get(s.userId) || { id: s.userId, name: '', email: '' }
+        }))
+      };
+    });
   });
 
   prisma.expense.count = jest.fn(async ({ where } = {}) => {
     let results = Array.from(expenses.values());
     if (where?.tripId) results = results.filter(e => e.tripId === where.tripId);
+    if (where?.paidById) results = results.filter(e => e.paidById === where.paidById);
     return results.length;
   });
 
@@ -444,6 +475,18 @@ function setupPrismaMock() {
 
   prisma.expense.deleteMany = jest.fn(async () => ({ count: 0 }));
   prisma.expenseSplit.deleteMany = jest.fn(async () => ({ count: 0 }));
+  prisma.expenseSplit.count = jest.fn(async ({ where } = {}) => {
+    let count = 0;
+    for (const exp of expenses.values()) {
+      if (where?.expense?.tripId && exp.tripId !== where.expense.tripId) continue;
+      if (exp.splits) {
+        for (const s of exp.splits) {
+          if (!where?.userId || s.userId === where.userId) count++;
+        }
+      }
+    }
+    return count;
+  });
 
   // ── prisma.activity ────────────────────────────────────────────────────────
   prisma.activity.create = jest.fn(async ({ data }) => {
@@ -510,19 +553,22 @@ function setupPrismaMock() {
 
   prisma.otp.findFirst = jest.fn(async ({ where }) => {
     const list = Array.from(otps.values());
-    return list.find(o => {
+    const found = list.find(o => {
       if (where.email && o.email.toLowerCase() !== where.email.toLowerCase()) return false;
       if (where.purpose && o.purpose !== where.purpose) return false;
       return true;
     }) || null;
+    return found ? { ...found } : null;
   });
 
   prisma.otp.updateMany = jest.fn(async ({ where, data }) => {
     let count = 0;
     for (const o of otps.values()) {
-      const matchEmail = !where.email || o.email.toLowerCase() === where.email.toLowerCase();
-      const matchPurpose = !where.purpose || o.purpose === where.purpose;
-      if (matchEmail && matchPurpose) {
+      const matchId = !where?.id || o.id === where.id;
+      const matchEmail = !where?.email || o.email.toLowerCase() === where.email.toLowerCase();
+      const matchPurpose = !where?.purpose || o.purpose === where.purpose;
+      const matchAttempts = where?.attempts?.lt === undefined || o.attempts < where.attempts.lt;
+      if (matchId && matchEmail && matchPurpose && matchAttempts) {
         if (data.attempts !== undefined) {
           if (data.attempts.increment) {
             o.attempts += data.attempts.increment;

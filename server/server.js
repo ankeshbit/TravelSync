@@ -62,6 +62,10 @@ app.use(cors(corsOptions));
 const crypto = require('crypto');
 app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
+app.use((req, res, next) => {
+  req.body = req.body ?? {};
+  next();
+});
 
 // ─── Request ID Middleware ───────────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -107,18 +111,35 @@ const generalApiLimiter = rateLimit({
 });
 app.use('/api', generalApiLimiter);
 
-// Strict OTP limiter: 5 requests per 15 minutes per IP for send/verify OTP
-const otpLimiter = rateLimit({
+// Separate OTP limiters: 5 sends and 10 verifies per 15 min, keyed by IP + email
+const getOtpKey = (req) => `${req.ip || 'ip'}_${(req.body && req.body.email) ? req.body.email.toLowerCase().trim() : ''}`;
+
+const sendOtpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,
+  keyGenerator: getOtpKey,
+  validate: { keyGeneratorIpFallback: false },
   message: {
     message: 'Too many OTP requests, please try again in 15 minutes.'
   },
   standardHeaders: true,
   legacyHeaders: false
 });
-app.use('/api/auth/send-otp', otpLimiter);
-app.use('/api/auth/verify-otp', otpLimiter);
+
+const verifyOtpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  keyGenerator: getOtpKey,
+  validate: { keyGeneratorIpFallback: false },
+  message: {
+    message: 'Too many OTP verification attempts, please try again in 15 minutes.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.use('/api/auth/send-otp', sendOtpLimiter);
+app.use('/api/auth/verify-otp', verifyOtpLimiter);
 
 // Auth endpoints: 20 requests per 15 minutes per IP
 const authLimiter = rateLimit({
@@ -307,7 +328,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 process.on('unhandledRejection', (reason) => {
   logger.error({ reason }, 'Unhandled Promise Rejection');
-  gracefulShutdown(1);
+  // Log and continue — do not shut down process on unhandledRejection
 });
 
 process.on('uncaughtException', (err) => {

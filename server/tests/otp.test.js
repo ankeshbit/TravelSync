@@ -21,6 +21,7 @@ jest.mock('../config/firebaseAdmin', () => ({
 jest.setTimeout(30000);
 
 const crypto = require('crypto');
+const config = require('../config/env');
 const {
   createOtp,
   verifyOtp,
@@ -282,55 +283,69 @@ describe('OTP System and Auth Hardening', () => {
     });
 
     it('should return 503 and log error if the database is down during token verification', async () => {
-      // Simulate database down error from Prisma $queryRaw
-      const dbDownError = new Error('Can\'t reach database server at ep-withered-dew.neon.tech:5432. Please make sure your database server is running.');
-      dbDownError.code = 'P1001';
-      dbDownError.name = 'PrismaClientInitializationError';
+      const origNeonAuth = config.NEON_AUTH_ENABLED;
+      config.NEON_AUTH_ENABLED = true;
 
-      jest.spyOn(prisma, '$queryRaw').mockRejectedValueOnce(dbDownError);
-      const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
+      try {
+        // Simulate database down error from Prisma $queryRaw
+        const dbDownError = new Error('Can\'t reach database server at ep-withered-dew.neon.tech:5432. Please make sure your database server is running.');
+        dbDownError.code = 'P1001';
+        dbDownError.name = 'PrismaClientInitializationError';
 
-      await verifyToken(mockReq, mockRes, mockNext);
+        jest.spyOn(prisma, '$queryRaw').mockRejectedValueOnce(dbDownError);
+        const loggerErrorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
 
-      // Verify DB error was logged via structured logger
-      expect(loggerErrorSpy).toHaveBeenCalled();
+        await verifyToken(mockReq, mockRes, mockNext);
 
-      // Verify HTTP 503 is returned, NOT 401
-      expect(mockRes.status).toHaveBeenCalledWith(503);
-      expect(mockRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringMatching(/database service unavailable/i) })
-      );
+        // Verify DB error was logged via structured logger
+        expect(loggerErrorSpy).toHaveBeenCalled();
+
+        // Verify HTTP 503 is returned, NOT 401
+        expect(mockRes.status).toHaveBeenCalledWith(503);
+        expect(mockRes.json).toHaveBeenCalledWith(
+          expect.objectContaining({ message: expect.stringMatching(/database service unavailable/i) })
+        );
+      } finally {
+        config.NEON_AUTH_ENABLED = origNeonAuth;
+      }
     });
 
     it('should cache Neon session check for a few seconds', async () => {
-      const testToken = `neon-test-token-${Date.now()}`;
-      const fakeUserId = `neon-user-${Date.now()}`;
+      const origNeonAuth = config.NEON_AUTH_ENABLED;
+      config.NEON_AUTH_ENABLED = true;
 
-      // Mock $queryRaw to return a valid session once
-      const queryRawSpy = jest.spyOn(prisma, '$queryRaw').mockResolvedValue([
-        { userId: fakeUserId, expiresAt: new Date(Date.now() + 60000) }
-      ]);
-      const findUniqueSpy = jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: fakeUserId,
-        email: 'neon@example.com',
-        name: 'Neon User'
-      });
+      try {
+        const testToken = `neon-test-token-${Date.now()}`;
+        const fakeUserId = `neon-user-${Date.now()}`;
 
-      const sessionReq = {
-        headers: { authorization: `Bearer ${testToken}` }
-      };
+        // Mock $queryRaw to return a valid session once
+        const queryRawSpy = jest.spyOn(prisma, '$queryRaw').mockResolvedValue([
+          { userId: fakeUserId, expiresAt: new Date(Date.now() + 60000) }
+        ]);
+        const findUniqueSpy = jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
+          id: fakeUserId,
+          email: 'neon@example.com',
+          name: 'Neon User'
+        });
 
-      // First call: hits DB
-      await verifyToken(sessionReq, mockRes, mockNext);
-      expect(mockNext).toHaveBeenCalledTimes(1);
-      expect(queryRawSpy).toHaveBeenCalledTimes(1);
-      expect(findUniqueSpy).toHaveBeenCalledTimes(1);
+        const sessionReq = {
+          headers: { authorization: `Bearer ${testToken}` }
+        };
 
-      // Second call immediately with same token: should use cache, not query DB again
-      const mockNext2 = jest.fn();
-      await verifyToken(sessionReq, mockRes, mockNext2);
-      expect(mockNext2).toHaveBeenCalledTimes(1);
-      expect(queryRawSpy).toHaveBeenCalledTimes(1); // Still 1, did not re-query
+        // First call: hits DB
+        await verifyToken(sessionReq, mockRes, mockNext);
+        expect(mockNext).toHaveBeenCalledTimes(1);
+        expect(queryRawSpy).toHaveBeenCalledTimes(1);
+        expect(findUniqueSpy).toHaveBeenCalledTimes(1);
+
+        // Second call immediately with same token: should use cache, not query DB again
+        const mockNext2 = jest.fn();
+        await verifyToken(sessionReq, mockRes, mockNext2);
+        expect(mockNext2).toHaveBeenCalledTimes(1);
+        expect(queryRawSpy).toHaveBeenCalledTimes(1); // Still 1, did not re-query
+      } finally {
+        config.NEON_AUTH_ENABLED = origNeonAuth;
+      }
     });
   });
 });

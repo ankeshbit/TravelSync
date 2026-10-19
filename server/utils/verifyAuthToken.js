@@ -1,3 +1,4 @@
+const config = require('../config/env');
 const { verifyFirebaseToken } = require('../config/firebaseAdmin');
 const { prisma, ensureUserSynced } = require('../db');
 const logger = require('./logger');
@@ -52,6 +53,8 @@ function handleDatabaseError(err, context) {
   }
 }
 
+let neonAuthMissingTableLogged = false;
+
 /**
  * Verify an authentication token (Neon session, Firebase ID token, or local JWT)
  * and return the associated Prisma User record.
@@ -69,46 +72,54 @@ async function verifyAuthToken(token) {
   const cleanToken = token.trim();
   let verifiedUserId = null;
 
-  // 1. Neon Auth session check (parameterised tagged template $queryRaw + cache)
-  const cached = neonSessionCache.get(cleanToken);
-  if (cached && (Date.now() - cached.cachedAt < NEON_SESSION_TTL_MS)) {
-    if (cached.expiresAt > Date.now()) {
-      verifiedUserId = cached.userId;
-    } else {
-      neonSessionCache.delete(cleanToken);
-    }
-  }
-
-  if (!verifiedUserId) {
-    try {
-      const sessionRows = await prisma.$queryRaw`
-        SELECT "userId", "expiresAt" FROM neon_auth.session WHERE token = ${cleanToken} AND "expiresAt" > NOW()
-      `;
-
-      if (sessionRows && sessionRows.length > 0) {
-        const row = sessionRows[0];
-        verifiedUserId = row.userId;
-        neonSessionCache.set(cleanToken, {
-          userId: row.userId,
-          expiresAt: new Date(row.expiresAt).getTime(),
-          cachedAt: Date.now()
-        });
+  // 1. Neon Auth session check (only if config.NEON_AUTH_ENABLED is true)
+  if (config.NEON_AUTH_ENABLED) {
+    const cached = neonSessionCache.get(cleanToken);
+    if (cached && (Date.now() - cached.cachedAt < NEON_SESSION_TTL_MS)) {
+      if (cached.expiresAt > Date.now()) {
+        verifiedUserId = cached.userId;
+      } else {
+        neonSessionCache.delete(cleanToken);
       }
-    } catch (dbErr) {
-      handleDatabaseError(dbErr, 'neon_auth.session query');
-      // If error is not DB-down (e.g. neon_auth schema doesn't exist: 42P01), proceed to next auth providers
     }
-  }
 
-  if (verifiedUserId) {
-    try {
-      let user = await prisma.user.findUnique({ where: { id: verifiedUserId } });
-      if (!user) {
-        user = await ensureUserSynced(verifiedUserId);
+    if (!verifiedUserId) {
+      try {
+        const sessionRows = await prisma.$queryRaw`
+          SELECT "userId", "expiresAt" FROM neon_auth.session WHERE token = ${cleanToken} AND "expiresAt" > NOW()
+        `;
+
+        if (sessionRows && sessionRows.length > 0) {
+          const row = sessionRows[0];
+          verifiedUserId = row.userId;
+          neonSessionCache.set(cleanToken, {
+            userId: row.userId,
+            expiresAt: new Date(row.expiresAt).getTime(),
+            cachedAt: Date.now()
+          });
+        }
+      } catch (dbErr) {
+        if (dbErr.code === '42P01' || (dbErr.message && dbErr.message.includes('42P01'))) {
+          if (!neonAuthMissingTableLogged) {
+            neonAuthMissingTableLogged = true;
+            logger.warn('neon_auth.session table does not exist (42P01).');
+          }
+        } else {
+          handleDatabaseError(dbErr, 'neon_auth.session query');
+        }
       }
-      if (user) return user;
-    } catch (dbErr) {
-      handleDatabaseError(dbErr, 'user lookup by neon session userId');
+    }
+
+    if (verifiedUserId) {
+      try {
+        let user = await prisma.user.findUnique({ where: { id: verifiedUserId } });
+        if (!user) {
+          user = await ensureUserSynced(verifiedUserId);
+        }
+        if (user) return user;
+      } catch (dbErr) {
+        handleDatabaseError(dbErr, 'user lookup by neon session userId');
+      }
     }
   }
 

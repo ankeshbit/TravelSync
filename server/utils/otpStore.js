@@ -82,48 +82,48 @@ async function createOtp(email, purpose) {
   // Opportunistic cleanup of expired rows
   cleanupExpiredOtps().catch(() => {});
 
-  // Check for resend cooldown on active OTP
-  const existing = await prisma.otp.findFirst({
-    where: {
-      email: normalizedEmail,
-      purpose,
-      expiresAt: { gt: now }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
-
-  if (existing) {
-    const elapsed = now.getTime() - new Date(existing.createdAt).getTime();
-    if (elapsed < RESEND_COOLDOWN_MS) {
-      const waitSeconds = Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000);
-      const error = new Error(`Please wait ${waitSeconds}s before requesting a new code.`);
-      error.statusCode = 429;
-      error.cooldownSeconds = waitSeconds;
-      throw error;
-    }
-  }
-
-  // Invalidate any existing OTPs for this email & purpose
-  await prisma.otp.deleteMany({
-    where: {
-      email: normalizedEmail,
-      purpose
-    }
-  });
-
-  // Generate cryptographically secure 6-digit OTP: [100000, 1000000)
   const otp = String(crypto.randomInt(100000, 1000000));
   const hash = hashOtp(otp);
   const expiresAt = new Date(now.getTime() + EXPIRY_MS);
 
-  await prisma.otp.create({
-    data: {
-      email: normalizedEmail,
-      hash,
-      purpose,
-      expiresAt,
-      attempts: 0
+  // Make cooldown check, deletion, and insert atomic inside a transaction
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.otp.findFirst({
+      where: {
+        email: normalizedEmail,
+        purpose,
+        expiresAt: { gt: now }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (existing) {
+      const elapsed = now.getTime() - new Date(existing.createdAt).getTime();
+      if (elapsed < RESEND_COOLDOWN_MS) {
+        const waitSeconds = Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000);
+        const error = new Error(`Please wait ${waitSeconds}s before requesting a new code.`);
+        error.statusCode = 429;
+        error.cooldownSeconds = waitSeconds;
+        throw error;
+      }
     }
+
+    await tx.otp.deleteMany({
+      where: {
+        email: normalizedEmail,
+        purpose
+      }
+    });
+
+    await tx.otp.create({
+      data: {
+        email: normalizedEmail,
+        hash,
+        purpose,
+        expiresAt,
+        attempts: 0
+      }
+    });
   });
 
   return otp;
@@ -132,7 +132,7 @@ async function createOtp(email, purpose) {
 /**
  * Verify an OTP.
  * Max 5 wrong attempts before invalidating.
- * Uses crypto.timingSafeEqual for hash comparison.
+ * Uses atomic updateMany with attempts < MAX and crypto.timingSafeEqual.
  *
  * @param {string} email
  * @param {string|number} candidateOtp
@@ -146,7 +146,8 @@ async function verifyOtp(email, candidateOtp, purpose) {
   const entry = await prisma.otp.findFirst({
     where: {
       email: normalizedEmail,
-      purpose
+      purpose,
+      expiresAt: { gt: now }
     },
     orderBy: { createdAt: 'desc' }
   });
@@ -155,14 +156,18 @@ async function verifyOtp(email, candidateOtp, purpose) {
     return { ok: false, reason: 'No verification code found. Please request a new one.' };
   }
 
-  // Check if expired
-  if (now > new Date(entry.expiresAt)) {
-    await prisma.otp.deleteMany({ where: { email: normalizedEmail, purpose } });
-    return { ok: false, reason: 'Verification code has expired. Please request a new one.' };
-  }
+  // Atomic attempts check and increment: only succeeds if attempts < MAX_ATTEMPTS
+  const updateResult = await prisma.otp.updateMany({
+    where: {
+      id: entry.id,
+      attempts: { lt: MAX_ATTEMPTS }
+    },
+    data: {
+      attempts: { increment: 1 }
+    }
+  });
 
-  // Check if already reached max attempts
-  if (entry.attempts >= MAX_ATTEMPTS) {
+  if (updateResult.count === 0) {
     await prisma.otp.deleteMany({ where: { email: normalizedEmail, purpose } });
     return {
       ok: false,
@@ -170,14 +175,12 @@ async function verifyOtp(email, candidateOtp, purpose) {
     };
   }
 
-  // Hash candidate and compare using crypto.timingSafeEqual
   const candidateHash = hashOtp(candidateOtp);
   const isMatch = compareHashes(candidateHash, entry.hash);
 
   if (!isMatch) {
     const newAttempts = entry.attempts + 1;
     if (newAttempts >= MAX_ATTEMPTS) {
-      // Exceeded max attempts: invalidate code
       await prisma.otp.deleteMany({ where: { email: normalizedEmail, purpose } });
       return {
         ok: false,
@@ -185,11 +188,6 @@ async function verifyOtp(email, candidateOtp, purpose) {
         attemptsRemaining: 0
       };
     }
-
-    await prisma.otp.update({
-      where: { id: entry.id },
-      data: { attempts: newAttempts }
-    });
 
     const attemptsRemaining = MAX_ATTEMPTS - newAttempts;
     return {
@@ -199,8 +197,11 @@ async function verifyOtp(email, candidateOtp, purpose) {
     };
   }
 
-  // Successful verification: delete OTP record (single-use)
-  await prisma.otp.deleteMany({ where: { email: normalizedEmail, purpose } });
+  // Successful verification: consume OTP atomically in a transaction
+  await prisma.$transaction(async (tx) => {
+    await tx.otp.deleteMany({ where: { email: normalizedEmail, purpose } });
+  });
+
   return { ok: true };
 }
 

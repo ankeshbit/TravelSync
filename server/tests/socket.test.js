@@ -19,14 +19,24 @@ jest.mock('../config/firebaseAdmin', () => ({
       return {
         uid: 'fb-user-1',
         email: 'socketuser@example.com',
-        name: 'Socket User'
+        name: 'Socket User',
+        email_verified: true
+      };
+    }
+    if (token === 'firebase-member-token') {
+      return {
+        uid: 'fb-user-member',
+        email: 'member@example.com',
+        name: 'Member User',
+        email_verified: true
       };
     }
     if (token === 'firebase-nonmember-token') {
       return {
         uid: 'fb-user-2',
         email: 'outsider@example.com',
-        name: 'Outsider User'
+        name: 'Outsider User',
+        email_verified: true
       };
     }
     throw new Error('Invalid Firebase token');
@@ -39,9 +49,11 @@ describe('Socket and Auth Token Hardening Tests', () => {
   let ioServer;
   let port;
   let ownerUser;
+  let memberUser;
   let _outsiderUser;
   let testTrip;
   let validToken;
+  let memberToken;
   let outsiderToken;
   let jwtToken;
 
@@ -58,6 +70,17 @@ describe('Socket and Auth Token Hardening Tests', () => {
       }
     });
 
+    memberUser = await prisma.user.upsert({
+      where: { email: 'member@example.com' },
+      update: { firebaseUid: 'fb-user-member' },
+      create: {
+        name: 'Member User',
+        email: 'member@example.com',
+        firebaseUid: 'fb-user-member',
+        password: ''
+      }
+    });
+
     _outsiderUser = await prisma.user.upsert({
       where: { email: 'outsider@example.com' },
       update: { firebaseUid: 'fb-user-2' },
@@ -69,7 +92,7 @@ describe('Socket and Auth Token Hardening Tests', () => {
       }
     });
 
-    // Create a trip owned by ownerUser
+    // Create a trip owned by ownerUser with memberUser
     testTrip = await prisma.trip.create({
       data: {
         name: 'Socket Test Trip',
@@ -78,12 +101,13 @@ describe('Socket and Auth Token Hardening Tests', () => {
         endDate: new Date('2026-10-10'),
         ownerId: ownerUser.id,
         members: {
-          create: [{ userId: ownerUser.id }]
+          create: [{ userId: ownerUser.id }, { userId: memberUser.id }]
         }
       }
     });
 
     validToken = 'firebase-valid-token';
+    memberToken = 'firebase-member-token';
     outsiderToken = 'firebase-nonmember-token';
     jwtToken = jwt.sign({ userId: ownerUser.id }, config.JWT_SECRET);
 
@@ -262,7 +286,7 @@ describe('Socket and Auth Token Hardening Tests', () => {
 
     it('emits user:left with socket.user.id on disconnect cleanup', (done) => {
       const client1 = Client(`http://localhost:${port}`, {
-        auth: { token: validToken },
+        auth: { token: memberToken },
         query: { tripId: testTrip.id },
         transports: ['websocket'],
         reconnection: false

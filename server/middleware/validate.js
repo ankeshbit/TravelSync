@@ -48,7 +48,12 @@ function validate({ body, params, query } = {}) {
           });
         }
       } else {
-        req.query = result.data;
+        req.validatedQuery = result.data;
+        try {
+          req.query = result.data;
+        } catch (_) {
+          // req.query is read-only in Express 5
+        }
       }
     }
 

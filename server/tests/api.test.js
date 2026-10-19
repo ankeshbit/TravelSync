@@ -592,6 +592,109 @@ describe('TravelSync API Integration Tests', () => {
     });
   });
 
+  describe('Phase 2 Core Server Bug Verifications', () => {
+    it('GET /api/explore/destinations coerces query parameters without 500', async () => {
+      const res = await request(app)
+        .get('/api/explore/destinations?page=1&limit=5&q=tokyo')
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    it('POST /api/auth/send-otp with empty body returns 400 instead of 500', async () => {
+      const res = await request(app)
+        .post('/api/auth/send-otp')
+        .send({});
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('POST /api/trips/:tripId/expenses rejects paidBy from non-member with 400', async () => {
+      const res = await request(app)
+        .post(`/api/trips/${testTripId}/expenses`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          title: 'Lunch',
+          amount: 50,
+          currency: 'USD',
+          paidBy: 'non-existent-or-non-member-user-id',
+          splitAmong: [testUser.id]
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/paidBy user is not a member/i);
+    });
+
+    it('DELETE /api/trips/:tripId/members/:userId returns 404 if user is not a member', async () => {
+      const res = await request(app)
+        .delete(`/api/trips/${testTripId}/members/random-non-member-user-id`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(res.status).toBe(404);
+      expect(res.body.message).toMatch(/not a member/i);
+    });
+
+    it('DELETE /api/trips/:tripId/members/:userId returns 409 if member has expenses in the trip', async () => {
+      // First, add testOtherUser as member
+      await prisma.tripMember.create({
+        data: { tripId: testTripId, userId: testOtherUser.id }
+      });
+
+      // Add expense paid by testOtherUser
+      await prisma.expense.create({
+        data: {
+          tripId: testTripId,
+          title: 'Museum Entry',
+          amount: 40,
+          currency: 'USD',
+          paidById: testOtherUser.id,
+          splits: {
+            create: [{ userId: testUser.id }]
+          }
+        }
+      });
+
+      // Attempt to remove testOtherUser
+      const res = await request(app)
+        .delete(`/api/trips/${testTripId}/members/${testOtherUser.id}`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(res.status).toBe(409);
+      expect(res.body.message).toMatch(/existing expenses or splits/i);
+    });
+
+    it('DELETE /api/trips/:tripId/members/me allows a member without expenses to leave', async () => {
+      // Create a fresh member user
+      const freshMember = await prisma.user.create({
+        data: {
+          name: 'Leaving Member',
+          email: 'leaving@example.com',
+          firebaseUid: 'test-firebase-uid-leaving'
+        }
+      });
+      await prisma.tripMember.create({
+        data: { tripId: testTripId, userId: freshMember.id }
+      });
+
+      // Mock token for leaving user
+      const { verifyFirebaseToken } = require('../config/firebaseAdmin');
+      verifyFirebaseToken.mockImplementationOnce(async (tok) => {
+        if (tok === 'leaving-token') {
+          return {
+            uid: 'test-firebase-uid-leaving',
+            email: 'leaving@example.com',
+            name: 'Leaving Member',
+            email_verified: true
+          };
+        }
+        return { uid: 'test-firebase-uid-primary', email: 'john@example.com', name: 'John Doe', email_verified: true };
+      });
+
+      const res = await request(app)
+        .delete(`/api/trips/${testTripId}/members/me`)
+        .set('Authorization', 'Bearer leaving-token');
+      expect(res.status).toBe(200);
+      expect(res.body.message).toMatch(/successfully left/i);
+    });
+  });
+
   describe('404 handler', () => {
     it('should return 404 for unknown routes', async () => {
       const res = await request(app).get('/api/does-not-exist');

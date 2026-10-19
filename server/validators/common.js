@@ -23,16 +23,10 @@ const tripAndMemberParamSchema = z.object({
   userId: z.string().trim().min(1, 'userId is required').max(128, 'userId is too long')
 });
 
-const paginationQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(50)
-});
-
 module.exports = {
   idParamSchema,
   tripIdParamSchema,
   tripAndPlaceParamSchema,
   tripAndExpenseParamSchema,
-  tripAndMemberParamSchema,
-  paginationQuerySchema
+  tripAndMemberParamSchema
 };

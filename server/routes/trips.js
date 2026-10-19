@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const config = require('../config/env');
-const { prisma, formatTrip, formatPlace, formatExpense, formatUser, formatActivity } = require('../db');
+const { prisma, formatTrip, formatPlace, formatExpense, formatUser, formatActivity, calculateDurationDays } = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validate } = require('../middleware/validate');
@@ -10,10 +10,10 @@ const { getIO, removeUserFromTripRoom, removeAllUsersFromTripRoom } = require('.
 const logActivity = require('../utils/logActivity');
 const { calculateBalances } = require('../utils/calculateBalances');
 const logger = require('../utils/logger');
-const { createTripSchema, updateTripSchema, addMemberSchema } = require('../validators/trip');
+const { createTripSchema, updateTripSchema, addMemberSchema, aiSuggestionsSchema } = require('../validators/trip');
 const { createPlaceSchema, updatePlaceNoteSchema, reorderPlacesSchema } = require('../validators/place');
 const { createExpenseSchema } = require('../validators/expense');
-const { tripIdParamSchema, idParamSchema, tripAndPlaceParamSchema } = require('../validators/common');
+const { tripIdParamSchema, idParamSchema, tripAndPlaceParamSchema, tripAndExpenseParamSchema, tripAndMemberParamSchema } = require('../validators/common');
 
 // AI suggestion limiter: 5 requests per 10 minutes, keyed by authenticated user ID (falls back to IP)
 const aiLimiter = rateLimit({
@@ -32,14 +32,12 @@ router.aiLimiter = aiLimiter;
 const checkTripMembership = asyncHandler(async (req, res, next) => {
   const trip = await prisma.trip.findUnique({
     where: { id: req.params.tripId },
-    include: {
-      members: true,
-      places: true,
-      expenses: {
-        include: {
-          paidBy: { select: { id: true, name: true, email: true } },
-          splits: { include: { user: { select: { id: true, name: true, email: true } } } }
-        }
+    select: {
+      id: true,
+      ownerId: true,
+      currency: true,
+      members: {
+        select: { userId: true }
       }
     }
   });
@@ -295,6 +293,7 @@ async function fetchAndAttachCoverImage(tripId, destination) {
     const url = `https://api.unsplash.com/search/photos?query=${query}&per_page=1&orientation=landscape`;
 
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(10000),
       headers: {
         Authorization: `Client-ID ${accessKey}`,
         'Accept-Version': 'v1'
@@ -318,6 +317,28 @@ async function fetchAndAttachCoverImage(tripId, destination) {
       where: { id: tripId },
       data: { coverImageUrl: photo.urls.regular }
     });
+
+    const updatedTrip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        members: { include: { user: { select: { id: true, name: true, email: true } } } },
+        places: true,
+        expenses: {
+          include: {
+            paidBy: { select: { id: true, name: true, email: true } },
+            splits: {
+              orderBy: { id: 'asc' },
+              include: { user: { select: { id: true, name: true, email: true } } }
+            }
+          }
+        }
+      }
+    });
+
+    if (updatedTrip) {
+      getIO().to(`trip:${tripId}`).emit('trip:updated', formatTrip(updatedTrip));
+    }
   } catch (err) {
     // Silently swallow — image is non-critical
     logger.warn({ err, destination }, '[CoverImage] Failed to fetch cover image');
@@ -495,7 +516,55 @@ router.post('/:tripId/members', verifyToken,
  *       404:
  *         description: User or Trip not found
  */
-router.delete('/:tripId/members/:userId', verifyToken, asyncHandler(async (req, res) => {
+router.delete('/:tripId/members/me', verifyToken, validate({ params: tripIdParamSchema }), asyncHandler(async (req, res) => {
+  const trip = await prisma.trip.findUnique({
+    where: { id: req.params.tripId },
+    include: { members: true }
+  });
+  if (!trip) return res.status(404).json({ message: 'Trip not found' });
+
+  if (trip.ownerId === req.userId) {
+    return res.status(400).json({ message: 'Cannot leave the trip as the owner' });
+  }
+
+  const isMember = trip.members.some(m => m.userId === req.userId);
+  if (!isMember) {
+    return res.status(404).json({ message: 'You are not a member of this trip' });
+  }
+
+  const [userExpensesCount, userSplitsCount] = await Promise.all([
+    prisma.expense.count({
+      where: { tripId: trip.id, paidById: req.userId }
+    }),
+    prisma.expenseSplit.count({
+      where: {
+        expense: { tripId: trip.id },
+        userId: req.userId
+      }
+    })
+  ]);
+
+  if (userExpensesCount > 0 || userSplitsCount > 0) {
+    return res.status(409).json({ message: 'Cannot leave trip with existing expenses or splits' });
+  }
+
+  const currentUser = await prisma.user.findUnique({ where: { id: req.userId } });
+  const userEmail = currentUser ? currentUser.email : 'Unknown';
+
+  await prisma.tripMember.deleteMany({
+    where: {
+      tripId: trip.id,
+      userId: req.userId
+    }
+  });
+
+  await removeUserFromTripRoom(req.params.tripId, req.userId);
+  await logActivity(req.params.tripId, req.userId, 'left the trip', userEmail);
+
+  res.status(200).json({ message: 'Successfully left the trip' });
+}));
+
+router.delete('/:tripId/members/:userId', verifyToken, validate({ params: tripAndMemberParamSchema }), asyncHandler(async (req, res) => {
   const trip = await prisma.trip.findUnique({
     where: { id: req.params.tripId },
     include: { members: true }
@@ -510,6 +579,27 @@ router.delete('/:tripId/members/:userId', verifyToken, asyncHandler(async (req, 
     return res.status(400).json({ message: 'Cannot remove the trip owner' });
   }
 
+  const isMember = trip.members.some(m => m.userId === req.params.userId);
+  if (!isMember) {
+    return res.status(404).json({ message: 'User is not a member of this trip' });
+  }
+
+  const [userExpensesCount, userSplitsCount] = await Promise.all([
+    prisma.expense.count({
+      where: { tripId: trip.id, paidById: req.params.userId }
+    }),
+    prisma.expenseSplit.count({
+      where: {
+        expense: { tripId: trip.id },
+        userId: req.params.userId
+      }
+    })
+  ]);
+
+  if (userExpensesCount > 0 || userSplitsCount > 0) {
+    return res.status(409).json({ message: 'Cannot remove member with existing expenses or splits in the trip' });
+  }
+
   const removedUser = await prisma.user.findUnique({ where: { id: req.params.userId } });
   const removedEmail = removedUser ? removedUser.email : 'Unknown';
 
@@ -521,7 +611,6 @@ router.delete('/:tripId/members/:userId', verifyToken, asyncHandler(async (req, 
   });
 
   await removeUserFromTripRoom(req.params.tripId, req.params.userId);
-
   await logActivity(req.params.tripId, req.userId, 'removed a member', removedEmail);
 
   const updatedTrip = await prisma.trip.findUnique({
@@ -533,7 +622,10 @@ router.delete('/:tripId/members/:userId', verifyToken, asyncHandler(async (req, 
       expenses: {
         include: {
           paidBy: { select: { id: true, name: true, email: true } },
-          splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+          splits: {
+            orderBy: { id: 'asc' },
+            include: { user: { select: { id: true, name: true, email: true } } }
+          }
         }
       }
     }
@@ -674,7 +766,7 @@ router.post('/:tripId/places', verifyToken, checkTripMembership,
  *       404:
  *         description: Place not found
  */
-router.delete('/:tripId/places/:placeId', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
+router.delete('/:tripId/places/:placeId', verifyToken, checkTripMembership, validate({ params: tripAndPlaceParamSchema }), asyncHandler(async (req, res) => {
   const place = await prisma.place.findUnique({
     where: { id: req.params.placeId }
   });
@@ -920,7 +1012,13 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership,
 
     const trip = req.trip;
     const allMemberIds = [trip.ownerId, ...trip.members.map(m => m.userId)];
-    const normalizedSplits = splitAmong.map(u => (typeof u === 'object' && u ? (u._id || u.id) : u));
+
+    if (!allMemberIds.includes(paidBy)) {
+      return res.status(400).json({ message: 'paidBy user is not a member of this trip' });
+    }
+
+    const rawSplits = splitAmong.map(u => (typeof u === 'object' && u ? (u._id || u.id) : u));
+    const normalizedSplits = Array.from(new Set(rawSplits));
 
     const invalidMembers = normalizedSplits.filter(userId => !allMemberIds.includes(userId));
     if (invalidMembers.length > 0) {
@@ -942,7 +1040,10 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership,
       },
       include: {
         paidBy: { select: { id: true, name: true, email: true } },
-        splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+        splits: {
+          orderBy: { id: 'asc' },
+          include: { user: { select: { id: true, name: true, email: true } } }
+        }
       }
     });
 
@@ -979,7 +1080,7 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership,
  *       404:
  *         description: Expense not found
  */
-router.delete('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
+router.delete('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership, validate({ params: tripAndExpenseParamSchema }), asyncHandler(async (req, res) => {
   const expense = await prisma.expense.findUnique({
     where: { id: req.params.expenseId }
   });
@@ -1021,40 +1122,39 @@ router.delete('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership, 
  *         description: Balance summary returned
  */
 router.get('/:tripId/expenses/balances', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
-  const trip = await prisma.trip.findUnique({
-    where: { id: req.params.tripId },
-    include: {
-      owner: { select: { id: true, name: true, email: true } },
-      members: { include: { user: { select: { id: true, name: true, email: true } } } },
-      expenses: {
-        include: {
-          paidBy: { select: { id: true, name: true, email: true } },
-          splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+  const memberUserIds = [req.trip.ownerId, ...req.trip.members.map(m => m.userId)];
+  const [expenses, users] = await Promise.all([
+    prisma.expense.findMany({
+      where: { tripId: req.trip.id },
+      include: {
+        paidBy: { select: { id: true, name: true, email: true } },
+        splits: {
+          orderBy: { id: 'asc' },
+          include: { user: { select: { id: true, name: true, email: true } } }
         }
       }
-    }
-  });
+    }),
+    prisma.user.findMany({
+      where: { id: { in: memberUserIds } },
+      select: { id: true, name: true, email: true }
+    })
+  ]);
 
-  if (!trip) return res.status(404).json({ message: 'Trip not found' });
+  const allMembers = users.map(formatUser);
+  const formattedExpenses = expenses.map(formatExpense);
 
-  const memberMap = new Map();
-  if (trip.owner) {
-    memberMap.set(trip.owner.id, formatUser(trip.owner));
-  }
-  trip.members.forEach(m => {
-    if (m.user) memberMap.set(m.user.id, formatUser(m.user));
-  });
-
-  const allMembers = Array.from(memberMap.values());
-  const formattedExpenses = trip.expenses.map(formatExpense);
-
-  const { balanceMap, settlements, membersWithBalance } = calculateBalances(formattedExpenses, allMembers);
+  const { balanceMap, settlements, membersWithBalance, byCurrency } = calculateBalances(
+    formattedExpenses,
+    allMembers,
+    req.trip.currency || 'INR'
+  );
 
   res.json({
-    currency: trip.currency || 'INR',
+    currency: req.trip.currency || 'INR',
     balanceMap,
     settlements,
-    membersWithBalance
+    membersWithBalance,
+    byCurrency
   });
 }));
 
@@ -1091,31 +1191,39 @@ router.get('/:tripId/expenses/balances', verifyToken, checkTripMembership, async
  *       200:
  *         description: Itinerary suggestions returned
  */
-router.post('/:tripId/ai-suggestions', verifyToken, aiLimiter, checkTripMembership, asyncHandler(async (req, res) => {
-  const trip = await prisma.trip.findUnique({
-    where: { id: req.params.tripId },
-    include: {
-      members: { include: { user: { select: { id: true, name: true } } } },
-      places: true
-    }
-  });
-  if (!trip) return res.status(404).json({ message: 'Trip not found' });
+router.post('/:tripId/ai-suggestions', verifyToken, aiLimiter, checkTripMembership,
+  validate({ params: tripIdParamSchema, body: aiSuggestionsSchema }),
+  asyncHandler(async (req, res) => {
+    const trip = await prisma.trip.findUnique({
+      where: { id: req.params.tripId },
+      include: {
+        members: { include: { user: { select: { id: true, name: true } } } },
+        places: true
+      }
+    });
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
 
-  const memberNames = trip.members.map(m => m.user?.name).filter(Boolean).join(', ');
-  const existingPlaces = (trip.places || []).map(p => p.name).join(', ');
-  const tripDays = trip.startDate && trip.endDate
-    ? Math.ceil((new Date(trip.endDate) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24))
-    : 3;
+    const memberNames = trip.members.map(m => m.user?.name).filter(Boolean).join(', ');
+    const existingPlaces = (trip.places || []).map(p => p.name).join(', ');
+    const calculatedDays = calculateDurationDays(trip.startDate, trip.endDate) || 3;
+    const tripDays = Math.min(Math.max(1, calculatedDays), 14);
 
-  const prompt = `You are a travel expert. Plan a ${tripDays}-day trip to ${trip.destination}.
+    const safeName = String(trip.name || '').slice(0, 100).replace(/[\\`$]/g, '');
+    const safeDestination = String(trip.destination || '').slice(0, 100).replace(/[\\`$]/g, '');
+    const safeMembers = String(memberNames || '').slice(0, 200).replace(/[\\`$]/g, '');
+    const safeExistingPlaces = String(existingPlaces || 'Nothing yet').slice(0, 500).replace(/[\\`$]/g, '');
+    const safeBudget = String(req.body.budget || 'moderate').slice(0, 50).replace(/[\\`$]/g, '');
+    const safeInterests = String(Array.isArray(req.body.interests) ? req.body.interests.join(', ') : (req.body.interests || 'culture, food, sightseeing')).slice(0, 200).replace(/[\\`$]/g, '');
+
+    const prompt = `You are a travel expert. Plan a ${tripDays}-day trip to ${safeDestination}.
 
 Trip details:
-- Name: ${trip.name}
-- Members: ${memberNames} (${trip.members.length} people)
+- Name: ${safeName}
+- Members: ${safeMembers} (${trip.members.length} people)
 - Theme/Notes: General sightseeing
-- Already planned: ${existingPlaces || 'Nothing yet'}
-- Budget level: ${req.body.budget || 'moderate'}
-- Interests: ${req.body.interests || 'culture, food, sightseeing'}
+- Already planned: ${safeExistingPlaces}
+- Budget level: ${safeBudget}
+- Interests: ${safeInterests}
 
 Return ONLY a valid JSON object (no markdown, no explanation) in this exact format:
 {
@@ -1138,44 +1246,59 @@ Return ONLY a valid JSON object (no markdown, no explanation) in this exact form
   "tips": ["Practical tip 1", "Practical tip 2", "Practical tip 3"]
 }`;
 
-  const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${config.GROQ_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 2000
-    })
-  });
+    if (!config.GROQ_API_KEY) {
+      return res.status(502).json({ message: 'GROQ_API_KEY is not configured on the server' });
+    }
 
-  const groqData = await groqRes.json();
-  const raw = groqData.choices?.[0]?.message?.content || '{}';
-
-  let suggestions;
-  try {
-    suggestions = JSON.parse(raw);
-  } catch {
+    let groqRes;
     try {
-      const stripped = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
-      suggestions = JSON.parse(stripped);
-    } catch (e) {
-      suggestions = { error: 'Could not parse AI response', raw };
+      groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        signal: AbortSignal.timeout(20000),
+        headers: {
+          'Authorization': `Bearer ${config.GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 4000
+        })
+      });
+    } catch (err) {
+      return res.status(502).json({ message: `AI request failed: ${err.message}` });
     }
-  }
 
-  res.json({
-    suggestions,
-    tripContext: {
-      destination: trip.destination,
-      days: tripDays,
-      members: trip.members.length
+    if (!groqRes.ok) {
+      const errorText = await groqRes.text().catch(() => '');
+      return res.status(502).json({ message: `AI service returned error ${groqRes.status}: ${errorText || groqRes.statusText}` });
     }
-  });
-}));
+
+    const groqData = await groqRes.json().catch(() => ({}));
+    const raw = groqData.choices?.[0]?.message?.content || '';
+
+    let suggestions;
+    try {
+      suggestions = JSON.parse(raw);
+    } catch {
+      try {
+        const stripped = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+        suggestions = JSON.parse(stripped);
+      } catch (e) {
+        return res.status(502).json({ message: 'Failed to parse AI response as JSON', raw });
+      }
+    }
+
+    res.json({
+      suggestions,
+      tripContext: {
+        destination: trip.destination,
+        days: tripDays,
+        members: trip.members.length
+      }
+    });
+  }));
 
 /**
  * @swagger
@@ -1358,13 +1481,19 @@ router.put('/:id', verifyToken,
         expenses: {
           include: {
             paidBy: { select: { id: true, name: true, email: true } },
-            splits: { include: { user: { select: { id: true, name: true, email: true } } } }
+            splits: {
+              orderBy: { id: 'asc' },
+              include: { user: { select: { id: true, name: true, email: true } } }
+            }
           }
         }
       }
     });
 
-    res.json(formatTrip(updatedTrip));
+    const formatted = formatTrip(updatedTrip);
+    getIO().to(`trip:${updatedTrip.id}`).emit('trip:updated', formatted);
+
+    res.json(formatted);
   }));
 
 /**
@@ -1389,7 +1518,7 @@ router.put('/:id', verifyToken,
  *       404:
  *         description: Trip not found
  */
-router.delete('/:id', verifyToken, asyncHandler(async (req, res) => {
+router.delete('/:id', verifyToken, validate({ params: idParamSchema }), asyncHandler(async (req, res) => {
   const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
   if (!trip) return res.status(404).json({ message: 'Trip not found' });
 
@@ -1398,6 +1527,7 @@ router.delete('/:id', verifyToken, asyncHandler(async (req, res) => {
   }
 
   await prisma.trip.delete({ where: { id: req.params.id } });
+  getIO().to(`trip:${req.params.id}`).emit('trip:deleted', { tripId: req.params.id });
   await removeAllUsersFromTripRoom(req.params.id);
   res.json({ message: 'Trip deleted' });
 }));

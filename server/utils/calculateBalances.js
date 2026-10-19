@@ -5,84 +5,9 @@ function getMemberId(m) {
 }
 
 /**
- * Calculate balances for a trip's expenses using integer minor units (paise/cents)
- * to avoid floating-point drift, rounding only at the edges.
+ * Generate minimum transactions to settle all debts using minor units.
+ * Debtors and creditors are sorted descending by amount before matching.
  *
- * @param {Array} expenses - Array of expense objects
- * @param {Array} members - Array of member objects (with id/_id, name, email)
- * @returns {Object} { balanceMap, settlements, membersWithBalance }
- */
-function calculateBalances(expenses, members) {
-  // Initialize balance map in integer minor units (e.g. cents/paise)
-  const minorBalanceMap = {};
-  members.forEach(member => {
-    const mId = getMemberId(member);
-    if (mId) minorBalanceMap[mId] = 0;
-  });
-
-  // Process each expense in integer minor units
-  expenses.forEach(expense => {
-    const rawAmount = Number(expense.amount) || 0;
-    const amountMinor = Math.round(rawAmount * 100);
-
-    // Normalize payer id (handle user object or raw id)
-    const paidByUserId = getMemberId(expense.paidBy) || (expense.paidById ? expense.paidById.toString() : null);
-
-    // Normalize splitAmong to an array of ids (handle user objects or strings)
-    const splitIds = Array.isArray(expense.splitAmong)
-      ? expense.splitAmong.map(getMemberId).filter(Boolean)
-      : (Array.isArray(expense.splits)
-        ? expense.splits.map(s => getMemberId(s.user) || (s.userId ? s.userId.toString() : null)).filter(Boolean)
-        : []);
-
-    const splitCount = splitIds.length;
-    if (splitCount === 0 || !paidByUserId) return; // Skip if invalid
-
-    // Base share and remainder distributed evenly to ensure total sum equals amountMinor exactly
-    const baseShareMinor = Math.floor(amountMinor / splitCount);
-    const remainderMinor = amountMinor - (baseShareMinor * splitCount);
-
-    // Payer's balance increases by total amount in minor units
-    minorBalanceMap[paidByUserId] = (minorBalanceMap[paidByUserId] || 0) + amountMinor;
-
-    // Each participant owes their share
-    splitIds.forEach((userIdStr, idx) => {
-      const participantShare = baseShareMinor + (idx < remainderMinor ? 1 : 0);
-      minorBalanceMap[userIdStr] = (minorBalanceMap[userIdStr] || 0) - participantShare;
-    });
-  });
-
-  // Convert minor balances back to currency units (2 decimal places)
-  const balanceMap = {};
-  Object.entries(minorBalanceMap).forEach(([userId, minorBal]) => {
-    balanceMap[userId] = minorBal / 100;
-  });
-
-  // Generate settlements array using minor units
-  const settlements = generateSettlements(minorBalanceMap, members);
-
-  // Build members with balance info
-  const membersWithBalance = members.map(member => {
-    const mId = getMemberId(member);
-    const balanceMinor = minorBalanceMap[mId] || 0;
-    return {
-      id: mId,
-      _id: mId,
-      name: member.name,
-      email: member.email,
-      balance: balanceMinor / 100
-    };
-  });
-
-  return {
-    balanceMap,
-    settlements,
-    membersWithBalance
-  };
-}
-
-/**
- * Generate minimum transactions to settle all debts using minor units
  * @param {Object} minorBalanceMap - Map of userId to net balance in minor units
  * @param {Array} members - Array of member objects
  * @returns {Array} Array of settlement transactions
@@ -90,7 +15,6 @@ function calculateBalances(expenses, members) {
 function generateSettlements(minorBalanceMap, members) {
   const settlements = [];
 
-  // Create member id to name/email mapping
   const memberMap = {};
   members.forEach(m => {
     const mId = getMemberId(m);
@@ -99,7 +23,6 @@ function generateSettlements(minorBalanceMap, members) {
     }
   });
 
-  // Debtors (negative balance) and creditors (positive balance) in minor units
   const debtors = [];
   const creditors = [];
 
@@ -111,7 +34,10 @@ function generateSettlements(minorBalanceMap, members) {
     }
   });
 
-  // Match debtors with creditors greedily
+  // Sort debtors and creditors descending by amount
+  debtors.sort((a, b) => b.amountMinor - a.amountMinor);
+  creditors.sort((a, b) => b.amountMinor - a.amountMinor);
+
   let debtorIdx = 0;
   let creditorIdx = 0;
 
@@ -141,5 +67,113 @@ function generateSettlements(minorBalanceMap, members) {
   return settlements;
 }
 
-module.exports = { calculateBalances };
+function calculateSingleCurrencyBalances(expenses, members) {
+  const minorBalanceMap = {};
+  members.forEach(member => {
+    const mId = getMemberId(member);
+    if (mId) minorBalanceMap[mId] = 0;
+  });
+
+  expenses.forEach(expense => {
+    const rawAmount = Number(expense.amount) || 0;
+    const amountMinor = Math.round(rawAmount * 100);
+
+    const paidByUserId = getMemberId(expense.paidBy) || (expense.paidById ? expense.paidById.toString() : null);
+
+    const rawSplits = Array.isArray(expense.splitAmong)
+      ? expense.splitAmong.map(getMemberId).filter(Boolean)
+      : (Array.isArray(expense.splits)
+        ? expense.splits.map(s => getMemberId(s.user) || (s.userId ? s.userId.toString() : null)).filter(Boolean)
+        : []);
+
+    // Deduplicate and sort deterministically by userId
+    const splitIds = Array.from(new Set(rawSplits)).sort();
+
+    const splitCount = splitIds.length;
+    if (splitCount === 0 || !paidByUserId) return;
+
+    const baseShareMinor = Math.floor(amountMinor / splitCount);
+    const remainderMinor = amountMinor - (baseShareMinor * splitCount);
+
+    minorBalanceMap[paidByUserId] = (minorBalanceMap[paidByUserId] || 0) + amountMinor;
+
+    splitIds.forEach((userIdStr, idx) => {
+      const participantShare = baseShareMinor + (idx < remainderMinor ? 1 : 0);
+      minorBalanceMap[userIdStr] = (minorBalanceMap[userIdStr] || 0) - participantShare;
+    });
+  });
+
+  const balanceMap = {};
+  Object.entries(minorBalanceMap).forEach(([userId, minorBal]) => {
+    balanceMap[userId] = minorBal / 100;
+  });
+
+  const settlements = generateSettlements(minorBalanceMap, members);
+
+  const membersWithBalance = members.map(member => {
+    const mId = getMemberId(member);
+    const balanceMinor = minorBalanceMap[mId] || 0;
+    return {
+      id: mId,
+      _id: mId,
+      name: member.name,
+      email: member.email,
+      balance: balanceMinor / 100
+    };
+  });
+
+  return {
+    balanceMap,
+    settlements,
+    membersWithBalance
+  };
+}
+
+/**
+ * Calculate balances for a trip's expenses grouped by currency.
+ *
+ * @param {Array} expenses - Array of expense objects
+ * @param {Array} members - Array of member objects
+ * @param {string} [defaultCurrency='INR'] - Default currency fallback
+ * @returns {Object} { balanceMap, settlements, membersWithBalance, byCurrency }
+ */
+function calculateBalances(expenses = [], members = [], defaultCurrency = 'INR') {
+  const byCurrency = {};
+
+  if (!expenses || expenses.length === 0) {
+    const single = calculateSingleCurrencyBalances([], members);
+    byCurrency[defaultCurrency] = single;
+    return {
+      ...single,
+      byCurrency
+    };
+  }
+
+  // Group expenses by currency
+  const currencyGroups = new Map();
+  for (const exp of expenses) {
+    const curr = (exp.currency || defaultCurrency || 'INR').toUpperCase();
+    if (!currencyGroups.has(curr)) {
+      currencyGroups.set(curr, []);
+    }
+    currencyGroups.get(curr).push(exp);
+  }
+
+  for (const [curr, currExpenses] of currencyGroups.entries()) {
+    byCurrency[curr] = calculateSingleCurrencyBalances(currExpenses, members);
+  }
+
+  // Primary return uses first currency or default
+  const primaryCurrency = currencyGroups.keys().next().value || defaultCurrency;
+  const primaryResult = byCurrency[primaryCurrency];
+
+  return {
+    balanceMap: primaryResult.balanceMap,
+    settlements: primaryResult.settlements,
+    membersWithBalance: primaryResult.membersWithBalance,
+    byCurrency
+  };
+}
+
+module.exports = { calculateBalances, generateSettlements };
 

@@ -77,6 +77,8 @@ async function detectFileType(buffer) {
 }
 const { verifyToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
+const { validate } = require('../middleware/validate');
+const { updateProfileSchema, sendOtpSchema, verifyOtpSchema } = require('../validators/auth');
 const { sendOtpEmail } = require('../utils/mailer');
 const { createOtp, verifyOtp } = require('../utils/otpStore');
 const logger = require('../utils/logger');
@@ -195,7 +197,7 @@ router.get('/me', verifyToken, asyncHandler(async (req, res) => {
  *     security:
  *       - BearerAuth: []
  */
-router.put('/me', verifyToken, asyncHandler(async (req, res) => {
+router.put('/me', verifyToken, validate({ body: updateProfileSchema }), asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.userId } });
   if (!user) return res.status(404).json({ message: 'User not found.' });
 
@@ -361,12 +363,8 @@ router.post('/upload-photo', verifyToken, (req, res, next) => {
  *     summary: Send OTP code to email (account deletion only)
  *     tags: [Auth]
  */
-router.post('/send-otp', asyncHandler(async (req, res) => {
-  const { email, purpose } = req.body;
-
-  if (!email || !['register', 'delete'].includes(purpose)) {
-    return res.status(400).json({ message: 'Valid email and purpose are required.' });
-  }
+router.post('/send-otp', validate({ body: sendOtpSchema }), asyncHandler(async (req, res) => {
+  const { email, purpose = 'register' } = req.body;
 
   let targetEmail = email.toLowerCase().trim();
 
@@ -418,12 +416,8 @@ router.post('/send-otp', asyncHandler(async (req, res) => {
  *     summary: Verify OTP code
  *     tags: [Auth]
  */
-router.post('/verify-otp', asyncHandler(async (req, res) => {
-  const { email, otp, purpose } = req.body;
-
-  if (!email || !otp || !purpose) {
-    return res.status(400).json({ message: 'Email, OTP, and purpose are required.' });
-  }
+router.post('/verify-otp', validate({ body: verifyOtpSchema }), asyncHandler(async (req, res) => {
+  const { email, otp, purpose = 'register' } = req.body;
 
   const result = await verifyOtp(email.toLowerCase().trim(), otp, purpose);
   if (!result.ok) {
