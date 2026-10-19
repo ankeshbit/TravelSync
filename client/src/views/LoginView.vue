@@ -165,6 +165,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getFirebaseErrorMessage } from '../services/authService'
+import { safeRedirect } from '../utils/url'
 import api from '../api'
 
 const route = useRoute()
@@ -179,11 +180,7 @@ const showPassword = ref(false)
 const stats = ref(null)
 
 const getRedirectTarget = () => {
-  const r = route.query?.redirect
-  if (typeof r === 'string' && r.startsWith('/') && !r.startsWith('//')) {
-    return r
-  }
-  return '/dashboard'
+  return safeRedirect(route.query?.redirect, '/dashboard')
 }
 
 const fetchStats = async () => {

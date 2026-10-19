@@ -20,4 +20,9 @@ describe('formatCurrency', () => {
     expect(formatCurrency(null, 'USD')).toBe('$0.00');
     expect(formatCurrency('abc', 'USD')).toBe('$0.00');
   });
+
+  it('falls back to 2 fraction digits for invalid currency code like US', () => {
+    expect(formatCurrency(1200, 'US')).toBe('US 1,200.00');
+    expect(formatCurrency(50.5, 'US')).toBe('US 50.50');
+  });
 });

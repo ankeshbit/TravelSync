@@ -180,7 +180,7 @@ const removeUserFromTripRoom = async (tripId, userId) => {
   }
 };
 
-const removeAllUsersFromTripRoom = async (tripId) => {
+const removeAllUsersFromTripRoom = async (tripId, options = {}) => {
   if (!io) return;
   const roomName = `trip:${tripId}`;
   try {
@@ -189,14 +189,18 @@ const removeAllUsersFromTripRoom = async (tripId) => {
       for (const socketId of Array.from(room)) {
         const s = io.sockets.sockets.get(socketId);
         if (s) {
-          s.emit('trip:removed', { tripId });
+          if (!options.silent) {
+            s.emit('trip:removed', { tripId });
+          }
           s.leave(roomName);
         }
       }
     } else {
       const sockets = await io.in(roomName).fetchSockets();
       for (const s of sockets) {
-        s.emit('trip:removed', { tripId });
+        if (!options.silent) {
+          s.emit('trip:removed', { tripId });
+        }
         s.leave(roomName);
       }
     }

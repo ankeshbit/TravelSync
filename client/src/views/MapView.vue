@@ -270,13 +270,15 @@ import Sidebar from '../components/Sidebar.vue';
 import TripPresence from '../components/TripPresence.vue';
 import { useSocket } from '../composables/useSocket';
 import { usePlacesStore } from '../stores/places';
+import { useTripsStore } from '../stores/trips';
 import api from '../api';
 
 const route = useRoute();
 const placesStore = usePlacesStore();
+const tripsStore = useTripsStore();
 
 const tripId = computed(() => route.params.id || route.params.tripId);
-const trip = ref(null);
+const trip = computed(() => tripsStore.currentTrip);
 const activeDay = ref(1);
 const customDayCount = ref(0);
 const showAddPlace = ref(false);
@@ -387,8 +389,7 @@ const removePlace = async (placeId) => {
 onMounted(async () => {
   if (tripId.value) {
     try {
-      const res = await api.get(`/trips/${tripId.value}`);
-      trip.value = res.data;
+      await tripsStore.fetchTrip(tripId.value);
     } catch (err) {
       console.error('Error fetching trip:', err);
     }

@@ -335,5 +335,29 @@ describe('Socket and Auth Token Hardening Tests', () => {
       expect(data.tripId).toBe(testTrip.id);
       client.close();
     });
+
+    it('does NOT emit trip:removed when removeAllUsersFromTripRoom is called with silent: true', async () => {
+      const { removeAllUsersFromTripRoom } = require('../socket');
+      const client = Client(`http://localhost:${port}`, {
+        auth: { token: validToken },
+        query: { tripId: testTrip.id },
+        transports: ['websocket'],
+        reconnection: false
+      });
+
+      await new Promise((resolve) => {
+        client.on('connect', resolve);
+      });
+
+      let receivedRemoved = false;
+      client.on('trip:removed', () => {
+        receivedRemoved = true;
+      });
+
+      await removeAllUsersFromTripRoom(testTrip.id, { silent: true });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(receivedRemoved).toBe(false);
+      client.close();
+    });
   });
 });

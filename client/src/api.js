@@ -4,14 +4,12 @@
 import axios from 'axios';
 import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
+import { getApiUrl } from './utils/url';
 
 const LOGIN_ROUTE = '/login';
 
 const api = axios.create({
-  baseURL:
-    import.meta.env.VITE_API_BASE_URL ||
-    import.meta.env.VITE_API_URL ||
-    'http://localhost:3000/api',
+  baseURL: getApiUrl(),
   timeout: 15000,
 });
 

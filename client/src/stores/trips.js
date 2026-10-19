@@ -51,8 +51,10 @@ export const useTripsStore = defineStore('trips', {
         throw err
       }
     },
-    async fetchTrip(id) {
-      this.loading = true;
+    async fetchTrip(id, { background = false } = {}) {
+      if (!background) {
+        this.loading = true;
+      }
       this.error = null;
       try {
         const response = await api.get(`/trips/${id}`);
@@ -63,7 +65,9 @@ export const useTripsStore = defineStore('trips', {
         this.error = err.response?.data?.message || err.message;
         throw err;
       } finally {
-        this.loading = false;
+        if (!background) {
+          this.loading = false;
+        }
       }
     },
     resetCurrentTrip() {

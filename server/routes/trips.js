@@ -1532,7 +1532,7 @@ router.delete('/:id', verifyToken, validate({ params: idParamSchema }), asyncHan
 
   await prisma.trip.delete({ where: { id: req.params.id } });
   getIO().to(`trip:${req.params.id}`).emit('trip:deleted', { tripId: req.params.id });
-  await removeAllUsersFromTripRoom(req.params.id);
+  await removeAllUsersFromTripRoom(req.params.id, { silent: true });
   res.json({ message: 'Trip deleted' });
 }));
 

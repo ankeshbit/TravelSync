@@ -117,19 +117,24 @@ export function useSocket(tripId) {
 
     socket.value.on('member:joined', (user) => {
       toastStore.showToast(`${user.name || user.email || 'A new member'} joined the trip`, 'info');
-      tripsStore.fetchTrip(rawTripId).catch(() => {});
+      tripsStore.fetchTrip(rawTripId, { background: true }).catch(() => {});
     });
 
     socket.value.on('trip:updated', () => {
-      tripsStore.fetchTrip(rawTripId).catch(() => {});
+      tripsStore.fetchTrip(rawTripId, { background: true }).catch(() => {});
     });
 
+    let hasLeftTrip = false;
     socket.value.on('trip:deleted', () => {
+      if (hasLeftTrip) return;
+      hasLeftTrip = true;
       toastStore.showToast('This trip has been deleted by the owner', 'warning');
       router.push('/dashboard').catch(() => {});
     });
 
     socket.value.on('trip:removed', () => {
+      if (hasLeftTrip) return;
+      hasLeftTrip = true;
       toastStore.showToast('You have been removed from this trip', 'warning');
       router.push('/dashboard').catch(() => {});
     });

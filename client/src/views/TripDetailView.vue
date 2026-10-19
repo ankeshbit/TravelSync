@@ -292,7 +292,7 @@ const router = useRouter();
 const tripsStore = useTripsStore();
 
 const loading = ref(true);
-const trip = ref(null);
+const trip = computed(() => tripsStore.currentTrip);
 const showAiPlanner = ref(false);
 const showEditModal = ref(false);
 
@@ -360,12 +360,9 @@ const highlightsList = computed(() => {
 const fetchTrip = async () => {
   loading.value = true;
   try {
-    const res = await api.get(`/trips/${currentTripId.value}`);
-    if (res.data) {
-      trip.value = res.data;
-    }
+    await tripsStore.fetchTrip(currentTripId.value);
   } catch (err) {
-    trip.value = null;
+    // Handled in store
   } finally {
     loading.value = false;
   }

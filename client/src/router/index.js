@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { safeRedirect } from '../utils/url'
 
 const LoginView = () => import('../views/LoginView.vue')
 const RegisterView = () => import('../views/RegisterView.vue')
@@ -100,9 +101,7 @@ router.beforeEach(async (to, from, next) => {
     (to.path === '/login' || to.path === '/register' || to.path === '/forgot-password') &&
     authStore.isAuthenticated
   ) {
-    const redirectPath = (typeof to.query.redirect === 'string' && to.query.redirect.startsWith('/'))
-      ? to.query.redirect
-      : '/dashboard'
+    const redirectPath = safeRedirect(to.query.redirect, '/dashboard')
     next(redirectPath)
   } else {
     next()

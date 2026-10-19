@@ -75,4 +75,15 @@ describe('Router navigation guards', () => {
     await router.push('/forgot-password');
     expect(router.currentRoute.value.path).toBe('/forgot-password');
   });
+
+  it('rejects unsafe redirects like //evil.com or /\\evil.com and falls back to /dashboard', async () => {
+    const authStore = useAuthStore();
+    authStore.firebaseUser = { uid: 'u1', emailVerified: true };
+
+    await router.push('/login?redirect=//evil.com');
+    expect(router.currentRoute.value.path).toBe('/dashboard');
+
+    await router.push('/login?redirect=/\\evil.com');
+    expect(router.currentRoute.value.path).toBe('/dashboard');
+  });
 });

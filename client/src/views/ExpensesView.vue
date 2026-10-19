@@ -362,6 +362,7 @@ import { useRoute } from 'vue-router'
 import api from '../api'
 import { useExpensesStore } from '../stores/expenses'
 import { useAuthStore } from '../stores/auth'
+import { useTripsStore } from '../stores/trips'
 import Navbar from '../components/Navbar.vue'
 import Sidebar from '../components/Sidebar.vue'
 import TripPresence from '../components/TripPresence.vue'
@@ -372,8 +373,9 @@ import { formatCurrency } from '../utils/format'
 const route = useRoute()
 const expensesStore = useExpensesStore()
 const authStore = useAuthStore()
+const tripsStore = useTripsStore()
 
-const trip = ref(null)
+const trip = computed(() => tripsStore.currentTrip)
 const loading = ref(true)
 const balancesLoading = ref(false)
 const error = ref('')
@@ -527,8 +529,9 @@ const openSettleUpModal = () => {
 }
 
 const fetchTrip = async () => {
-  const res = await api.get(`/trips/${route.params.tripId}`)
-  trip.value = res.data
+  if (route.params.tripId) {
+    await tripsStore.fetchTrip(route.params.tripId)
+  }
 }
 
 const fetchExpenses = async () => {

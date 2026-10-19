@@ -22,8 +22,9 @@ vi.mock('socket.io-client', () => ({
   io: vi.fn(() => mockSocket)
 }));
 
+const mockPush = vi.fn().mockResolvedValue();
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn().mockResolvedValue() })
+  useRouter: () => ({ push: mockPush })
 }));
 
 vi.mock('../firebase', () => ({
@@ -140,6 +141,30 @@ describe('useSocket composable', () => {
 
     // Active members should be reset
     expect(composable.activeMembers.value).toEqual([]);
+
+    wrapper.unmount();
+  });
+
+  it('trip:deleted followed by trip:removed redirects and toasts only once', async () => {
+    const toastStore = useToastStore();
+    const showToastSpy = vi.spyOn(toastStore, 'showToast');
+
+    const TestComponent = defineComponent({
+      setup() {
+        useSocket('trip-123');
+        return () => h('div');
+      }
+    });
+
+    const wrapper = mount(TestComponent);
+
+    listeners['trip:deleted']();
+    listeners['trip:removed']();
+
+    expect(showToastSpy).toHaveBeenCalledTimes(1);
+    expect(showToastSpy).toHaveBeenCalledWith('This trip has been deleted by the owner', 'warning');
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/dashboard');
 
     wrapper.unmount();
   });
