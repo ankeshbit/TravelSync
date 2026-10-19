@@ -302,7 +302,7 @@ const onImgError = (e) => {
 
 const currentTripId = computed(() => route.params.id || route.params.tripId);
 const currentTrip = computed(() => trip.value);
-const { activeMembers } = useSocket(currentTripId);
+const { activeMembers } = useSocket(() => route.params.id || route.params.tripId);
 
 const allMembers = computed(() => {
   if (!currentTrip.value) return [];
@@ -371,9 +371,9 @@ const fetchTrip = async () => {
   }
 };
 
-const onItineraryGenerated = () => {
+const onItineraryGenerated = async () => {
   showAiPlanner.value = false;
-  router.push(`/trips/${currentTripId.value}/map?tab=itinerary`);
+  await fetchTrip();
 };
 
 watch(() => currentTripId.value, (newId) => {

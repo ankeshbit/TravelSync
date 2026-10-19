@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, ref, toValue } from 'vue';
+import { onUnmounted, ref, toValue, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { io } from 'socket.io-client';
 import { auth } from '../firebase';
@@ -17,8 +17,17 @@ export function useSocket(tripId) {
   const socket = ref(null);
   const activeMembers = ref([]);
 
-  onMounted(() => {
-    const rawTripId = toValue(tripId);
+  function disconnectSocket() {
+    if (socket.value) {
+      socket.value.removeAllListeners();
+      socket.value.disconnect();
+      socket.value = null;
+    }
+    activeMembers.value = [];
+  }
+
+  function connectSocket(rawTripId) {
+    disconnectSocket();
     if (!rawTripId) return;
 
     const socketURL = getBaseUrl();
@@ -124,14 +133,14 @@ export function useSocket(tripId) {
       toastStore.showToast('You have been removed from this trip', 'warning');
       router.push('/dashboard').catch(() => {});
     });
-  });
+  }
+
+  watch(() => toValue(tripId), (newTripId) => {
+    connectSocket(newTripId);
+  }, { immediate: true });
 
   onUnmounted(() => {
-    if (socket.value) {
-      socket.value.removeAllListeners();
-      socket.value.disconnect();
-      socket.value = null;
-    }
+    disconnectSocket();
   });
 
   return {

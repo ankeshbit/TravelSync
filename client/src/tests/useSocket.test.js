@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { useSocket } from '../composables/useSocket';
@@ -12,7 +12,9 @@ const mockSocket = {
     listeners[event] = cb;
   }),
   emit: vi.fn(),
-  removeAllListeners: vi.fn(),
+  removeAllListeners: vi.fn(() => {
+    Object.keys(listeners).forEach(k => delete listeners[k]);
+  }),
   disconnect: vi.fn()
 };
 
@@ -99,6 +101,45 @@ describe('useSocket composable', () => {
     expect(expensesStore.expenses).toEqual([]);
     expect(fetchBalancesSpy).toHaveBeenCalledWith('trip-123');
     expect(toastStore.toasts.some(t => t.message.includes('deleted an expense'))).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('switching tripId reconnects once and old listeners no longer fire', async () => {
+    const currentTripId = ref('trip-1');
+    let composable;
+    const TestComponent = defineComponent({
+      setup() {
+        composable = useSocket(() => currentTripId.value);
+        return () => h('div');
+      }
+    });
+
+    const wrapper = mount(TestComponent);
+
+    const { io } = await import('socket.io-client');
+    expect(io).toHaveBeenCalledTimes(1);
+    expect(io).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      query: { tripId: 'trip-1' }
+    }));
+
+    // Trigger user:joined on old connection
+    listeners['user:joined']({ id: 'u-initial', name: 'User Initial' });
+    expect(composable.activeMembers.value.length).toBe(1);
+
+    // Switch to trip-2
+    currentTripId.value = 'trip-2';
+    await wrapper.vm.$nextTick();
+
+    expect(mockSocket.removeAllListeners).toHaveBeenCalled();
+    expect(mockSocket.disconnect).toHaveBeenCalled();
+    expect(io).toHaveBeenCalledTimes(2);
+    expect(io).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({
+      query: { tripId: 'trip-2' }
+    }));
+
+    // Active members should be reset
+    expect(composable.activeMembers.value).toEqual([]);
 
     wrapper.unmount();
   });

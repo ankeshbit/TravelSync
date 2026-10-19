@@ -285,7 +285,7 @@ const mapLoaded = ref(false);
 const mapContainer = ref(null);
 const searchInput = ref(null);
 
-const { activeMembers } = useSocket(tripId);
+const { activeMembers } = useSocket(() => route.params.id || route.params.tripId);
 
 const newPlace = ref({
   name: '',

@@ -44,6 +44,28 @@
           </button>
         </div>
 
+        <!-- Currency Selector / Tabs -->
+        <div v-if="availableCurrencies.length > 0" class="flex items-center gap-2 mb-6">
+          <span class="text-xs font-semibold text-slate-400">Currency:</span>
+          <div class="flex items-center bg-[#090F1E] border border-[#16233F] rounded-xl p-1 gap-1">
+            <button
+              v-for="curr in availableCurrencies"
+              :key="curr"
+              type="button"
+              :data-test="`currency-tab-${curr}`"
+              @click="selectedCurrency = curr"
+              :class="[
+                'px-3 py-1 text-xs font-semibold rounded-lg transition-all',
+                selectedCurrency === curr
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#14203A]'
+              ]"
+            >
+              {{ curr }}
+            </button>
+          </div>
+        </div>
+
         <!-- 4 Stat Cards Row -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <!-- Total Expenses -->
@@ -335,7 +357,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, watchEffect, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api'
 import { useExpensesStore } from '../stores/expenses'
@@ -359,11 +381,45 @@ const loadError = ref(null)
 const showAddExpenseModal = ref(false)
 const showSettleModal = ref(false)
 
-const tripIdComputed = computed(() => route.params.tripId)
-const { activeMembers } = useSocket(tripIdComputed)
+const { activeMembers } = useSocket(() => route.params.tripId)
+
+const availableCurrencies = computed(() => {
+  const currencies = new Set()
+  const tripCurr = trip.value?.currency || expensesStore.currency
+  if (tripCurr) {
+    currencies.add(tripCurr.toUpperCase())
+  }
+  if (expensesStore.byCurrency) {
+    Object.keys(expensesStore.byCurrency).forEach(c => currencies.add(c.toUpperCase()))
+  }
+  if (expensesStore.expenses) {
+    expensesStore.expenses.forEach(e => {
+      if (e.currency) currencies.add(e.currency.toUpperCase())
+    })
+  }
+  if (currencies.size === 0) {
+    currencies.add('USD')
+  }
+  return Array.from(currencies)
+})
+
+const selectedCurrency = ref('')
+
+watchEffect(() => {
+  const list = availableCurrencies.value
+  const defaultCurr = (trip.value?.currency || expensesStore.currency || list[0] || 'USD').toUpperCase()
+  if (!selectedCurrency.value || !list.includes(selectedCurrency.value)) {
+    selectedCurrency.value = list.includes(defaultCurr) ? defaultCurr : (list[0] || 'USD')
+  }
+})
 
 const currentTripCurrency = computed(() => {
-  return trip.value?.currency || expensesStore.currency || 'USD'
+  return selectedCurrency.value || trip.value?.currency || expensesStore.currency || 'USD'
+})
+
+const currentCurrencyData = computed(() => {
+  const curr = currentTripCurrency.value
+  return expensesStore.byCurrency?.[curr] || null
 })
 
 const displayExpenses = computed(() => {
@@ -372,10 +428,9 @@ const displayExpenses = computed(() => {
 
 const displayOwesList = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
-  if (!expensesStore.settlements || expensesStore.settlements.length === 0) {
-    return []
-  }
-  return expensesStore.settlements.map((s, idx) => {
+  const currData = currentCurrencyData.value
+  const settlements = currData?.settlements || expensesStore.settlements || []
+  return settlements.map((s, idx) => {
     const isYouOwe = s.from === currentUserId
     const partnerName = isYouOwe ? s.toName : s.fromName
     return {
@@ -390,27 +445,28 @@ const displayOwesList = computed(() => {
 })
 
 const computedTotalExpenses = computed(() => {
-  const curr = currentTripCurrency.value
-  if (expensesStore.byCurrency && expensesStore.byCurrency[curr]?.totalExpenses !== undefined) {
-    return expensesStore.byCurrency[curr].totalExpenses
+  const currData = currentCurrencyData.value
+  if (currData && currData.totalExpenses !== undefined) {
+    return currData.totalExpenses
   }
-  return expensesStore.totalExpenses || 0
+  const curr = currentTripCurrency.value
+  return expensesStore.expenses
+    .filter(e => (e.currency || trip.value?.currency || 'USD').toUpperCase() === curr.toUpperCase())
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
 })
 
 const computedYourShare = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
   const curr = currentTripCurrency.value
-  if (expensesStore.byCurrency && expensesStore.byCurrency[curr]?.membersWithBalance) {
-    const member = expensesStore.byCurrency[curr].membersWithBalance.find(m => m.userId === currentUserId)
-    if (member && member.share !== undefined) {
-      return member.share
-    }
-  }
   if (!currentUserId || !expensesStore.expenses?.length) return 0
   return expensesStore.expenses.reduce((sum, item) => {
-    const splits = item.splitAmong || []
+    const itemCurrency = (item.currency || trip.value?.currency || 'USD').toUpperCase()
+    if (itemCurrency !== curr.toUpperCase()) return sum
+    const splits = Array.isArray(item.splitAmong)
+      ? item.splitAmong
+      : (Array.isArray(item.splits) ? item.splits.map(s => s.user?.id || s.userId || s) : [])
     if (splits.length === 0) {
-      return sum + (Number(item.amount) || 0)
+      return sum
     }
     const isIncluded = splits.some(u => {
       const uId = typeof u === 'object' ? (u.id || u._id) : u
@@ -425,16 +481,20 @@ const computedYourShare = computed(() => {
 
 const computedYouOwe = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
-  if (!currentUserId || !expensesStore.settlements?.length) return 0
-  return expensesStore.settlements
+  const currData = currentCurrencyData.value
+  const settlements = currData?.settlements || expensesStore.settlements || []
+  if (!currentUserId || !settlements.length) return 0
+  return settlements
     .filter(s => s.from === currentUserId)
     .reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
 })
 
 const computedYouAreOwed = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
-  if (!currentUserId || !expensesStore.settlements?.length) return 0
-  return expensesStore.settlements
+  const currData = currentCurrencyData.value
+  const settlements = currData?.settlements || expensesStore.settlements || []
+  if (!currentUserId || !settlements.length) return 0
+  return settlements
     .filter(s => s.to === currentUserId)
     .reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
 })

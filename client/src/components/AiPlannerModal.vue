@@ -140,7 +140,7 @@
               <button @click="resetForm" class="text-gray-500 hover:text-primary text-sm font-medium flex items-center gap-1">
                 <span class="material-symbols-outlined text-sm">refresh</span> Try Again
               </button>
-              <button @click="closeModal" class="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:opacity-90">
+              <button @click="onDone" class="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:opacity-90">
                 Done
               </button>
             </div>
@@ -173,6 +173,7 @@ const loading = ref(false);
 const itinerary = ref(null);
 const errorMessage = ref('');
 const addedPlaces = ref(new Set());
+const addedPlacesList = ref([]);
 
 const form = reactive({
   budget: 'moderate',
@@ -191,6 +192,7 @@ const resetForm = () => {
   itinerary.value = null;
   errorMessage.value = '';
   addedPlaces.value = new Set();
+  addedPlacesList.value = [];
   loading.value = false;
 };
 
@@ -198,11 +200,17 @@ const closeModal = () => {
   emit('update:isOpen', false);
 };
 
+const onDone = () => {
+  emit('itinerary-generated', addedPlacesList.value);
+  closeModal();
+};
+
 const generatePlan = async () => {
   loading.value = true;
   itinerary.value = null;
   errorMessage.value = '';
   addedPlaces.value = new Set();
+  addedPlacesList.value = [];
 
   try {
     const res = await api.post(`/trips/${props.tripId}/ai-suggestions`, {
@@ -215,15 +223,17 @@ const generatePlan = async () => {
       toastStore.showToast(res.data.suggestions.error, 'error');
     } else {
       itinerary.value = res.data.suggestions;
-      emit('itinerary-generated', res.data.suggestions);
       toastStore.showToast('Itinerary generated successfully!', 'success');
     }
   } catch (err) {
-    const msg = err.response?.status === 502
+    const is502 = err.response?.status === 502;
+    const msg = is502
       ? (err.response?.data?.message || 'AI service is temporarily unavailable (502). Please try again later.')
       : (err.response?.data?.message || 'Failed to generate plan.');
     errorMessage.value = msg;
-    toastStore.showToast(msg, 'error');
+    if (!is502) {
+      toastStore.showToast(msg, 'error');
+    }
   } finally {
     loading.value = false;
   }
@@ -233,26 +243,39 @@ const addPlaceToItinerary = async (place, dayNumber, index) => {
   const key = `${dayNumber}-${index}`;
   if (addedPlaces.value.has(key)) return;
 
+  if (place.lat == null || place.lng == null || isNaN(Number(place.lat)) || isNaN(Number(place.lng))) {
+    toastStore.showToast(`Skipping "${place.name || 'place'}" without valid coordinates`, 'warning');
+    return;
+  }
+
   try {
-    if (!placesStore.places.length) {
-      await placesStore.fetchPlaces(props.tripId).catch(() => {});
-    }
-    const placesOnDay = placesStore.places.filter(p => Number(p.dayNumber) === Number(dayNumber));
+    await placesStore.fetchPlaces(props.tripId);
+    const placesOnDay = (placesStore.places || []).filter(p => Number(p.dayNumber) === Number(dayNumber));
     const nextOrderIndex = placesOnDay.length > 0
       ? Math.max(...placesOnDay.map(p => Number(p.orderIndex ?? 0))) + 1
       : 0;
 
-    await placesStore.addPlace(props.tripId, {
+    const added = await placesStore.addPlace(props.tripId, {
       name: place.name,
-      address: place.name,
-      lat: place.lat ?? 0,
-      lng: place.lng ?? 0,
+      address: place.address || place.name,
+      lat: Number(place.lat),
+      lng: Number(place.lng),
       dayNumber: Number(dayNumber),
       orderIndex: nextOrderIndex,
       category: place.type || 'attraction',
       note: place.description || ''
     });
     addedPlaces.value = new Set([...addedPlaces.value, key]);
+    addedPlacesList.value.push(added || {
+      name: place.name,
+      address: place.address || place.name,
+      lat: Number(place.lat),
+      lng: Number(place.lng),
+      dayNumber: Number(dayNumber),
+      orderIndex: nextOrderIndex,
+      category: place.type || 'attraction',
+      note: place.description || ''
+    });
     toastStore.showToast(`"${place.name}" added to itinerary.`, 'success');
   } catch (err) {
     toastStore.showToast(`Failed to add "${place.name}".`, 'error');

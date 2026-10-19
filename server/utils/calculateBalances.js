@@ -74,9 +74,12 @@ function calculateSingleCurrencyBalances(expenses, members) {
     if (mId) minorBalanceMap[mId] = 0;
   });
 
+  let totalExpensesMinor = 0;
+
   expenses.forEach(expense => {
     const rawAmount = Number(expense.amount) || 0;
     const amountMinor = Math.round(rawAmount * 100);
+    totalExpensesMinor += amountMinor;
 
     const paidByUserId = getMemberId(expense.paidBy) || (expense.paidById ? expense.paidById.toString() : null);
 
@@ -103,6 +106,8 @@ function calculateSingleCurrencyBalances(expenses, members) {
     });
   });
 
+  const totalExpenses = totalExpensesMinor / 100;
+
   const balanceMap = {};
   Object.entries(minorBalanceMap).forEach(([userId, minorBal]) => {
     balanceMap[userId] = minorBal / 100;
@@ -123,6 +128,7 @@ function calculateSingleCurrencyBalances(expenses, members) {
   });
 
   return {
+    totalExpenses,
     balanceMap,
     settlements,
     membersWithBalance
@@ -168,6 +174,7 @@ function calculateBalances(expenses = [], members = [], defaultCurrency = 'INR')
   const primaryResult = byCurrency[primaryCurrency];
 
   return {
+    totalExpenses: primaryResult.totalExpenses,
     balanceMap: primaryResult.balanceMap,
     settlements: primaryResult.settlements,
     membersWithBalance: primaryResult.membersWithBalance,

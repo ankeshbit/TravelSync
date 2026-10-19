@@ -148,12 +148,14 @@ describe('calculateBalances', () => {
     expect(result.byCurrency.USD).toBeDefined();
     expect(result.byCurrency.EUR).toBeDefined();
 
+    expect(result.byCurrency.USD.totalExpenses).toBe(100);
     expect(result.byCurrency.USD.balanceMap['1']).toBe(50);
     expect(result.byCurrency.USD.balanceMap['2']).toBe(-50);
     expect(result.byCurrency.USD.settlements).toEqual([
       expect.objectContaining({ from: '2', to: '1', amount: 50 })
     ]);
 
+    expect(result.byCurrency.EUR.totalExpenses).toBe(200);
     expect(result.byCurrency.EUR.balanceMap['2']).toBe(100);
     expect(result.byCurrency.EUR.balanceMap['1']).toBe(-100);
     expect(result.byCurrency.EUR.settlements).toEqual([

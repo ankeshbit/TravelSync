@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import api from '../api'
 
+let fetchTripsRequestId = 0;
+
 export const useTripsStore = defineStore('trips', {
   state: () => ({
     trips: [],
@@ -13,16 +15,21 @@ export const useTripsStore = defineStore('trips', {
   }),
   actions: {
     async fetchTrips() {
+      const currentRequestId = ++fetchTripsRequestId;
       this.loading = true;
       this.error = null;
       try {
         const response = await api.get('/trips');
+        if (currentRequestId !== fetchTripsRequestId) return;
         this.trips = response.data.trips ?? response.data;
       } catch (err) {
+        if (currentRequestId !== fetchTripsRequestId) return;
         this.error = err.response?.data?.message || err.message;
         throw err;
       } finally {
-        this.loading = false;
+        if (currentRequestId === fetchTripsRequestId) {
+          this.loading = false;
+        }
       }
     },
     async createTrip(data) {

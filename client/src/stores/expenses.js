@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import api from '../api';
 
+let fetchExpensesRequestId = 0;
+
 export const useExpensesStore = defineStore('expenses', {
   state: () => ({
     expenses: [],
@@ -31,6 +33,7 @@ export const useExpensesStore = defineStore('expenses', {
     },
 
     async fetchExpenses(tripId) {
+      const currentRequestId = ++fetchExpensesRequestId;
       this.resetExpenses();
       this.loading = true;
       this.error = null;
@@ -38,14 +41,18 @@ export const useExpensesStore = defineStore('expenses', {
         let allExpenses = [];
         let page = 1;
         let hasNextPage = true;
+        let responseCurrency = null;
 
         while (hasNextPage) {
           const response = await api.get(`/trips/${tripId}/expenses?page=${page}&limit=50`);
+          if (currentRequestId !== fetchExpensesRequestId) {
+            return;
+          }
           const data = response.data;
           const pageExpenses = data.expenses ?? (Array.isArray(data) ? data : []);
           allExpenses = allExpenses.concat(pageExpenses);
           if (data.currency) {
-            this.currency = data.currency;
+            responseCurrency = data.currency;
           }
           if (data.pagination && data.pagination.hasNextPage) {
             page += 1;
@@ -53,12 +60,19 @@ export const useExpensesStore = defineStore('expenses', {
             hasNextPage = false;
           }
         }
+        if (currentRequestId !== fetchExpensesRequestId) return;
         this.expenses = allExpenses;
+        if (responseCurrency) {
+          this.currency = responseCurrency;
+        }
       } catch (err) {
+        if (currentRequestId !== fetchExpensesRequestId) return;
         this.error = err.response?.data?.message || err.message;
         throw err;
       } finally {
-        this.loading = false;
+        if (currentRequestId === fetchExpensesRequestId) {
+          this.loading = false;
+        }
       }
     },
 

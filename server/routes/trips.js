@@ -1247,7 +1247,8 @@ Return ONLY a valid JSON object (no markdown, no explanation) in this exact form
 }`;
 
     if (!config.GROQ_API_KEY) {
-      return res.status(502).json({ message: 'GROQ_API_KEY is not configured on the server' });
+      logger.error('AI service is not configured (missing GROQ_API_KEY)');
+      return res.status(502).json({ message: 'AI service is not configured' });
     }
 
     let groqRes;
@@ -1267,12 +1268,14 @@ Return ONLY a valid JSON object (no markdown, no explanation) in this exact form
         })
       });
     } catch (err) {
-      return res.status(502).json({ message: `AI request failed: ${err.message}` });
+      logger.error({ err }, 'AI request failed');
+      return res.status(502).json({ message: 'AI service is unavailable' });
     }
 
     if (!groqRes.ok) {
       const errorText = await groqRes.text().catch(() => '');
-      return res.status(502).json({ message: `AI service returned error ${groqRes.status}: ${errorText || groqRes.statusText}` });
+      logger.error({ status: groqRes.status, errorText }, 'AI service returned error');
+      return res.status(502).json({ message: 'AI service is unavailable' });
     }
 
     const groqData = await groqRes.json().catch(() => ({}));
@@ -1286,7 +1289,8 @@ Return ONLY a valid JSON object (no markdown, no explanation) in this exact form
         const stripped = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
         suggestions = JSON.parse(stripped);
       } catch (e) {
-        return res.status(502).json({ message: 'Failed to parse AI response as JSON', raw });
+        logger.error({ err: e, raw }, 'Failed to parse AI response as JSON');
+        return res.status(502).json({ message: 'AI returned an invalid response' });
       }
     }
 
