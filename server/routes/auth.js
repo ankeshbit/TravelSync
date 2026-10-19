@@ -251,12 +251,38 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'User not found.' });
   }
 
+  // Pre-check: if the user has any expenses paid or splits, reject with 409 before burning the OTP
+  const [expensesPaidCount, expenseSplitsCount] = await Promise.all([
+    prisma.expense.count({ where: { paidById: req.userId } }),
+    prisma.expenseSplit.count({ where: { userId: req.userId } })
+  ]);
+
+  if (expensesPaidCount > 0 || expenseSplitsCount > 0) {
+    return res.status(409).json({
+      message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
+      code: 'ACCOUNT_HAS_EXPENSES'
+    });
+  }
+
   const otpResult = await verifyOtp(user.email, otp, 'delete');
   if (!otpResult.ok) {
     return res.status(403).json({ message: otpResult.reason || 'Invalid or expired OTP.' });
   }
 
-  // Delete Firebase user via firebase-admin if firebaseUid is present
+  // Delete DB user first inside a try/catch mapping P2003 to 409
+  try {
+    await prisma.user.delete({ where: { id: req.userId } });
+  } catch (dbErr) {
+    if (dbErr.code === 'P2003') {
+      return res.status(409).json({
+        message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
+        code: 'ACCOUNT_HAS_EXPENSES'
+      });
+    }
+    throw dbErr;
+  }
+
+  // Delete Firebase user via firebase-admin if firebaseUid is present (log failure and still return 200)
   if (user.firebaseUid) {
     try {
       const { getAdminApp } = require('../config/firebaseAdmin');
@@ -264,7 +290,7 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       const adminApp = getAdminApp();
       await getAuth(adminApp).deleteUser(user.firebaseUid);
     } catch (fbErr) {
-      logger.warn({ err: fbErr }, 'Failed to delete Firebase user during account deletion');
+      logger.error({ err: fbErr }, 'Failed to delete Firebase user during account deletion (DB user already deleted)');
     }
   }
 
@@ -279,9 +305,6 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       logger.warn({ err: fileErr }, 'Failed to delete user uploaded photo during account deletion');
     }
   }
-
-  // Cascade deletion handles owned trips and member associations
-  await prisma.user.delete({ where: { id: req.userId } });
 
   res.json({ message: 'Account deleted successfully.' });
 }));

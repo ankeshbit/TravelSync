@@ -46,11 +46,25 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+let hasShownEmailVerifyToast = false;
+
 // ── Response interceptor ──────────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const status = error.response?.status;
+
+    // Special handling for EMAIL_NOT_VERIFIED (403): do not sign out, redirect to /verify-email
+    if (status === 403 && error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+      if (toastStoreRef && !hasShownEmailVerifyToast) {
+        hasShownEmailVerifyToast = true;
+        toastStoreRef.showToast(error.response.data.message || 'Please verify your email to continue', 'warning');
+      }
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/verify-email')) {
+        window.location.href = '/verify-email';
+      }
+      return Promise.reject(error);
+    }
 
     if (status === 401) {
       // Firebase tokens expire after 1 hour. Try a forced refresh once.
@@ -79,8 +93,8 @@ api.interceptors.response.use(
       redirectToLogin();
     }
 
-    // Show toast notifications for API errors
-    if (toastStoreRef) {
+    // Show toast notifications for API errors (unless explicitly suppressed)
+    if (toastStoreRef && !error.config?.skipErrorToast) {
       if (error.response) {
         const message = error.response.data?.message || 'An error occurred';
         if (status === 403) {

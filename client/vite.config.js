@@ -9,6 +9,12 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    globals: true
+    globals: true,
+    env: {
+      VITE_FIREBASE_API_KEY: 'test-key',
+      VITE_FIREBASE_AUTH_DOMAIN: 'test.firebaseapp.com',
+      VITE_FIREBASE_PROJECT_ID: 'test',
+      VITE_FIREBASE_APP_ID: '1:1:web:1'
+    }
   }
 })

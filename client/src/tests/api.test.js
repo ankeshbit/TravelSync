@@ -92,4 +92,19 @@ describe('api.js interceptors', () => {
     expect(locationHref).toBe('http://localhost:3000/login');
     api.defaults.adapter = originalAdapter;
   });
+
+  it('does not sign out on 403 with EMAIL_NOT_VERIFIED and redirects to /verify-email', async () => {
+    const originalAdapter = api.defaults.adapter;
+    api.defaults.adapter = vi.fn().mockImplementation(async (config) => {
+      const err = new Error('Forbidden');
+      err.response = { status: 403, data: { code: 'EMAIL_NOT_VERIFIED', message: 'Email not verified' } };
+      err.config = config;
+      throw err;
+    });
+
+    await expect(api.get('/test')).rejects.toThrow();
+    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(locationHref).toBe('/verify-email');
+    api.defaults.adapter = originalAdapter;
+  });
 });

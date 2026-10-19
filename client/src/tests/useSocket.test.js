@@ -3,6 +3,8 @@ import { defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { useSocket } from '../composables/useSocket';
+import { useExpensesStore } from '../stores/expenses';
+import { useToastStore } from '../stores/toast';
 
 const listeners = {};
 const mockSocket = {
@@ -72,5 +74,32 @@ describe('useSocket composable', () => {
     wrapper.unmount();
     expect(mockSocket.removeAllListeners).toHaveBeenCalled();
     expect(mockSocket.disconnect).toHaveBeenCalled();
+  });
+
+  it('deletes the ONLY expense, refetches balances, and shows toast on expense:deleted', async () => {
+    const expensesStore = useExpensesStore();
+    const toastStore = useToastStore();
+    expensesStore.expenses = [{ id: 'exp-1', title: 'Coffee', amount: 5 }];
+    const fetchBalancesSpy = vi.spyOn(expensesStore, 'fetchBalances').mockResolvedValue();
+
+    const TestComponent = defineComponent({
+      setup() {
+        useSocket('trip-123');
+        return () => h('div');
+      }
+    });
+
+    const wrapper = mount(TestComponent);
+
+    expect(listeners['expense:deleted']).toBeDefined();
+
+    // Trigger expense:deleted on the only expense
+    listeners['expense:deleted']({ expenseId: 'exp-1' });
+
+    expect(expensesStore.expenses).toEqual([]);
+    expect(fetchBalancesSpy).toHaveBeenCalledWith('trip-123');
+    expect(toastStore.toasts.some(t => t.message.includes('deleted an expense'))).toBe(true);
+
+    wrapper.unmount();
   });
 });

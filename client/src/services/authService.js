@@ -8,29 +8,26 @@ import {
   signInWithPopup,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
 } from 'firebase/auth';
 import { auth } from '../firebase';
-
-import api from '../api';
 
 // ── Email / Password ──────────────────────────────────────────────────────────
 
 /**
  * Register a new user with email and password.
- * Also sets the Firebase displayName so /api/auth/me has a name to sync.
+ * Also sets the Firebase displayName and sends email verification.
  */
 export async function registerWithEmail(name, email, password) {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   // Persist the display name in Firebase immediately
   await updateProfile(credential.user, { displayName: name });
-  const freshToken = await credential.user.getIdToken(true);
-  try {
-    await api.put('/auth/me', { name }, {
-      headers: { Authorization: `Bearer ${freshToken}` }
-    });
-  } catch {
-    // Non-fatal if initial sync or PUT fails; will retry on subsequent visits
+  // Send verification email to activate account
+  await sendEmailVerification(credential.user);
+  // Store chosen name to submit to backend after email verification
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('pendingUserName', name);
   }
   return credential.user;
 }

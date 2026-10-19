@@ -164,12 +164,28 @@ export const useAuthStore = defineStore('auth', {
      * The request interceptor in api.js automatically attaches the Firebase ID token.
      */
     async _syncMongoUser() {
+      if (this.firebaseUser && !this.firebaseUser.emailVerified) {
+        return;
+      }
+      const pendingName = typeof window !== 'undefined' ? localStorage.getItem('pendingUserName') : null;
+      if (pendingName) {
+        try {
+          await api.put('/auth/me', { name: pendingName });
+          localStorage.removeItem('pendingUserName');
+        } catch {
+          // If error, will retry later
+        }
+      }
       const res = await api.get('/auth/me');
       this.currentUser = res.data;
       // Keep localStorage in sync so Navbar/Settings avatar works immediately
       if (typeof window !== 'undefined') {
         localStorage.setItem('user', JSON.stringify(res.data));
       }
+    },
+
+    async syncUser() {
+      return this._syncMongoUser();
     },
 
     // ── Legacy compatibility stubs ────────────────────────────────────────────

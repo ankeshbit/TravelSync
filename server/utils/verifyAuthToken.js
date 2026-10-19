@@ -151,7 +151,8 @@ async function verifyAuthToken(token) {
             }
           }
           const err = new Error('Email is not verified. Please verify your email.');
-          err.statusCode = 401;
+          err.statusCode = 403;
+          err.code = 'EMAIL_NOT_VERIFIED';
           throw err;
         }
 
@@ -194,7 +195,7 @@ async function verifyAuthToken(token) {
           throw createErr;
         }
       } catch (dbErr) {
-        if (dbErr.statusCode === 401) {
+        if (dbErr.statusCode === 401 || dbErr.statusCode === 403) {
           throw dbErr;
         }
         handleDatabaseError(dbErr, 'Firebase user synchronization');
@@ -202,7 +203,7 @@ async function verifyAuthToken(token) {
       }
     }
   } catch (firebaseErr) {
-    if (firebaseErr.statusCode === 503 || isDatabaseDownError(firebaseErr) || firebaseErr.statusCode === 401) {
+    if (firebaseErr.statusCode === 503 || isDatabaseDownError(firebaseErr) || firebaseErr.statusCode === 401 || firebaseErr.statusCode === 403) {
       throw firebaseErr;
     }
   }

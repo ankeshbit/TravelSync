@@ -12,6 +12,7 @@ vi.mock('../views/SettingsView.vue', () => ({ default: { template: '<div>Setting
 vi.mock('../views/NotFoundView.vue', () => ({ default: { template: '<div>NotFound</div>' } }));
 vi.mock('../views/MapView.vue', () => ({ default: { template: '<div>Map</div>' } }));
 vi.mock('../views/ExpensesView.vue', () => ({ default: { template: '<div>Expenses</div>' } }));
+vi.mock('../views/VerifyEmailView.vue', () => ({ default: { template: '<div>VerifyEmail</div>' } }));
 
 import router from '../router';
 import { useAuthStore } from '../stores/auth';
@@ -35,25 +36,33 @@ describe('Router navigation guards', () => {
     expect(router.currentRoute.value.query.redirect).toBe('/dashboard');
   });
 
-  it('redirects authenticated users from /login to /dashboard', async () => {
+  it('redirects unverified user to /verify-email', async () => {
     const authStore = useAuthStore();
-    authStore.firebaseUser = { uid: 'u1' };
+    authStore.firebaseUser = { uid: 'u1', emailVerified: false };
+
+    await router.push('/dashboard');
+    expect(router.currentRoute.value.path).toBe('/verify-email');
+  });
+
+  it('redirects authenticated verified users from /login to /dashboard', async () => {
+    const authStore = useAuthStore();
+    authStore.firebaseUser = { uid: 'u1', emailVerified: true };
 
     await router.push('/login');
     expect(router.currentRoute.value.path).toBe('/dashboard');
   });
 
-  it('redirects authenticated users to redirect query target if present', async () => {
+  it('redirects authenticated verified users to redirect query target if present', async () => {
     const authStore = useAuthStore();
-    authStore.firebaseUser = { uid: 'u1' };
+    authStore.firebaseUser = { uid: 'u1', emailVerified: true };
 
     await router.push('/login?redirect=/explore');
     expect(router.currentRoute.value.path).toBe('/explore');
   });
 
-  it('allows authenticated users to access protected routes', async () => {
+  it('allows authenticated verified users to access protected routes', async () => {
     const authStore = useAuthStore();
-    authStore.firebaseUser = { uid: 'u1' };
+    authStore.firebaseUser = { uid: 'u1', emailVerified: true };
 
     await router.push('/settings');
     expect(router.currentRoute.value.path).toBe('/settings');

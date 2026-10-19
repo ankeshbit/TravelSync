@@ -16,6 +16,14 @@ jest.mock('../config/firebaseAdmin', () => ({
         email_verified: false
       };
     }
+    if (token === 'unverified-existing-token') {
+      return {
+        uid: 'test-firebase-uid-unverified-existing',
+        email: 'john@example.com',
+        name: 'Unverified Existing',
+        email_verified: false
+      };
+    }
     if (token === 'other-token') {
       return {
         uid: 'test-firebase-uid-other',
@@ -32,6 +40,13 @@ jest.mock('../config/firebaseAdmin', () => ({
     };
   }),
   getAdminApp: jest.fn().mockReturnValue({})
+}));
+
+const mockDeleteUser = jest.fn().mockResolvedValue();
+jest.mock('firebase-admin/auth', () => ({
+  getAuth: jest.fn(() => ({
+    deleteUser: mockDeleteUser
+  }))
 }));
 
 jest.setTimeout(30000);
@@ -169,11 +184,20 @@ describe('TravelSync API Integration Tests', () => {
         expect(res.status).toBe(401);
       });
 
-      it('should return 401 with an unverified email token', async () => {
+      it('should return 403 EMAIL_NOT_VERIFIED with an unverified new email token', async () => {
         const res = await request(app)
           .get('/api/auth/me')
           .set('Authorization', 'Bearer unverified-token');
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe('EMAIL_NOT_VERIFIED');
+      });
+
+      it('should return 401 when an unverified email would link to an existing account', async () => {
+        const res = await request(app)
+          .get('/api/auth/me')
+          .set('Authorization', 'Bearer unverified-existing-token');
         expect(res.status).toBe(401);
+        expect(res.body.message).toContain('Email must be verified to link');
       });
     });
   });
@@ -571,6 +595,83 @@ describe('TravelSync API Integration Tests', () => {
       expect(res.status).toBe(403);
     });
 
+    it('DELETE /api/auth/me should return 409 when the user has expenses', async () => {
+      await prisma.otp.deleteMany();
+      await prisma.expense.create({
+        data: {
+          tripId: 'some-trip',
+          title: 'Lunch',
+          amount: 25,
+          paidById: testUser.id
+        }
+      });
+
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ACCOUNT_HAS_EXPENSES');
+
+      await prisma.expense.deleteMany();
+    });
+
+    it('DELETE /api/auth/me performs deletion order (DB before Firebase)', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      const executionOrder = [];
+      const originalDelete = prisma.user.delete;
+      prisma.user.delete = jest.fn(async (args) => {
+        executionOrder.push('db_delete');
+        return originalDelete(args);
+      });
+      mockDeleteUser.mockImplementationOnce(async () => {
+        executionOrder.push('firebase_delete');
+      });
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(200);
+      expect(executionOrder).toEqual(['db_delete', 'firebase_delete']);
+      prisma.user.delete = originalDelete;
+
+      await prisma.user.upsert({
+        where: { id: testUser.id },
+        update: {},
+        create: testUser
+      });
+    });
+
+    it('DELETE /api/auth/me returns 200 even if Firebase deleteUser fails after DB delete', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      mockDeleteUser.mockRejectedValueOnce(new Error('Firebase connection error'));
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(200);
+
+      await prisma.user.upsert({
+        where: { id: testUser.id },
+        update: {},
+        create: testUser
+      });
+    });
+
     it('POST /api/auth/upload-photo should reject SVG upload with 400', async () => {
       const svgBuffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>');
       const res = await request(app)
@@ -605,6 +706,14 @@ describe('TravelSync API Integration Tests', () => {
       const res = await request(app)
         .post('/api/auth/send-otp')
         .send({});
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('POST /api/auth/send-otp with { email: 123 } returns 400 instead of 500', async () => {
+      const res = await request(app)
+        .post('/api/auth/send-otp')
+        .send({ email: 123 });
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
     });

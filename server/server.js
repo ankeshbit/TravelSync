@@ -3,7 +3,7 @@ const config = require('./config/env');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
@@ -111,14 +111,11 @@ const generalApiLimiter = rateLimit({
 });
 app.use('/api', generalApiLimiter);
 
-// Separate OTP limiters: 5 sends and 10 verifies per 15 min, keyed by IP + email
-const getOtpKey = (req) => `${req.ip || 'ip'}_${(req.body && req.body.email) ? req.body.email.toLowerCase().trim() : ''}`;
-
+// Separate OTP limiters: 5 sends and 10 verifies per 15 min, keyed by IP only
 const sendOtpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,
-  keyGenerator: getOtpKey,
-  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     message: 'Too many OTP requests, please try again in 15 minutes.'
   },
@@ -129,8 +126,7 @@ const sendOtpLimiter = rateLimit({
 const verifyOtpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
-  keyGenerator: getOtpKey,
-  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     message: 'Too many OTP verification attempts, please try again in 15 minutes.'
   },

@@ -2,7 +2,6 @@ const http = require('http');
 const express = require('express');
 const { io: Client } = require('socket.io-client');
 const jwt = require('jsonwebtoken');
-const config = require('../config/env');
 const { setupSocket } = require('../socket');
 const { verifyAuthToken } = require('../utils/verifyAuthToken');
 const { prisma } = require('../db');
@@ -109,7 +108,7 @@ describe('Socket and Auth Token Hardening Tests', () => {
     validToken = 'firebase-valid-token';
     memberToken = 'firebase-member-token';
     outsiderToken = 'firebase-nonmember-token';
-    jwtToken = jwt.sign({ userId: ownerUser.id }, config.JWT_SECRET);
+    jwtToken = jwt.sign({ userId: ownerUser.id }, 'test-secret-at-least-32-chars-long');
 
     // Setup HTTP and Socket.IO server on dynamic port
     const app = express();

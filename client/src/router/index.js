@@ -11,11 +11,14 @@ const ExploreView = () => import('../views/ExploreView.vue')
 const SettingsView = () => import('../views/SettingsView.vue')
 const NotFoundView = () => import('../views/NotFoundView.vue')
 
+const VerifyEmailView = () => import('../views/VerifyEmailView.vue')
+
 const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', component: LoginView },
   { path: '/register', component: RegisterView },
   { path: '/forgot-password', component: ForgotPasswordView },
+  { path: '/verify-email', component: VerifyEmailView, meta: { requiresAuth: false } },
   {
     path: '/dashboard',
     component: DashboardView,
@@ -73,6 +76,22 @@ router.beforeEach(async (to, from, next) => {
   // so there is no redirect loop even when already initialized
   if (!authStore.initialized) {
     await authStore.waitForAuth()
+  }
+
+  const isUnverified = Boolean(authStore.firebaseUser && !authStore.firebaseUser.emailVerified)
+
+  if (isUnverified) {
+    if (to.path !== '/verify-email' && to.path !== '/login') {
+      return next('/verify-email')
+    }
+    return next()
+  }
+
+  if (to.path === '/verify-email') {
+    if (!authStore.isAuthenticated) {
+      return next('/login')
+    }
+    return next('/dashboard')
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {

@@ -181,7 +181,7 @@ async function handleVerify() {
         email: props.email,
         otp: otpValue.value,
         purpose: props.purpose,
-      });
+      }, { skipErrorToast: true });
     }
     emit('verified', otpValue.value);
   } catch (err) {

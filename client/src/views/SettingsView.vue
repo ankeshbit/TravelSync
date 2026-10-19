@@ -327,11 +327,19 @@ const initiateDeleteAccount = async () => {
 };
 
 const handleDeleteAccount = async (otp) => {
-  await api.delete('/auth/me', { data: { otp } });
-  toastStore.showToast('Your account has been deleted.', 'success');
+  await api.delete('/auth/me', { data: { otp }, skipErrorToast: true });
   showDeleteModal.value = false;
-  await authStore.logout();
-  router.push('/login');
+  const { signOut } = await import('firebase/auth');
+  const { auth } = await import('../firebase');
+  try {
+    await signOut(auth);
+  } catch {}
+  authStore.clearAuth();
+  if (typeof window !== 'undefined') {
+    localStorage.clear();
+  }
+  await router.push('/login');
+  toastStore.showToast('Account deleted successfully.', 'success');
 };
 
 const fetchUserProfile = async () => {

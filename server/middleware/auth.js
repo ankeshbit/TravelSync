@@ -25,7 +25,11 @@ const verifyToken = async (req, res, next) => {
       return res.status(503).json({ message: 'Database service unavailable. Please try again later.' });
     }
     const statusCode = err.statusCode || 401;
-    return res.status(statusCode).json({ message: err.message || 'Invalid or expired token.' });
+    const body = { message: err.message || 'Invalid or expired token.' };
+    if (err.code) {
+      body.code = err.code;
+    }
+    return res.status(statusCode).json(body);
   }
 };
 

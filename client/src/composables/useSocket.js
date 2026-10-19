@@ -98,7 +98,7 @@ export function useSocket(tripId) {
     });
 
     socket.value.on('expense:deleted', (data) => {
-      const exists = expensesStore.expenses.find(e => (e.id || e._id) !== data.expenseId);
+      const exists = expensesStore.expenses.find(e => (e.id || e._id) === data.expenseId);
       if (exists) {
         expensesStore.expenses = expensesStore.expenses.filter(e => (e.id || e._id) !== data.expenseId);
         expensesStore.fetchBalances(rawTripId).catch(() => {});
