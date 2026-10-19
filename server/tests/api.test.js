@@ -1,5 +1,6 @@
 process.env.JWT_SECRET = 'test-jwt-secret-min-32-chars-long-validation-ok';
 process.env.REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long-validation-ok';
+process.env.OTP_SECRET = 'test-otp-secret-min-32-chars-long-validation-ok';
 process.env.ALLOWED_ORIGIN = 'http://localhost:5173';
 process.env.NODE_ENV = 'test';
 
@@ -7,20 +8,30 @@ process.env.NODE_ENV = 'test';
 jest.mock('../config/firebaseAdmin', () => ({
   verifyFirebaseToken: jest.fn().mockImplementation(async (token) => {
     if (token === 'invalidtoken') throw new Error('Invalid token');
+    if (token === 'unverified-token') {
+      return {
+        uid: 'test-firebase-uid-unverified',
+        email: 'unverified@example.com',
+        name: 'Unverified User',
+        email_verified: false
+      };
+    }
     if (token === 'other-token') {
       return {
         uid: 'test-firebase-uid-other',
         email: 'jane@example.com',
-        name: 'Jane Smith'
+        name: 'Jane Smith',
+        email_verified: true
       };
     }
     return {
       uid: 'test-firebase-uid-primary',
       email: 'john@example.com',
-      name: 'John Doe'
+      name: 'John Doe',
+      email_verified: true
     };
   }),
-  getAdminApp: jest.fn()
+  getAdminApp: jest.fn().mockReturnValue({})
 }));
 
 jest.setTimeout(30000);
@@ -155,6 +166,13 @@ describe('TravelSync API Integration Tests', () => {
         const res = await request(app)
           .get('/api/auth/me')
           .set('Authorization', 'Bearer invalidtoken');
+        expect(res.status).toBe(401);
+      });
+
+      it('should return 401 with an unverified email token', async () => {
+        const res = await request(app)
+          .get('/api/auth/me')
+          .set('Authorization', 'Bearer unverified-token');
         expect(res.status).toBe(401);
       });
     });
@@ -380,6 +398,14 @@ describe('TravelSync API Integration Tests', () => {
         expect(Array.isArray(res.body)).toBe(true);
       });
 
+      it('PATCH /api/trips/:tripId/places/reorder should return 400 with a foreign place id', async () => {
+        const res = await request(app)
+          .patch(`/api/trips/${testTripId}/places/reorder`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .send([{ placeId: 'foreign-place-id-not-in-trip', dayNumber: 1, orderIndex: 0 }]);
+        expect(res.status).toBe(400);
+      });
+
       it('DELETE /api/trips/:tripId/places/:placeId should delete place', async () => {
         if (!testPlaceId) return;
         const res = await request(app)
@@ -535,6 +561,34 @@ describe('TravelSync API Integration Tests', () => {
         .post('/api/auth/refresh')
         .send({});
       expect(res.status).toBe(410);
+    });
+
+    it('DELETE /api/auth/me should return 403 without a valid OTP', async () => {
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({});
+      expect(res.status).toBe(403);
+    });
+
+    it('POST /api/auth/upload-photo should reject SVG upload with 400', async () => {
+      const svgBuffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>');
+      const res = await request(app)
+        .post('/api/auth/upload-photo')
+        .set('Authorization', `Bearer ${userToken}`)
+        .attach('photo', svgBuffer, 'avatar.svg');
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('Only JPEG, PNG, WebP, and GIF');
+    });
+
+    it('POST /api/auth/upload-photo should accept valid PNG image', async () => {
+      const pngBuffer = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082', 'hex');
+      const res = await request(app)
+        .post('/api/auth/upload-photo')
+        .set('Authorization', `Bearer ${userToken}`)
+        .attach('photo', pngBuffer, 'avatar.png');
+      expect(res.status).toBe(200);
+      expect(res.body.pictureUrl).toMatch(/^\/uploads\/user-.*\.png$/);
     });
   });
 

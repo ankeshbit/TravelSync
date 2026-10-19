@@ -38,7 +38,7 @@ const isAllowedOrigin = (origin) => {
 
   // Allow localhost origins ONLY when NODE_ENV !== 'production'
   if (!config.isProduction) {
-    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return true;
     }
   }
@@ -74,7 +74,15 @@ app.use((req, res, next) => {
 // ─── Static Uploads ───────────────────────────────────────────────────────────
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-app.use('/uploads', express.static(uploadsDir));
+const ALLOWED_UPLOAD_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  const ext = path.extname(req.path).toLowerCase();
+  if (ALLOWED_UPLOAD_EXTS.has(ext)) {
+    res.setHeader('Content-Disposition', 'inline');
+  }
+  next();
+}, express.static(uploadsDir));
 
 // ─── Socket.IO Setup ─────────────────────────────────────────────────────────
 const { setupSocket } = require('./socket');

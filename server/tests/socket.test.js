@@ -116,10 +116,10 @@ describe('Socket and Auth Token Hardening Tests', () => {
       expect(user.id).toBe(ownerUser.id);
     });
 
-    it('accepts local JWT token as fallback and resolves user', async () => {
-      const user = await verifyAuthToken(jwtToken);
-      expect(user).toBeDefined();
-      expect(user.id).toBe(ownerUser.id);
+    it('rejects local JWT token since local fallback is removed', async () => {
+      await expect(verifyAuthToken(jwtToken)).rejects.toMatchObject({
+        statusCode: 401
+      });
     });
 
     it('rejects missing or empty token with 401', async () => {
@@ -206,9 +206,9 @@ describe('Socket and Auth Token Hardening Tests', () => {
       });
 
       client1.on('connect', () => {
-        // Now connect client2 with local JWT for same trip
+        // Now connect client2 for same trip
         const client2 = Client(`http://localhost:${port}`, {
-          auth: { token: jwtToken },
+          auth: { token: validToken },
           query: { tripId: testTrip.id },
           transports: ['websocket'],
           reconnection: false
@@ -236,7 +236,7 @@ describe('Socket and Auth Token Hardening Tests', () => {
 
       client1.on('connect', () => {
         const client2 = Client(`http://localhost:${port}`, {
-          auth: { token: jwtToken },
+          auth: { token: validToken },
           query: { tripId: testTrip.id },
           transports: ['websocket'],
           reconnection: false
@@ -270,7 +270,7 @@ describe('Socket and Auth Token Hardening Tests', () => {
 
       client1.on('connect', () => {
         const client2 = Client(`http://localhost:${port}`, {
-          auth: { token: jwtToken },
+          auth: { token: validToken },
           query: { tripId: testTrip.id },
           transports: ['websocket'],
           reconnection: false
@@ -288,6 +288,29 @@ describe('Socket and Auth Token Hardening Tests', () => {
           client2.disconnect();
         });
       });
+    });
+
+    it('emits trip:removed and removes socket when user is removed from trip', async () => {
+      const { removeUserFromTripRoom } = require('../socket');
+      const client = Client(`http://localhost:${port}`, {
+        auth: { token: validToken },
+        query: { tripId: testTrip.id },
+        transports: ['websocket'],
+        reconnection: false
+      });
+
+      await new Promise((resolve) => {
+        client.on('connect', resolve);
+      });
+
+      const removedPromise = new Promise((resolve) => {
+        client.on('trip:removed', resolve);
+      });
+
+      await removeUserFromTripRoom(testTrip.id, ownerUser.id);
+      const data = await removedPromise;
+      expect(data.tripId).toBe(testTrip.id);
+      client.close();
     });
   });
 });

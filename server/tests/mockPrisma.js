@@ -356,6 +356,8 @@ function setupPrismaMock() {
     let results = Array.from(places.values());
     if (where?.tripId) results = results.filter(p => p.tripId === where.tripId);
     if (where?.dayNumber !== undefined) results = results.filter(p => p.dayNumber === where.dayNumber);
+    if (where?.id?.in) results = results.filter(p => where.id.in.includes(p.id));
+    else if (where?.id) results = results.filter(p => p.id === where.id);
     return results.length;
   });
 

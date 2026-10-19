@@ -25,6 +25,8 @@ const setupSocket = (server, corsOptions) => {
       const dbUser = await verifyAuthToken(token);
       socket.user = formatUser(dbUser);
       socket.userId = dbUser.id;
+      socket.data = socket.data || {};
+      socket.data.userId = dbUser.id;
       next();
     } catch (err) {
       next(new Error(`Authentication error: ${err.message || 'Invalid or expired token'}`));
@@ -111,4 +113,60 @@ const getIO = () => {
   return io;
 };
 
-module.exports = { setupSocket, getIO };
+const removeUserFromTripRoom = async (tripId, userId) => {
+  if (!io) return;
+  const roomName = `trip:${tripId}`;
+  try {
+    const room = io.sockets.adapter?.rooms?.get(roomName);
+    if (room) {
+      for (const socketId of Array.from(room)) {
+        const s = io.sockets.sockets.get(socketId);
+        if (s && (s.userId === userId || s.user?.id === userId || s.data?.userId === userId)) {
+          s.emit('trip:removed', { tripId, userId });
+          s.leave(roomName);
+        }
+      }
+    } else {
+      const sockets = await io.in(roomName).fetchSockets();
+      for (const s of sockets) {
+        if (s.userId === userId || s.data?.userId === userId) {
+          s.emit('trip:removed', { tripId, userId });
+          s.leave(roomName);
+        }
+      }
+    }
+  } catch (err) {
+    if (!config.isProduction) {
+      logger.error({ err }, 'Error removing user socket from trip room');
+    }
+  }
+};
+
+const removeAllUsersFromTripRoom = async (tripId) => {
+  if (!io) return;
+  const roomName = `trip:${tripId}`;
+  try {
+    const room = io.sockets.adapter?.rooms?.get(roomName);
+    if (room) {
+      for (const socketId of Array.from(room)) {
+        const s = io.sockets.sockets.get(socketId);
+        if (s) {
+          s.emit('trip:removed', { tripId });
+          s.leave(roomName);
+        }
+      }
+    } else {
+      const sockets = await io.in(roomName).fetchSockets();
+      for (const s of sockets) {
+        s.emit('trip:removed', { tripId });
+        s.leave(roomName);
+      }
+    }
+  } catch (err) {
+    if (!config.isProduction) {
+      logger.error({ err }, 'Error removing all sockets from trip room');
+    }
+  }
+};
+
+module.exports = { setupSocket, getIO, removeUserFromTripRoom, removeAllUsersFromTripRoom };

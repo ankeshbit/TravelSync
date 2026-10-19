@@ -19,27 +19,19 @@ function validateEnv(env = process.env) {
     errors.push('DATABASE_URL is missing or empty.');
   }
 
-  // 2. JWT_SECRET validation (min 32 chars)
-  const JWT_SECRET = (env.JWT_SECRET || '').trim();
-  if (!JWT_SECRET) {
-    if (isProduction) {
-      errors.push('JWT_SECRET is missing.');
+  // 2. OTP_SECRET validation (required for HMAC in otpStore, min 32 chars)
+  const OTP_SECRET = (env.OTP_SECRET || (isTest ? 'travelsync-test-otp-secret-key-32chars' : '')).trim();
+  if (!OTP_SECRET) {
+    if (isProduction || !isTest) {
+      errors.push('OTP_SECRET is missing or empty.');
     }
-  } else if (JWT_SECRET.length < 32) {
-    errors.push(`JWT_SECRET must be at least 32 characters long (currently ${JWT_SECRET.length}).`);
+  } else if (OTP_SECRET.length < 32) {
+    errors.push(`OTP_SECRET must be at least 32 characters long (currently ${OTP_SECRET.length}).`);
   }
 
-  // 3. REFRESH_SECRET validation (min 32 chars, different from JWT_SECRET)
+  // JWT_SECRET and REFRESH_SECRET are optional and unused after Firebase migration
+  const JWT_SECRET = (env.JWT_SECRET || '').trim();
   const REFRESH_SECRET = (env.REFRESH_SECRET || '').trim();
-  if (!REFRESH_SECRET) {
-    if (isProduction) {
-      errors.push('REFRESH_SECRET is missing.');
-    }
-  } else if (REFRESH_SECRET.length < 32) {
-    errors.push(`REFRESH_SECRET must be at least 32 characters long (currently ${REFRESH_SECRET.length}).`);
-  } else if (JWT_SECRET && REFRESH_SECRET === JWT_SECRET) {
-    errors.push('REFRESH_SECRET must be different from JWT_SECRET.');
-  }
 
   // 4. ALLOWED_ORIGIN validation
   const ALLOWED_ORIGIN = (env.ALLOWED_ORIGIN || '').trim();
@@ -130,8 +122,9 @@ function validateEnv(env = process.env) {
     PORT: parseInt(env.PORT, 10) || 3000,
     DATABASE_URL,
     DIRECT_URL,
-    JWT_SECRET: JWT_SECRET || (!isProduction ? 'travelsync-dev-insecure-jwt-secret-min-32-chars-long' : ''),
-    REFRESH_SECRET: REFRESH_SECRET || (!isProduction ? 'travelsync-dev-insecure-refresh-secret-min-32-chars' : ''),
+    OTP_SECRET,
+    JWT_SECRET,
+    REFRESH_SECRET,
     ALLOWED_ORIGIN: ALLOWED_ORIGIN || (!isProduction ? 'http://localhost:5173' : ''),
     TRUST_PROXY,
     GROQ_API_KEY,

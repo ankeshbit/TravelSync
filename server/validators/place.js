@@ -16,13 +16,25 @@ const updatePlaceNoteSchema = z.object({
   note: z.string().trim().max(2000, 'note must be 2000 characters or fewer').optional().default('')
 });
 
-const reorderPlacesSchema = z.object({
-  places: z.array(z.object({
-    id: z.string().trim().min(1, 'id is required'),
-    dayNumber: z.coerce.number().int().min(1, 'dayNumber must be >= 1'),
-    orderIndex: z.coerce.number().int().min(0, 'orderIndex must be >= 0')
-  })).min(1, 'places array must not be empty')
-});
+const reorderPlaceItemSchema = z.object({
+  placeId: z.string().trim().min(1).optional(),
+  id: z.string().trim().min(1).optional(),
+  dayNumber: z.coerce.number().int().min(1, 'dayNumber must be >= 1'),
+  orderIndex: z.coerce.number().int().min(0, 'orderIndex must be >= 0')
+}).refine(item => Boolean(item.placeId || item.id), {
+  message: 'placeId or id is required'
+}).transform(item => ({
+  placeId: item.placeId || item.id,
+  dayNumber: item.dayNumber,
+  orderIndex: item.orderIndex
+}));
+
+const reorderPlacesSchema = z.union([
+  z.array(reorderPlaceItemSchema),
+  z.object({
+    places: z.array(reorderPlaceItemSchema)
+  }).transform(data => data.places)
+]);
 
 module.exports = {
   createPlaceSchema,

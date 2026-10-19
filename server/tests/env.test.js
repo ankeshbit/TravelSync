@@ -18,16 +18,14 @@ describe('Environment & Server Configuration Tests', () => {
   test('validateEnv accepts valid environment variables', () => {
     const customEnv = {
       DATABASE_URL: 'postgresql://user:pass@localhost:5432/testdb',
-      JWT_SECRET: 'a'.repeat(32),
-      REFRESH_SECRET: 'b'.repeat(32),
+      OTP_SECRET: 'o'.repeat(32),
       ALLOWED_ORIGIN: 'http://localhost:5173,http://localhost:3000',
       NODE_ENV: 'development'
     };
 
     const config = validateEnv(customEnv);
     expect(config.DATABASE_URL).toBe('postgresql://user:pass@localhost:5432/testdb');
-    expect(config.JWT_SECRET).toBe('a'.repeat(32));
-    expect(config.REFRESH_SECRET).toBe('b'.repeat(32));
+    expect(config.OTP_SECRET).toBe('o'.repeat(32));
     expect(config.ALLOWED_ORIGIN).toBe('http://localhost:5173,http://localhost:3000');
     expect(config.isProduction).toBe(false);
     expect(config.errors).toHaveLength(0);
@@ -54,7 +52,7 @@ describe('Environment & Server Configuration Tests', () => {
     errorMock.mockRestore();
   });
 
-  test('in production mode, fails fast if JWT_SECRET is less than 32 characters', () => {
+  test('in production mode, fails fast if OTP_SECRET is less than 32 characters', () => {
     const exitMock = jest.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`process.exit: ${code}`);
     });
@@ -63,8 +61,7 @@ describe('Environment & Server Configuration Tests', () => {
     const invalidProdEnv = {
       NODE_ENV: 'production',
       DATABASE_URL: 'postgresql://localhost:5432/db',
-      JWT_SECRET: 'short-secret',
-      REFRESH_SECRET: 'b'.repeat(32),
+      OTP_SECRET: 'short-secret',
       ALLOWED_ORIGIN: 'https://example.com'
     };
 
@@ -76,27 +73,17 @@ describe('Environment & Server Configuration Tests', () => {
     errorMock.mockRestore();
   });
 
-  test('in production mode, fails fast if REFRESH_SECRET matches JWT_SECRET', () => {
-    const exitMock = jest.spyOn(process, 'exit').mockImplementation((code) => {
-      throw new Error(`process.exit: ${code}`);
-    });
-    const errorMock = jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    const sameSecret = 'c'.repeat(32);
-    const invalidProdEnv = {
+  test('in production mode, accepts valid configuration with optional JWT_SECRET omitted', () => {
+    const validProdEnv = {
       NODE_ENV: 'production',
       DATABASE_URL: 'postgresql://localhost:5432/db',
-      JWT_SECRET: sameSecret,
-      REFRESH_SECRET: sameSecret,
+      OTP_SECRET: 'o'.repeat(32),
       ALLOWED_ORIGIN: 'https://example.com'
     };
 
-    expect(() => {
-      validateEnv(invalidProdEnv);
-    }).toThrow('process.exit: 1');
-
-    exitMock.mockRestore();
-    errorMock.mockRestore();
+    const config = validateEnv(validProdEnv);
+    expect(config.OTP_SECRET).toBe('o'.repeat(32));
+    expect(config.errors).toHaveLength(0);
   });
 
   test('in development mode, warns but does not exit when variables are missing', () => {

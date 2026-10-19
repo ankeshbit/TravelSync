@@ -48,7 +48,7 @@ function getAdminApp() {
  */
 async function verifyFirebaseToken(idToken) {
   const app = getAdminApp();
-  return getAuth(app).verifyIdToken(idToken);
+  return getAuth(app).verifyIdToken(idToken, true);
 }
 
 module.exports = { verifyFirebaseToken, getAdminApp };

@@ -6,12 +6,12 @@ const { prisma, formatTrip, formatPlace, formatExpense, formatUser, formatActivi
 const { verifyToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validate } = require('../middleware/validate');
-const { getIO } = require('../socket');
+const { getIO, removeUserFromTripRoom, removeAllUsersFromTripRoom } = require('../socket');
 const logActivity = require('../utils/logActivity');
 const { calculateBalances } = require('../utils/calculateBalances');
 const logger = require('../utils/logger');
 const { createTripSchema, updateTripSchema, addMemberSchema } = require('../validators/trip');
-const { createPlaceSchema, updatePlaceNoteSchema } = require('../validators/place');
+const { createPlaceSchema, updatePlaceNoteSchema, reorderPlacesSchema } = require('../validators/place');
 const { createExpenseSchema } = require('../validators/expense');
 const { tripIdParamSchema, idParamSchema, tripAndPlaceParamSchema } = require('../validators/common');
 
@@ -456,7 +456,12 @@ router.post('/:tripId/members', verifyToken,
       }
     });
 
-    getIO().to(`trip:${req.params.tripId}`).emit('member:joined', formatUser(user));
+    getIO().to(`trip:${req.params.tripId}`).emit('member:joined', {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      picture: user.picture
+    });
 
     res.status(200).json(formatTrip(updatedTrip));
   }));
@@ -514,6 +519,8 @@ router.delete('/:tripId/members/:userId', verifyToken, asyncHandler(async (req, 
       userId: req.params.userId
     }
   });
+
+  await removeUserFromTripRoom(req.params.tripId, req.params.userId);
 
   await logActivity(req.params.tripId, req.userId, 'removed a member', removedEmail);
 
@@ -763,20 +770,37 @@ router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership,
  *         description: Places reordered successfully
  */
 router.patch('/:tripId/places/reorder', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
-  const updates = req.body; // Array of { placeId, dayNumber, orderIndex }
+  const parseResult = reorderPlacesSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({
+      message: 'Invalid reorder data',
+      errors: parseResult.error.format()
+    });
+  }
 
-  if (Array.isArray(updates) && updates.length > 0) {
+  const updates = parseResult.data; // Array of { placeId, dayNumber, orderIndex }
+
+  if (updates.length > 0) {
+    const placeIds = [...new Set(updates.map(u => u.placeId))];
+    const matchingCount = await prisma.place.count({
+      where: {
+        id: { in: placeIds },
+        tripId: req.params.tripId
+      }
+    });
+
+    if (matchingCount !== placeIds.length) {
+      return res.status(400).json({ message: 'One or more places do not belong to this trip.' });
+    }
+
     await prisma.$transaction(
-      updates.map(update => {
-        const id = update.placeId || update._id || update.id;
-        const data = {};
-        if (update.dayNumber !== undefined) data.dayNumber = Number(update.dayNumber);
-        if (update.orderIndex !== undefined) data.orderIndex = Number(update.orderIndex);
-        return prisma.place.update({
-          where: { id },
-          data
-        });
-      })
+      updates.map(update => prisma.place.update({
+        where: { id: update.placeId },
+        data: {
+          dayNumber: update.dayNumber,
+          orderIndex: update.orderIndex
+        }
+      }))
     );
   }
 
@@ -1374,6 +1398,7 @@ router.delete('/:id', verifyToken, asyncHandler(async (req, res) => {
   }
 
   await prisma.trip.delete({ where: { id: req.params.id } });
+  await removeAllUsersFromTripRoom(req.params.id);
   res.json({ message: 'Trip deleted' });
 }));
 

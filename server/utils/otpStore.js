@@ -27,7 +27,10 @@ const MAX_ATTEMPTS = 5;
  * @returns {string} 64-char hex digest
  */
 function hashOtp(otp) {
-  const secret = config.JWT_SECRET || 'travelsync-otp-secret-key-min-32chars';
+  const secret = config.OTP_SECRET;
+  if (!secret) {
+    throw new Error('OTP_SECRET is not configured.');
+  }
   return crypto.createHmac('sha256', secret).update(String(otp)).digest('hex');
 }
 

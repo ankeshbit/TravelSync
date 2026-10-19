@@ -14,36 +14,76 @@
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const multer = require('multer');
 const config = require('../config/env');
 const { prisma, formatUser } = require('../db');
+
+async function detectFileType(buffer) {
+  try {
+    const dynamicImport = new Function('specifier', 'return import(specifier)');
+    const { fileTypeFromBuffer } = await dynamicImport('file-type');
+    const result = await fileTypeFromBuffer(buffer);
+    if (result) return result;
+  } catch (_err) {
+    // In environments where dynamic import callback is unavailable (e.g. Jest VM), detect magic bytes
+  }
+
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return undefined;
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { ext: 'jpg', mime: 'image/jpeg' };
+  }
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return { ext: 'png', mime: 'image/png' };
+  }
+  // GIF: GIF87a or GIF89a
+  if (
+    buffer[0] === 0x47 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x38 &&
+    (buffer[4] === 0x37 || buffer[4] === 0x39) &&
+    buffer[5] === 0x61
+  ) {
+    return { ext: 'gif', mime: 'image/gif' };
+  }
+  // WebP: RIFF....WEBP
+  if (
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    return { ext: 'webp', mime: 'image/webp' };
+  }
+
+  return undefined;
+}
 const { verifyToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { sendOtpEmail } = require('../utils/mailer');
 const { createOtp, verifyOtp } = require('../utils/otpStore');
+const logger = require('../utils/logger');
 
 // ─── Multer Setup ─────────────────────────────────────────────────────────────
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../uploads'));
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `user-${req.userId}-${Date.now()}${ext}`);
-  }
-});
-
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed.'), false);
-  }
-};
-
 const upload = multer({
-  storage,
-  fileFilter,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 } // 5 MB
 });
 
@@ -198,15 +238,44 @@ router.put('/me/password', (req, res) => {
  *       - BearerAuth: []
  */
 router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
-  const { otpVerified } = req.body;
+  const { otp } = req.body || {};
 
-  if (!otpVerified) {
-    return res.status(403).json({ message: 'Email verification required before account deletion.' });
+  if (!otp) {
+    return res.status(403).json({ message: 'Valid OTP required for account deletion.' });
   }
 
   const user = await prisma.user.findUnique({ where: { id: req.userId } });
   if (!user) {
     return res.status(404).json({ message: 'User not found.' });
+  }
+
+  const otpResult = await verifyOtp(user.email, otp, 'delete');
+  if (!otpResult.ok) {
+    return res.status(403).json({ message: otpResult.reason || 'Invalid or expired OTP.' });
+  }
+
+  // Delete Firebase user via firebase-admin if firebaseUid is present
+  if (user.firebaseUid) {
+    try {
+      const { getAdminApp } = require('../config/firebaseAdmin');
+      const { getAuth } = require('firebase-admin/auth');
+      const adminApp = getAdminApp();
+      await getAuth(adminApp).deleteUser(user.firebaseUid);
+    } catch (fbErr) {
+      logger.warn({ err: fbErr }, 'Failed to delete Firebase user during account deletion');
+    }
+  }
+
+  // Remove the user's uploaded photo file
+  if (user.picture && user.picture.startsWith('/uploads/')) {
+    const photoPath = path.join(__dirname, '..', user.picture);
+    try {
+      if (fs.existsSync(photoPath)) {
+        fs.unlinkSync(photoPath);
+      }
+    } catch (fileErr) {
+      logger.warn({ err: fileErr }, 'Failed to delete user uploaded photo during account deletion');
+    }
   }
 
   // Cascade deletion handles owned trips and member associations
@@ -229,15 +298,50 @@ router.post('/upload-photo', verifyToken, (req, res, next) => {
     if (err) {
       return res.status(400).json({ message: err.message || 'Upload failed.' });
     }
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
 
     asyncHandler(async (innerReq, innerRes) => {
+      const typeResult = await detectFileType(innerReq.file.buffer);
+      const ALLOWED_MIMES = {
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+        'image/gif': 'gif'
+      };
+
+      if (!typeResult || !ALLOWED_MIMES[typeResult.mime]) {
+        return innerRes.status(400).json({
+          message: 'Invalid image format. Only JPEG, PNG, WebP, and GIF images are allowed.'
+        });
+      }
+
       const user = await prisma.user.findUnique({ where: { id: innerReq.userId } });
       if (!user) return innerRes.status(404).json({ message: 'User not found.' });
 
-      const pictureUrl = `/uploads/${innerReq.file.filename}`;
+      // Delete user's previous photo if in /uploads/
+      if (user.picture && user.picture.startsWith('/uploads/')) {
+        const oldPhotoPath = path.join(__dirname, '..', user.picture);
+        try {
+          if (fs.existsSync(oldPhotoPath)) {
+            fs.unlinkSync(oldPhotoPath);
+          }
+        } catch (e) {
+          logger.warn({ err: e }, 'Failed to delete previous profile photo');
+        }
+      }
+
+      const ext = ALLOWED_MIMES[typeResult.mime];
+      const filename = `user-${innerReq.userId}-${Date.now()}.${ext}`;
+      const uploadsDir = path.join(__dirname, '../uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const targetPath = path.join(uploadsDir, filename);
+      fs.writeFileSync(targetPath, innerReq.file.buffer);
+
+      const pictureUrl = `/uploads/${filename}`;
       await prisma.user.update({
         where: { id: innerReq.userId },
         data: { picture: pictureUrl }

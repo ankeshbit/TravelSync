@@ -1,5 +1,3 @@
-const jwt = require('jsonwebtoken');
-const config = require('../config/env');
 const { verifyFirebaseToken } = require('../config/firebaseAdmin');
 const { prisma, ensureUserSynced } = require('../db');
 const logger = require('./logger');
@@ -120,26 +118,46 @@ async function verifyAuthToken(token) {
     if (decodedFirebaseToken && decodedFirebaseToken.uid) {
       const firebaseUid = decodedFirebaseToken.uid;
       const firebaseEmail = decodedFirebaseToken.email || '';
-      const firebaseName = decodedFirebaseToken.name || firebaseEmail.split('@')[0] || 'User';
+      const firebaseName = decodedFirebaseToken.name || (firebaseEmail ? firebaseEmail.split('@')[0] : 'User');
       const firebasePicture = decodedFirebaseToken.picture || '';
+      const isEmailVerified = decodedFirebaseToken.email_verified === true;
 
       try {
         // Look up user by firebaseUid (fast path for returning users)
         let user = await prisma.user.findFirst({ where: { firebaseUid } });
+        if (user) {
+          return user;
+        }
 
-        if (!user && firebaseEmail) {
-          // Link existing user created before Firebase migration by matching on email
+        // Only link or create a user when decoded.email_verified === true
+        if (!isEmailVerified) {
+          if (firebaseEmail) {
+            const existing = await prisma.user.findUnique({ where: { email: firebaseEmail } });
+            if (existing) {
+              const err = new Error('Email must be verified to link to an existing account.');
+              err.statusCode = 401;
+              throw err;
+            }
+          }
+          const err = new Error('Email is not verified. Please verify your email.');
+          err.statusCode = 401;
+          throw err;
+        }
+
+        // Email is verified: link existing user created before Firebase migration
+        if (firebaseEmail) {
           user = await prisma.user.findUnique({ where: { email: firebaseEmail } });
           if (user) {
             user = await prisma.user.update({
               where: { id: user.id },
               data: { firebaseUid }
             });
+            return user;
           }
         }
 
-        if (!user) {
-          // First-time login — auto-provision user record
+        // First-time login — auto-provision user record with P2002 retry
+        try {
           user = await prisma.user.create({
             data: {
               name: firebaseName,
@@ -149,46 +167,33 @@ async function verifyAuthToken(token) {
               password: ''
             }
           });
+          return user;
+        } catch (createErr) {
+          if (createErr.code === 'P2002') {
+            user = await prisma.user.findFirst({
+              where: {
+                OR: [
+                  { firebaseUid },
+                  ...(firebaseEmail ? [{ email: firebaseEmail }] : [])
+                ]
+              }
+            });
+            if (user) return user;
+          }
+          throw createErr;
         }
-
-        return user;
       } catch (dbErr) {
+        if (dbErr.statusCode === 401) {
+          throw dbErr;
+        }
         handleDatabaseError(dbErr, 'Firebase user synchronization');
         throw dbErr;
       }
     }
   } catch (firebaseErr) {
-    if (firebaseErr.statusCode === 503 || isDatabaseDownError(firebaseErr)) {
+    if (firebaseErr.statusCode === 503 || isDatabaseDownError(firebaseErr) || firebaseErr.statusCode === 401) {
       throw firebaseErr;
     }
-    // If Firebase verification fails, continue to local JWT check
-  }
-
-  // 3. Fallback: local JWT verification (for tests, dev, or local sessions)
-  try {
-    const secret = config.JWT_SECRET;
-    if (secret) {
-      const decoded = jwt.verify(cleanToken, secret);
-      const userId = decoded.userId || decoded.id || decoded.sub;
-
-      try {
-        if (userId) {
-          const user = await prisma.user.findUnique({ where: { id: userId } });
-          if (user) return user;
-        } else if (decoded.email) {
-          const user = await prisma.user.findUnique({ where: { email: decoded.email } });
-          if (user) return user;
-        }
-      } catch (dbErr) {
-        handleDatabaseError(dbErr, 'JWT user lookup');
-        throw dbErr;
-      }
-    }
-  } catch (jwtErr) {
-    if (jwtErr.statusCode === 503 || isDatabaseDownError(jwtErr)) {
-      throw jwtErr;
-    }
-    // Fallback failed
   }
 
   const error = new Error('Invalid or expired token.');
