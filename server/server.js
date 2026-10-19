@@ -256,10 +256,12 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// ─── Swagger Documentation ──────────────────────────────────────────────────
-const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./swagger');
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// ─── Swagger Documentation (Non-production only) ───────────────────────────
+if (process.env.NODE_ENV !== 'production') {
+  const swaggerUi = require('swagger-ui-express');
+  const swaggerSpec = require('./swagger');
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));

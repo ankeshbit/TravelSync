@@ -32,14 +32,14 @@ A full-stack web application for planning trips with friends, managing itinerari
 - **Multi-Payer Expenses** — Log expenses paid by a single user and split among multiple members.
 - **Equal Split Math** — Automated equal splitting with precise floating-point precision logic.
 - **Balance Tracking** — Real-time tracking of net positive or negative balances for all members.
-- **Minimum Settlements** — Custom simplification algorithm generating the absolute minimum transactions needed to settle all debts.
+- **Debt Settlements** — Greedy debt simplification algorithm matching debtors and creditors to settle balances per currency.
 - **Multi-Currency Support** — Core support for travel budgets, defaulted to INR (₹).
 
 ### Phase 5: Polish & Deployment 🚀
 - **Real-Time Collaboration** — Socket.io integration syncing place updates, expense entries, drag-reorders, and member additions instantly across all clients.
 - **Presence Tracking** — View which team members are currently online and viewing the active trip map or dashboard.
 - **AI Itinerary Planner** — Context-aware, Groq-powered AI engine (`llama-3.3-70b-versatile`) suggesting custom day-by-day itineraries based on duration, members, budget level, and interests.
-- **OTP Verification** — Two-factor authentication (2FA) verification codes sent via email for user registration and account deletion.
+- **OTP Verification** — Cryptographic OTP verification codes sent via email for secure account deletion.
 - **Dark Mode Support** — System-aware dark theme switching with persistent local storage preferences.
 - **Interactive UI Feedback** — Micro-animations, skeleton screen loaders, toast notifications (success, error, info), and clean empty-state messaging.
 - **Security Hardening** — Helmet headers, cors configurations, rate-limiters on authentication and AI paths, and secure error boundary structures.
@@ -184,6 +184,8 @@ npm run dev  # Starts Vite HMR server
 Copy `server/.env.example` to `server/.env` and configure:
 ```env
 DATABASE_URL=postgresql://user:password@ep-project.neon.tech/neondb?sslmode=require
+DIRECT_URL=postgresql://user:password@ep-project.neon.tech/neondb?sslmode=require
+OTP_SECRET=replace-with-random-otp-secret-min-32-chars-long-string
 ALLOWED_ORIGIN=http://localhost:5173
 PORT=3000
 NODE_ENV=development
@@ -194,9 +196,13 @@ FIREBASE_PROJECT_ID=your-firebase-project-id
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...\n-----END PRIVATE KEY-----\n"
 
+# Optional Services
+NEON_AUTH_ENABLED=false
 GROQ_API_KEY=gsk_your_groq_api_key_here
-SMTP_EMAIL=your-verification-email@gmail.com
-SMTP_PASSWORD=your-gmail-app-password
+SMTP_USER=your-verification-email@gmail.com
+SMTP_PASS=your-gmail-app-password
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
 UNSPLASH_ACCESS_KEY=your_unsplash_access_key_here
 ```
 
@@ -221,8 +227,8 @@ VITE_FIREBASE_APP_ID=1:123456789012:web:abcdef123456
 ## 🔐 API Reference
 
 > [!TIP]
-> **Self-Hosted Interactive Swagger Documentation**  
-> When the backend server is running in development mode, navigate to `http://localhost:3000/api-docs` to view the comprehensive, interactive Swagger UI specification. You can run test requests directly through your browser interface!
+> **Self-Hosted Interactive Swagger Documentation (Development Only)**  
+> When the backend server is running in development mode (`NODE_ENV !== 'production'`), navigate to `http://localhost:3000/api-docs` to view the comprehensive, interactive Swagger UI specification. You can run test requests directly through your browser interface!
 
 ### Authentication & Profile Endpoints
 | Method | Route | Auth | Description |
@@ -288,17 +294,20 @@ TravelSync relies on WebSockets via **Socket.io** to coordinate real-time state 
 
 ### WebSocket Action Map
 ```javascript
-// Outbound Client Events
-socket.emit('join_trip', tripId)
-socket.emit('place_added', { tripId, place })
-socket.emit('expense_added', { tripId, expense })
-socket.emit('user_presence', { tripId, status })
-
-// Inbound Broadcast Events
-socket.on('trip_updated', (trip) => { /* Update trip metadata */ })
-socket.on('member_joined', (user) => { /* Broadcast member entry */ })
-socket.on('place_changed', (place) => { /* Sync itinerary reorders */ })
-socket.on('presence_updated', (members) => { /* Update online indicators */ })
+// Server Room Broadcast Events (Real-Time)
+socket.on('user:joined', ({ id, name }) => { /* Member joined active session */ })
+socket.on('user:left', ({ userId }) => { /* Member left active session */ })
+socket.on('presence:list', (users) => { /* Initial list of online members */ })
+socket.on('place:added', (place) => { /* New place added to itinerary */ })
+socket.on('place:deleted', ({ placeId }) => { /* Place removed from itinerary */ })
+socket.on('place:reordered', (places) => { /* Day/order of places updated */ })
+socket.on('place:note_updated', (place) => { /* Place note edited */ })
+socket.on('expense:added', (expense) => { /* New expense logged */ })
+socket.on('expense:deleted', ({ expenseId }) => { /* Expense deleted */ })
+socket.on('member:joined', ({ id, name, email, picture }) => { /* New member added to trip */ })
+socket.on('trip:updated', (trip) => { /* Trip metadata or cover photo updated */ })
+socket.on('trip:deleted', ({ tripId }) => { /* Trip was deleted by owner */ })
+socket.on('trip:removed', ({ tripId }) => { /* Current user was removed from trip */ })
 ```
 
 ---
@@ -319,7 +328,7 @@ The TravelSync **AI Plan Assistant** interfaces directly with the Groq API (leve
 The repository relies on automated test suites to maintain structural and computational integrity.
 
 ### Run Server-Side Jest Suite (`cd server`)
-Backend unit tests evaluate calculation accuracies, single-user splitting fallbacks, floating-point roundings, and debt minimization:
+Backend unit tests evaluate calculation accuracies, single-user splitting fallbacks, floating-point roundings, and debt simplification:
 ```bash
 npm run test
 ```
@@ -347,8 +356,8 @@ TravelSync includes system-aware styling that detects theme preferences and stor
 ## 🔒 Security Practices
 
 1. **Security Headers** — Integrated `helmet.js` to guard against common web vulnerabilities, specifically configured to handle cross-origin image loads safely in development.
-2. **API Rate Limiter** — Brute-force protection limiting users to 20 requests per 15 minutes on auth routes and 5 suggestions per minute on AI routes.
-3. **Database Cascade Deletion** — Cascading triggers ensuring all child documents (owned trips, invitations) are securely expunged upon user account deletion.
+2. **API Rate Limiter** — Brute-force protection limiting users to 20 requests per 15 minutes on auth routes (5 sends and 10 verifies per 15 minutes on OTP routes) and 5 suggestions per 10 minutes on AI routes.
+3. **Database Cascade Protection** — Restrict relations ensuring user account deletion never silently cascades to destroy shared trip expenses or splits.
 4. **Environment Isolation** — Complete environment variable segmentation ensuring zero hardcoded secrets.
 
 ---
@@ -374,10 +383,10 @@ TravelSync includes system-aware styling that detects theme preferences and stor
 - Go to [console.cloud.google.com/billing](https://console.cloud.google.com/billing) and link a billing account.
 - Google provides a $200/month free credit — standard usage during development will not incur charges.
 
-### Session Invalidation & Manual Relogin
-- Access tokens expire after 15 minutes.
-- Silent session renewal runs automatically in the background utilizing the rotating refresh token (valid for 7 days).
-- In the event that a user has been inactive for more than 7 days, the active refresh token will expire and the user will be seamlessly returned to the `/login` screen to re-authenticate.
+### Session Management & Token Refresh
+- Firebase ID tokens expire after 1 hour.
+- Silent session renewal runs automatically in the client via the Firebase Web SDK (`auth.currentUser.getIdToken()`).
+- On authenticated HTTP and WebSocket connections, the latest Firebase ID token is transmitted and cryptographically verified on the backend.
 
 ---
 

@@ -104,6 +104,32 @@ describe('Environment & Server Configuration Tests', () => {
     warnMock.mockRestore();
   });
 
+  test('accepts canonical SMTP_USER and SMTP_PASS', () => {
+    const config = validateEnv({
+      DATABASE_URL: 'postgresql://localhost:5432/db',
+      OTP_SECRET: 'o'.repeat(32),
+      ALLOWED_ORIGIN: 'http://localhost:5173',
+      SMTP_USER: 'user@example.com',
+      SMTP_PASS: 'app-password'
+    });
+    expect(config.SMTP_USER).toBe('user@example.com');
+    expect(config.SMTP_PASS).toBe('app-password');
+    expect(config.errors).toHaveLength(0);
+  });
+
+  test('accepts legacy SMTP_EMAIL and SMTP_PASSWORD', () => {
+    const config = validateEnv({
+      DATABASE_URL: 'postgresql://localhost:5432/db',
+      OTP_SECRET: 'o'.repeat(32),
+      ALLOWED_ORIGIN: 'http://localhost:5173',
+      SMTP_EMAIL: 'legacy@example.com',
+      SMTP_PASSWORD: 'legacy-password'
+    });
+    expect(config.SMTP_USER).toBe('legacy@example.com');
+    expect(config.SMTP_PASS).toBe('legacy-password');
+    expect(config.errors).toHaveLength(0);
+  });
+
   describe('CORS behavior verification', () => {
     const createTestApp = (envConfig) => {
       const app = express();

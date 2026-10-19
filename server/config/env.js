@@ -48,11 +48,11 @@ function validateEnv(env = process.env) {
   // Optional: UNSPLASH_ACCESS_KEY
   const UNSPLASH_ACCESS_KEY = (env.UNSPLASH_ACCESS_KEY || '').trim();
 
-  // Optional: Email credentials
+  // Optional: Email credentials (canonical: SMTP_USER/SMTP_PASS, legacy: SMTP_EMAIL/SMTP_PASSWORD)
   const SMTP_USER = (env.SMTP_USER || env.EMAIL_USER || env.SMTP_EMAIL || '').trim();
   const SMTP_PASS = (env.SMTP_PASS || env.EMAIL_PASS || env.SMTP_PASSWORD || '').trim();
   if ((SMTP_USER && !SMTP_PASS) || (!SMTP_USER && SMTP_PASS)) {
-    errors.push('Both SMTP_USER/EMAIL_USER and SMTP_PASS/EMAIL_PASS must be provided together.');
+    errors.push('Both SMTP_USER and SMTP_PASS must be provided together.');
   }
 
   // Optional: NEON_AUTH_ENABLED (default false)

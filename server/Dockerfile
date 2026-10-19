@@ -11,12 +11,10 @@ WORKDIR /app
 # Install OpenSSL for Prisma engine compatibility on Alpine
 RUN apk add --no-cache openssl
 
-# Install all dependencies (including devDependencies so prisma CLI is available)
+# Install all dependencies (copying prisma before npm ci so postinstall succeeds)
 COPY package*.json ./
-RUN npm ci
-
-# Copy Prisma schema and generate client
 COPY prisma ./prisma
+RUN npm ci
 RUN npx prisma generate
 
 # ─── Stage 2: Production Runner ────────────────────────────────────────────────
@@ -30,14 +28,14 @@ RUN apk add --no-cache openssl
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Install production dependencies only (using npm ci --omit=dev)
+# Install production dependencies (copying prisma before npm ci --omit=dev)
 COPY package*.json ./
+COPY prisma ./prisma
 RUN npm ci --omit=dev
 
 # Copy generated Prisma Client artifacts and schema from builder stage
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/prisma ./prisma
 
 # Copy application source files
 COPY . .
@@ -57,11 +55,12 @@ USER node
 
 EXPOSE 3000
 
-# Health check: queries /api/health and fails if HTTP status !== 200 or dbStatus !== 'connected'
+# Health check: queries /api/health with dynamic ENV PORT and fails if HTTP status !== 200 or dbStatus !== 'connected'
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "\
     const http = require('http');\
-    const req = http.get('http://localhost:3000/api/health', (res) => {\
+    const port = process.env.PORT || 3000;\
+    const req = http.get('http://localhost:' + port + '/api/health', (res) => {\
       let body = '';\
       res.on('data', chunk => body += chunk);\
       res.on('end', () => {\
