@@ -90,13 +90,14 @@ import { ref, computed, watch, onUnmounted } from 'vue';
 import api from '../api';
 
 const props = defineProps({
-  visible:  { type: Boolean, default: false },
-  email:    { type: String,  required: true },
-  purpose:  { type: String,  required: true }, // 'register' | 'delete'
-  devOtp:   { type: String,  default: '' },
+  visible:      { type: Boolean,  default: false },
+  email:        { type: String,   required: true },
+  purpose:      { type: String,   required: true }, // 'register' | 'delete'
+  devOtp:       { type: String,   default: '' },
+  customVerify: { type: Function, default: null },
 });
 
-const emit = defineEmits(['verified', 'cancel']);
+const emit = defineEmits(['verified', 'cancel', 'update:devOtp']);
 
 // ── State ──────────────────────────────────────────────────────────────────────
 const digits       = ref(Array(6).fill(''));
@@ -173,14 +174,18 @@ async function handleVerify() {
   verifying.value = true;
   errorMsg.value = '';
   try {
-    await api.post('/auth/verify-otp', {
-      email: props.email,
-      otp: otpValue.value,
-      purpose: props.purpose,
-    });
-    emit('verified'); // tell parent to proceed
+    if (props.customVerify) {
+      await props.customVerify(otpValue.value);
+    } else {
+      await api.post('/auth/verify-otp', {
+        email: props.email,
+        otp: otpValue.value,
+        purpose: props.purpose,
+      });
+    }
+    emit('verified', otpValue.value);
   } catch (err) {
-    errorMsg.value = err.response?.data?.message || 'Invalid code. Please try again.';
+    errorMsg.value = err.response?.data?.message || err.message || 'Invalid code. Please try again.';
     hasError.value = true;
     digits.value = Array(6).fill('');
     setTimeout(() => inputs.value[0]?.focus(), 50);
@@ -194,7 +199,10 @@ async function handleResend() {
   sendingResend.value = true;
   errorMsg.value = '';
   try {
-    await api.post('/auth/send-otp', { email: props.email, purpose: props.purpose });
+    const res = await api.post('/auth/send-otp', { email: props.email, purpose: props.purpose });
+    if (res.data?.devOtp) {
+      emit('update:devOtp', res.data.devOtp);
+    }
     digits.value = Array(6).fill('');
     hasError.value = false;
     startCountdown(60);

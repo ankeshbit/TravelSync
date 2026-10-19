@@ -81,6 +81,7 @@
 
             <!-- Actions: Edit Trip & AI Plan -->
             <div class="flex items-center gap-3">
+              <TripPresence :activeMembers="activeMembers" />
               <button 
                 @click="showAiPlanner = true"
                 class="bg-[#111C33] hover:bg-[#162442] border border-[#1E2E4E] text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-all active:scale-95"
@@ -264,22 +265,23 @@
     <!-- AI Planner Modal Component -->
     <AiPlannerModal
       v-if="currentTrip"
-      :isOpen="showAiPlanner"
+      v-model:isOpen="showAiPlanner"
       :tripId="currentTrip.id || currentTrip._id"
       :destination="currentTrip.destination"
       :duration="3"
-      @close="showAiPlanner = false"
       @itinerary-generated="onItineraryGenerated"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
+import TripPresence from '../components/TripPresence.vue';
 import AiPlannerModal from '../components/AiPlannerModal.vue';
+import { useSocket } from '../composables/useSocket';
 import { useTripsStore } from '../stores/trips';
 import api from '../api';
 import { DEFAULT_TRIP_COVER_IMAGE } from '../constants';
@@ -300,6 +302,7 @@ const onImgError = (e) => {
 
 const currentTripId = computed(() => route.params.id || route.params.tripId);
 const currentTrip = computed(() => trip.value);
+const { activeMembers } = useSocket(currentTripId);
 
 const allMembers = computed(() => {
   if (!currentTrip.value) return [];
@@ -339,7 +342,7 @@ const formatDate = (dateString) => {
   if (!dateString) return 'TBD';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return dateString;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const highlightsList = computed(() => {
@@ -372,6 +375,12 @@ const onItineraryGenerated = () => {
   showAiPlanner.value = false;
   router.push(`/trips/${currentTripId.value}/map?tab=itinerary`);
 };
+
+watch(() => currentTripId.value, (newId) => {
+  if (newId) {
+    fetchTrip();
+  }
+});
 
 onMounted(() => {
   fetchTrip();

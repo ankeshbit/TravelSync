@@ -15,6 +15,8 @@
           </div>
 
           <div class="flex items-center gap-3">
+            <TripPresence :activeMembers="activeMembers" />
+
             <button
               @click="openSettleUpModal"
               class="px-4 py-2.5 rounded-xl bg-[#111C33] hover:bg-[#162442] border border-[#1E2E4E] text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5"
@@ -31,6 +33,15 @@
               Add Expense
             </button>
           </div>
+        </div>
+
+        <!-- Full page load error with Retry -->
+        <div v-if="loadError" class="p-8 text-center bg-[#0D1527] border border-red-500/30 rounded-2xl mb-6">
+          <span class="material-symbols-outlined text-4xl text-red-400 mb-2">error</span>
+          <p class="text-sm font-semibold text-white">{{ loadError }}</p>
+          <button @click="loadAllData" class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl">
+            Retry
+          </button>
         </div>
 
         <!-- 4 Stat Cards Row -->
@@ -306,12 +317,9 @@
               </p>
               <p class="text-[11px] text-slate-400 mt-0.5">Amount: {{ formatCurrency(debt.amount, currentTripCurrency) }}</p>
             </div>
-            <button
-              @click="markSettled(debt)"
-              class="px-3 py-1.5 rounded-lg bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/30 text-[11px] font-semibold transition-all"
-            >
-              Mark Settled
-            </button>
+            <span class="text-xs font-semibold px-2 py-1 rounded bg-slate-800 text-slate-300">
+              {{ formatCurrency(debt.amount, currentTripCurrency) }}
+            </span>
           </div>
         </div>
 
@@ -327,14 +335,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api'
 import { useExpensesStore } from '../stores/expenses'
 import { useAuthStore } from '../stores/auth'
 import Navbar from '../components/Navbar.vue'
 import Sidebar from '../components/Sidebar.vue'
+import TripPresence from '../components/TripPresence.vue'
 import AddExpenseModal from '../components/AddExpenseModal.vue'
+import { useSocket } from '../composables/useSocket'
 import { formatCurrency } from '../utils/format'
 
 const route = useRoute()
@@ -345,8 +355,12 @@ const trip = ref(null)
 const loading = ref(true)
 const balancesLoading = ref(false)
 const error = ref('')
+const loadError = ref(null)
 const showAddExpenseModal = ref(false)
 const showSettleModal = ref(false)
+
+const tripIdComputed = computed(() => route.params.tripId)
+const { activeMembers } = useSocket(tripIdComputed)
 
 const currentTripCurrency = computed(() => {
   return trip.value?.currency || expensesStore.currency || 'USD'
@@ -376,11 +390,22 @@ const displayOwesList = computed(() => {
 })
 
 const computedTotalExpenses = computed(() => {
+  const curr = currentTripCurrency.value
+  if (expensesStore.byCurrency && expensesStore.byCurrency[curr]?.totalExpenses !== undefined) {
+    return expensesStore.byCurrency[curr].totalExpenses
+  }
   return expensesStore.totalExpenses || 0
 })
 
 const computedYourShare = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
+  const curr = currentTripCurrency.value
+  if (expensesStore.byCurrency && expensesStore.byCurrency[curr]?.membersWithBalance) {
+    const member = expensesStore.byCurrency[curr].membersWithBalance.find(m => m.userId === currentUserId)
+    if (member && member.share !== undefined) {
+      return member.share
+    }
+  }
   if (!currentUserId || !expensesStore.expenses?.length) return 0
   return expensesStore.expenses.reduce((sum, item) => {
     const splits = item.splitAmong || []
@@ -424,9 +449,10 @@ const getCategoryIcon = (title = '') => {
 }
 
 const formatDate = (dateStr) => {
-  if (!dateStr) return 'Sep 27, 2026'
+  if (!dateStr) return '—'
   try {
     return new Date(dateStr).toLocaleDateString('en-US', {
+      timeZone: 'UTC',
       month: 'short',
       day: 'numeric',
       year: 'numeric'
@@ -440,62 +466,63 @@ const openSettleUpModal = () => {
   showSettleModal.value = true
 }
 
-const markSettled = (debt) => {
-  alert(`Marked settlement with ${debt.name} for ${formatCurrency(debt.amount, currentTripCurrency.value)} as settled!`)
-  showSettleModal.value = false
-}
-
 const fetchTrip = async () => {
-  try {
-    const res = await api.get(`/trips/${route.params.tripId}`)
-    trip.value = res.data
-  } catch (err) {
-    // Graceful fallback for mock preview
-    trip.value = {
-      id: route.params.tripId || 'paris-getaway',
-      _id: route.params.tripId || 'paris-getaway',
-      name: 'Paris Getaway',
-      currency: 'USD',
-      members: []
-    }
-  }
+  const res = await api.get(`/trips/${route.params.tripId}`)
+  trip.value = res.data
 }
 
 const fetchExpenses = async () => {
-  try {
-    if (route.params.tripId) {
-      await expensesStore.fetchExpenses(route.params.tripId)
-    }
-  } catch (err) {
-    // Keep sample
+  if (route.params.tripId) {
+    await expensesStore.fetchExpenses(route.params.tripId)
   }
 }
 
 const fetchBalances = async () => {
-  try {
-    if (route.params.tripId) {
-      await expensesStore.fetchBalances(route.params.tripId)
-    }
-  } catch (err) {
-    // Keep sample
+  if (route.params.tripId) {
+    await expensesStore.fetchBalances(route.params.tripId)
   }
 }
 
 const refreshBalances = async () => {
   balancesLoading.value = true
-  await fetchBalances()
+  await fetchBalances().catch(() => {})
   balancesLoading.value = false
 }
 
-const handleAddExpense = async (expenseData) => {
+const loadAllData = async () => {
+  loading.value = true
+  loadError.value = null
+  try {
+    await fetchTrip()
+    await Promise.all([
+      fetchExpenses(),
+      fetchBalances()
+    ])
+  } catch (err) {
+    loadError.value = err.response?.data?.message || err.message || 'Failed to load expenses'
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleAddExpense = async (expenseData, onComplete) => {
   try {
     if (route.params.tripId) {
       await expensesStore.addExpense(route.params.tripId, expenseData)
-      await expensesStore.fetchBalances(route.params.tripId)
+      showAddExpenseModal.value = false
+      error.value = ''
+      try {
+        await expensesStore.fetchBalances(route.params.tripId)
+      } catch (balErr) {
+        console.error('Failed to update balances after expense add:', balErr)
+      }
     }
-    showAddExpenseModal.value = false
   } catch (err) {
     error.value = err.response?.data?.message || err.message || 'Failed to add expense'
+  } finally {
+    if (typeof onComplete === 'function') {
+      onComplete()
+    }
   }
 }
 
@@ -504,7 +531,7 @@ const handleDeleteExpense = async (expenseId) => {
   try {
     if (route.params.tripId) {
       await expensesStore.deleteExpense(route.params.tripId, expenseId)
-      await expensesStore.fetchBalances(route.params.tripId)
+      await expensesStore.fetchBalances(route.params.tripId).catch(() => {})
     }
   } catch (err) {
     error.value = err.message || 'Failed to delete expense'
@@ -512,19 +539,31 @@ const handleDeleteExpense = async (expenseId) => {
 }
 
 const canDeleteExpense = (expense) => {
-  const expenseId = expense.id || expense._id
-  if (expenseId && String(expenseId).startsWith('mock-')) return false
-  const currentUser = authStore.currentUser
-  if (!currentUser) return false
-  return true
+  if (!expense) return false
+  const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
+  if (!currentUserId) return false
+
+  const isTripOwner = trip.value && (
+    (trip.value.ownerId && trip.value.ownerId === currentUserId) ||
+    (trip.value.owner?.id && trip.value.owner.id === currentUserId)
+  )
+  const paidById = typeof expense.paidBy === 'object'
+    ? (expense.paidBy?.id || expense.paidBy?._id)
+    : (expense.paidById || expense.paidBy)
+  const isPayer = paidById === currentUserId
+
+  return Boolean(isTripOwner || isPayer)
 }
 
-onMounted(async () => {
-  loading.value = true
-  await fetchTrip()
-  await fetchExpenses()
-  await fetchBalances()
-  loading.value = false
+watch(() => route.params.tripId, (newId) => {
+  if (newId) {
+    expensesStore.resetExpenses()
+    loadAllData()
+  }
+})
+
+onMounted(() => {
+  loadAllData()
 })
 </script>
 

@@ -36,8 +36,6 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     // True when a Firebase user is present — replaces the old accessToken check
     isAuthenticated: (state) => Boolean(state.firebaseUser),
-    // Convenience accessor used by components (mirrors old shape)
-    accessToken: () => null, // kept for backward compat; not used in Firebase flow
   },
 
   actions: {
@@ -53,6 +51,12 @@ export const useAuthStore = defineStore('auth', {
       onAuthStateChanged(auth, async (firebaseUser) => {
         this.firebaseUser = firebaseUser;
 
+        // Immediately mark initialized and unblock app before DB sync
+        if (!this.initialized) {
+          this.initialized = true;
+          authReadyResolve(Boolean(firebaseUser));
+        }
+
         if (firebaseUser) {
           // Sync database user in the background
           try {
@@ -66,14 +70,22 @@ export const useAuthStore = defineStore('auth', {
           if (typeof window !== 'undefined') {
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('token');
+            localStorage.removeItem('user');
           }
         }
-
-        if (!this.initialized) {
-          this.initialized = true;
-          authReadyResolve(Boolean(firebaseUser));
-        }
       });
+    },
+
+    /**
+     * Update user properties in state and local storage
+     * @param {Object} userData
+     */
+    updateUser(userData) {
+      if (!userData) return;
+      this.currentUser = { ...(this.currentUser || {}), ...userData };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify(this.currentUser));
+      }
     },
 
     /**

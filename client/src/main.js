@@ -20,8 +20,11 @@ setupApiInterceptors({ toastStore, authStore })
 // Start the Firebase auth listener so onAuthStateChanged fires before any routes load
 authStore.initializeAuth()
 
-// Wait for Firebase to restore the session before mounting — prevents redirect flicker
-await authStore.waitForAuth()
+// Wait for Firebase to restore the session before mounting — with 5s timeout fallback
+await Promise.race([
+  authStore.waitForAuth(),
+  new Promise((resolve) => setTimeout(resolve, 5000))
+]);
 
 app.use(router)
 app.mount('#app')

@@ -162,11 +162,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getFirebaseErrorMessage } from '../services/authService'
 import api from '../api'
 
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const form = ref({ email: '', password: '' })
@@ -176,6 +177,14 @@ const loadingGoogle = ref(false)
 const error = ref('')
 const showPassword = ref(false)
 const stats = ref(null)
+
+const getRedirectTarget = () => {
+  const r = route.query?.redirect
+  if (typeof r === 'string' && r.startsWith('/') && !r.startsWith('//')) {
+    return r
+  }
+  return '/dashboard'
+}
 
 const fetchStats = async () => {
   try {
@@ -204,7 +213,7 @@ const handleLogin = async () => {
   loadingEmail.value = true
   try {
     await authStore.loginWithEmail(form.value.email.trim(), form.value.password)
-    router.push('/dashboard')
+    router.push(getRedirectTarget())
   } catch (err) {
     error.value = getFirebaseErrorMessage(err)
   } finally {
@@ -219,7 +228,7 @@ const handleGoogleLogin = async () => {
   loadingGoogle.value = true
   try {
     await authStore.loginWithGoogle()
-    router.push('/dashboard')
+    router.push(getRedirectTarget())
   } catch (err) {
     error.value = getFirebaseErrorMessage(err)
   } finally {

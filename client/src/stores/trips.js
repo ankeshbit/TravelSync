@@ -44,6 +44,26 @@ export const useTripsStore = defineStore('trips', {
         throw err
       }
     },
+    async fetchTrip(id) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await api.get(`/trips/${id}`);
+        this.currentTrip = response.data;
+        this.members = response.data.members || [];
+        return response.data;
+      } catch (err) {
+        this.error = err.response?.data?.message || err.message;
+        throw err;
+      } finally {
+        this.loading = false;
+      }
+    },
+    resetCurrentTrip() {
+      this.currentTrip = null;
+      this.members = [];
+      this.error = null;
+    },
     async fetchMembers(tripId) {
       this.memberLoading = true
       this.memberError = null

@@ -69,10 +69,12 @@ describe('AddExpenseModal.vue', () => {
 
     expect(wrapper.emitted()).toHaveProperty('submit');
     const submitEvent = wrapper.emitted('submit')[0][0];
-    
     expect(submitEvent).toMatchObject({
       title: 'Dinner',
-      amount: 50
+      amount: 50,
+      paidBy: '1',
+      currency: 'USD'
     });
+    expect(submitEvent.splitAmong).toEqual(['1', '2']);
   });
 });

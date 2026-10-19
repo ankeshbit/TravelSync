@@ -187,6 +187,7 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSidebar } from '../composables/useSidebar';
 import { useAuthStore } from '../stores/auth';
+import { getBaseUrl } from '../utils/url';
 
 const route = useRoute();
 const router = useRouter();
@@ -257,7 +258,7 @@ const userPicture = computed(() => {
   if (authStore.currentUser?.picture) {
     const pic = authStore.currentUser.picture;
     if (pic.startsWith('http')) return pic;
-    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
+    const base = getBaseUrl();
     return `${base}${pic}`;
   }
   if (authStore.firebaseUser?.photoURL) {

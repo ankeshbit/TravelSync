@@ -15,11 +15,9 @@ export function formatCurrency(amount, currency = 'USD') {
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      currency: currencyCode
     }).format(safeAmount);
   } catch (err) {
-    return `${currencyCode} ${safeAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencyCode} ${safeAmount.toLocaleString('en-US')}`;
   }
 }

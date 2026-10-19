@@ -12,6 +12,8 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 
+import api from '../api';
+
 // ── Email / Password ──────────────────────────────────────────────────────────
 
 /**
@@ -22,6 +24,14 @@ export async function registerWithEmail(name, email, password) {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   // Persist the display name in Firebase immediately
   await updateProfile(credential.user, { displayName: name });
+  const freshToken = await credential.user.getIdToken(true);
+  try {
+    await api.put('/auth/me', { name }, {
+      headers: { Authorization: `Bearer ${freshToken}` }
+    });
+  } catch {
+    // Non-fatal if initial sync or PUT fails; will retry on subsequent visits
+  }
   return credential.user;
 }
 

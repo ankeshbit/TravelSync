@@ -210,11 +210,36 @@
                 Sign Out
               </button>
             </div>
+
+            <!-- Danger Zone: Delete Account -->
+            <div v-if="activeTab === 'account'" class="p-5 rounded-2xl bg-red-950/20 border border-red-500/30 flex items-center justify-between">
+              <div>
+                <h4 class="text-sm font-semibold text-red-400">Delete Account</h4>
+                <p class="text-xs text-slate-400">Permanently delete your account, trips, and data. Requires OTP verification.</p>
+              </div>
+              <button 
+                @click="initiateDeleteAccount"
+                :disabled="sendingDeleteOtp"
+                class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {{ sendingDeleteOtp ? 'Sending OTP...' : 'Delete Account' }}
+              </button>
+            </div>
           </div>
 
         </section>
       </div>
     </main>
+
+    <OtpModal
+      :visible="showDeleteModal"
+      :email="profileForm.email || authStore.currentUser?.email || ''"
+      purpose="delete"
+      :devOtp="deleteDevOtp"
+      :customVerify="handleDeleteAccount"
+      @update:devOtp="deleteDevOtp = $event"
+      @cancel="showDeleteModal = false"
+    />
   </div>
 </template>
 
@@ -223,9 +248,11 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
+import OtpModal from '../components/OtpModal.vue';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
+import { getBaseUrl } from '../utils/url';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -276,6 +303,37 @@ const triggerPhotoSelect = () => {
   photoInput.value?.click();
 };
 
+const showDeleteModal = ref(false);
+const deleteDevOtp = ref('');
+const sendingDeleteOtp = ref(false);
+
+const initiateDeleteAccount = async () => {
+  const email = profileForm.value.email || authStore.currentUser?.email;
+  if (!email) {
+    toastStore.showToast('No email address found for this account', 'error');
+    return;
+  }
+  sendingDeleteOtp.value = true;
+  try {
+    const res = await api.post('/auth/send-otp', { email, purpose: 'delete' });
+    deleteDevOtp.value = res.data?.devOtp || '';
+    showDeleteModal.value = true;
+    toastStore.showToast('Verification code sent to your email', 'info');
+  } catch (err) {
+    toastStore.showToast(err.response?.data?.message || 'Failed to send verification code', 'error');
+  } finally {
+    sendingDeleteOtp.value = false;
+  }
+};
+
+const handleDeleteAccount = async (otp) => {
+  await api.delete('/auth/me', { data: { otp } });
+  toastStore.showToast('Your account has been deleted.', 'success');
+  showDeleteModal.value = false;
+  await authStore.logout();
+  router.push('/login');
+};
+
 const fetchUserProfile = async () => {
   try {
     const res = await api.get('/auth/me');
@@ -283,7 +341,7 @@ const fetchUserProfile = async () => {
       if (res.data.name) profileForm.value.name = res.data.name;
       if (res.data.email) profileForm.value.email = res.data.email;
       if (res.data.picture) {
-        const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
+        const base = getBaseUrl();
         profilePicture.value = res.data.picture.startsWith('http') ? res.data.picture : `${base}${res.data.picture}`;
       }
       if (res.data.createdAt) {
@@ -306,6 +364,7 @@ const handleProfileUpdate = async () => {
   loadingProfile.value = true;
   try {
     await api.put('/auth/me', { name: profileForm.value.name });
+    authStore.updateUser({ name: profileForm.value.name });
     toastStore.showToast('Profile updated successfully!', 'success');
   } catch (err) {
     toastStore.showToast(err.response?.data?.message || 'Failed to update profile', 'error');
@@ -327,8 +386,10 @@ const handlePhotoUpload = async (event) => {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
 
-    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '');
-    profilePicture.value = `${base}${res.data.pictureUrl}`;
+    const pictureUrl = res.data.pictureUrl;
+    const base = getBaseUrl();
+    profilePicture.value = `${base}${pictureUrl}`;
+    authStore.updateUser({ picture: pictureUrl });
     toastStore.showToast('Profile photo updated!', 'success');
   } catch (err) {
     toastStore.showToast('Failed to upload photo', 'error');

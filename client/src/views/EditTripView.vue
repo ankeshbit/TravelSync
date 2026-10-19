@@ -99,12 +99,18 @@ const form = reactive({
   endDate: ''
 });
 
+let originalStartDate = '';
+let originalEndDate = '';
+
 const formatDateForInput = (dateString) => {
   if (!dateString) return '';
+  if (typeof dateString === 'string' && dateString.length >= 10) {
+    return dateString.slice(0, 10);
+  }
   const d = new Date(dateString);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const year = d.getFullYear();
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
 
@@ -120,6 +126,8 @@ const fetchTrip = async () => {
     form.destination = trip.destination;
     form.startDate = formatDateForInput(trip.startDate);
     form.endDate = formatDateForInput(trip.endDate);
+    originalStartDate = form.startDate;
+    originalEndDate = form.endDate;
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to fetch trip details.';
   } finally {
@@ -128,7 +136,7 @@ const fetchTrip = async () => {
 };
 
 const submitForm = async () => {
-  if (new Date(form.endDate) < new Date(form.startDate)) {
+  if (form.startDate && form.endDate && new Date(form.endDate) < new Date(form.startDate)) {
     error.value = 'End date cannot be before start date.';
     return;
   }
@@ -136,7 +144,17 @@ const submitForm = async () => {
   try {
     saving.value = true;
     error.value = '';
-    await api.put(`/trips/${route.params.id}`, form);
+    const payload = {
+      name: form.name,
+      destination: form.destination
+    };
+    if (form.startDate !== originalStartDate) {
+      payload.startDate = form.startDate;
+    }
+    if (form.endDate !== originalEndDate) {
+      payload.endDate = form.endDate;
+    }
+    await api.put(`/trips/${route.params.id}`, payload);
     router.push(`/trips/${route.params.id}`);
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to update trip. Please try again.';

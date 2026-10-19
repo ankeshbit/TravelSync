@@ -12,6 +12,7 @@ describe('formatCurrency', () => {
     expect(formatCurrency(100, 'EUR')).toBe('€100.00');
     expect(formatCurrency(250, 'GBP')).toBe('£250.00');
     expect(formatCurrency(1500, 'INR')).toBe('₹1,500.00');
+    expect(formatCurrency(1000, 'JPY')).toBe('¥1,000');
   });
 
   it('handles 0, null, and invalid inputs gracefully', () => {

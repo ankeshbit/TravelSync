@@ -76,12 +76,15 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
+    next({ path: '/login', query: { redirect: to.fullPath } })
   } else if (
     (to.path === '/login' || to.path === '/register' || to.path === '/forgot-password') &&
     authStore.isAuthenticated
   ) {
-    next('/dashboard')
+    const redirectPath = (typeof to.query.redirect === 'string' && to.query.redirect.startsWith('/'))
+      ? to.query.redirect
+      : '/dashboard'
+    next(redirectPath)
   } else {
     next()
   }

@@ -29,18 +29,7 @@
               <span class="text-xs font-bold text-emerald-400">Live</span>
             </div>
 
-            <!-- Avatars -->
-            <div class="flex items-center -space-x-2">
-              <div 
-                v-for="(member, idx) in activeMembersList" 
-                :key="member.id || member._id || idx"
-                class="w-6 h-6 rounded-full border-2 border-[#111C33] overflow-hidden bg-slate-700 flex items-center justify-center text-[9px] font-bold text-white shadow"
-                :title="member.name || member.email || 'Member'"
-              >
-                <img v-if="member.picture" :src="member.picture" :alt="member.name" class="w-full h-full object-cover" />
-                <span v-else>{{ getInitials(member.name || member.email) }}</span>
-              </div>
-            </div>
+            <TripPresence :activeMembers="activeMembers" />
           </div>
 
           <!-- Options -->
@@ -274,10 +263,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import Navbar from '../components/Navbar.vue';
 import Sidebar from '../components/Sidebar.vue';
+import TripPresence from '../components/TripPresence.vue';
+import { useSocket } from '../composables/useSocket';
 import { usePlacesStore } from '../stores/places';
 import api from '../api';
 
@@ -294,25 +285,13 @@ const mapLoaded = ref(false);
 const mapContainer = ref(null);
 const searchInput = ref(null);
 
+const { activeMembers } = useSocket(tripId);
+
 const newPlace = ref({
   name: '',
   address: '',
   category: 'attraction',
   note: ''
-});
-
-const activeMembersList = computed(() => {
-  if (!trip.value) return [];
-  const list = [];
-  if (trip.value.owner) list.push(trip.value.owner);
-  if (Array.isArray(trip.value.members)) {
-    for (const m of trip.value.members) {
-      if (!list.some(existing => (existing.id || existing._id) === (m.id || m._id))) {
-        list.push(m);
-      }
-    }
-  }
-  return list;
 });
 
 const getInitials = (name) => {
@@ -329,9 +308,9 @@ const computedDaysList = computed(() => {
       let dateLabel = `Day ${num}`;
       if (trip.value?.startDate) {
         const d = new Date(trip.value.startDate);
-        d.setDate(d.getDate() + i);
+        d.setUTCDate(d.getUTCDate() + i);
         if (!isNaN(d.getTime())) {
-          dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          dateLabel = d.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
         }
       }
       return { num, date: dateLabel };
@@ -344,9 +323,9 @@ const computedDaysList = computed(() => {
     const diffDays = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1);
     return Array.from({ length: Math.min(diffDays, 30) }, (_, i) => {
       const d = new Date(start);
-      d.setDate(d.getDate() + i);
+      d.setUTCDate(d.getUTCDate() + i);
       const dateLabel = !isNaN(d.getTime()) 
-        ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        ? d.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' })
         : `Day ${i + 1}`;
       return { num: i + 1, date: dateLabel };
     });

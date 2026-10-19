@@ -218,17 +218,18 @@ const displayTrips = computed(() => {
   }
 
   if (activeFilter.value === 'Upcoming') {
-    return list.filter(t => t.status !== 'completed');
+    return list.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
   } else if (activeFilter.value === 'Past') {
-    return list.filter(t => t.status === 'completed');
+    return list.filter(t => t.status === 'completed' || t.status === 'cancelled');
   }
 
   return list;
 });
 
 const onTripCreated = (trip) => {
+  if (!trip) return;
   const newTripId = trip.id || trip._id;
-  if (trip && !trips.value.some(existingTrip => (existingTrip.id || existingTrip._id) === newTripId)) {
+  if (!trips.value.some(existingTrip => (existingTrip.id || existingTrip._id) === newTripId)) {
     trips.value.unshift(trip);
     fetchSummary();
   }
@@ -239,7 +240,9 @@ const goToTrip = (id) => {
 };
 
 onMounted(() => {
-  tripsStore.fetchTrips();
+  tripsStore.fetchTrips().catch(err => {
+    console.error('Failed to fetch trips:', err);
+  });
   fetchSummary();
   if (route.query.create) {
     initialDestination.value = route.query.dest || '';

@@ -22,10 +22,8 @@ A full-stack web application for planning trips with friends, managing itinerari
 - **Unified Dashboard** — Dashboard interface showing a comprehensive list of collaborative trips with overview statistics.
 
 ### Phase 3: Itinerary & Maps 🗺️
-- **Interactive Google Maps** — Real-time markers, routes, and place tracking on high-fidelity maps.
-- **Places Autocomplete** — Integrated Google Places Autocomplete search to quickly look up and Pin locations.
-- **Day-by-Day Planning** — Add and organize itinerary places grouped by daily schedules.
-- **Drag-and-Drop Reordering** — Fluid visual reordering with instant state persistence.
+- **Itinerary & Route Tracking** — Day-by-day itinerary planning with place locations, categories, and notes.
+- **Places Planning** — Search, add, and organize locations grouped by daily schedules.
 - **Location Notes** — Add editable descriptions, tips, and notes to specific itinerary places.
 
 ### Phase 4: Expense Splitting 💰

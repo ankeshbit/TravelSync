@@ -55,6 +55,11 @@
                 />
               </div>
 
+              <div v-if="errorMessage" class="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm flex items-start gap-2">
+                <span class="material-symbols-outlined text-[18px] text-red-500 mt-0.5">error</span>
+                <span>{{ errorMessage }}</span>
+              </div>
+
               <div class="pt-4 flex justify-end gap-3">
                 <button @click="closeModal" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors">Cancel</button>
                 <button @click="generatePlan" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
@@ -154,16 +159,19 @@ import { useToastStore } from '../stores/toast';
 
 const props = defineProps({
   isOpen: { type: Boolean, required: true },
-  tripId: { type: String, required: true }
+  tripId: { type: String, required: true },
+  destination: { type: String, default: '' },
+  duration: { type: [Number, String], default: 3 }
 });
 
-const emit = defineEmits(['update:isOpen']);
+const emit = defineEmits(['update:isOpen', 'itinerary-generated']);
 
 const placesStore = usePlacesStore();
 const toastStore = useToastStore();
 
 const loading = ref(false);
 const itinerary = ref(null);
+const errorMessage = ref('');
 const addedPlaces = ref(new Set());
 
 const form = reactive({
@@ -181,6 +189,7 @@ const resetForm = () => {
   form.budget = 'moderate';
   form.interests = '';
   itinerary.value = null;
+  errorMessage.value = '';
   addedPlaces.value = new Set();
   loading.value = false;
 };
@@ -192,6 +201,7 @@ const closeModal = () => {
 const generatePlan = async () => {
   loading.value = true;
   itinerary.value = null;
+  errorMessage.value = '';
   addedPlaces.value = new Set();
 
   try {
@@ -201,13 +211,19 @@ const generatePlan = async () => {
     });
     
     if (res.data.suggestions && res.data.suggestions.error) {
+      errorMessage.value = res.data.suggestions.error;
       toastStore.showToast(res.data.suggestions.error, 'error');
     } else {
       itinerary.value = res.data.suggestions;
+      emit('itinerary-generated', res.data.suggestions);
       toastStore.showToast('Itinerary generated successfully!', 'success');
     }
   } catch (err) {
-    toastStore.showToast(err.response?.data?.message || 'Failed to generate plan.', 'error');
+    const msg = err.response?.status === 502
+      ? (err.response?.data?.message || 'AI service is temporarily unavailable (502). Please try again later.')
+      : (err.response?.data?.message || 'Failed to generate plan.');
+    errorMessage.value = msg;
+    toastStore.showToast(msg, 'error');
   } finally {
     loading.value = false;
   }
@@ -218,13 +234,22 @@ const addPlaceToItinerary = async (place, dayNumber, index) => {
   if (addedPlaces.value.has(key)) return;
 
   try {
+    if (!placesStore.places.length) {
+      await placesStore.fetchPlaces(props.tripId).catch(() => {});
+    }
+    const placesOnDay = placesStore.places.filter(p => Number(p.dayNumber) === Number(dayNumber));
+    const nextOrderIndex = placesOnDay.length > 0
+      ? Math.max(...placesOnDay.map(p => Number(p.orderIndex ?? 0))) + 1
+      : 0;
+
     await placesStore.addPlace(props.tripId, {
       name: place.name,
-      address: place.name, // The AI might not return a full address, using name as fallback
-      lat: 0, // Fallbacks, a proper geocoding should happen or map will handle it
-      lng: 0,
-      dayNumber: dayNumber,
-      orderIndex: index,
+      address: place.name,
+      lat: place.lat ?? 0,
+      lng: place.lng ?? 0,
+      dayNumber: Number(dayNumber),
+      orderIndex: nextOrderIndex,
+      category: place.type || 'attraction',
       note: place.description || ''
     });
     addedPlaces.value = new Set([...addedPlaces.value, key]);

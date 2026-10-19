@@ -2,6 +2,7 @@
 // Firebase ID tokens are attached to every protected request automatically.
 // The old JWT / refresh-token interceptor has been replaced.
 import axios from 'axios';
+import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
 const LOGIN_ROUTE = '/login';
@@ -11,14 +12,19 @@ const api = axios.create({
     import.meta.env.VITE_API_BASE_URL ||
     import.meta.env.VITE_API_URL ||
     'http://localhost:3000/api',
+  timeout: 15000,
 });
 
 let toastStoreRef = null;
 let authStoreRef = null;
 
 const redirectToLogin = () => {
-  if (typeof window !== 'undefined' && window.location.pathname !== LOGIN_ROUTE) {
-    window.location.href = LOGIN_ROUTE;
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith(LOGIN_ROUTE)) {
+    const currentPath = window.location.pathname + window.location.search;
+    const redirectUrl = (currentPath && currentPath !== '/')
+      ? `${LOGIN_ROUTE}?redirect=${encodeURIComponent(currentPath)}`
+      : LOGIN_ROUTE;
+    window.location.href = redirectUrl;
   }
 };
 
@@ -65,6 +71,11 @@ api.interceptors.response.use(
       }
       // Still 401 after retry → session truly expired
       authStoreRef?.clearAuth();
+      try {
+        await signOut(auth);
+      } catch {
+        // Ignore sign-out error
+      }
       redirectToLogin();
     }
 
