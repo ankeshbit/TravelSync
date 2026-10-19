@@ -3,7 +3,11 @@ const config = require('./config/env');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const {
+  generalApiLimiter,
+  authLimiter,
+  closeRedis
+} = require('./middleware/rateLimiter');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
@@ -100,53 +104,9 @@ app.use((req, res, next) => {
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
 // General API limiter: 300 requests per 15 minutes per IP for all /api endpoints
-const generalApiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 300,
-  message: {
-    message: 'Too many requests from this IP, please try again in 15 minutes.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
 app.use('/api', generalApiLimiter);
 
-// Separate OTP limiters: 5 sends and 10 verifies per 15 min, keyed by IP only
-const sendOtpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
-  message: {
-    message: 'Too many OTP requests, please try again in 15 minutes.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const verifyOtpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
-  message: {
-    message: 'Too many OTP verification attempts, please try again in 15 minutes.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-app.use('/api/auth/send-otp', sendOtpLimiter);
-app.use('/api/auth/verify-otp', verifyOtpLimiter);
-
 // Auth endpoints: 20 requests per 15 minutes per IP
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
-  message: {
-    message: 'Too many authentication attempts, please try again in 15 minutes.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
@@ -198,7 +158,8 @@ app.get('/api/health', async (req, res) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
       dbStatus = 'connected';
-    } catch {
+    } catch (err) {
+      logger.error({ err }, '[Health] Liveness probe database query failed');
       dbStatus = 'error';
     }
   }
@@ -229,10 +190,11 @@ app.get('/api/health/ready', async (req, res) => {
       timestamp: new Date()
     });
   } catch (err) {
+    logger.error({ err }, '[Health] Readiness probe database query failed');
     return res.status(503).json({
       status: 'not ready',
       database: 'disconnected',
-      error: err.message,
+      error: 'Database connection failed',
       timestamp: new Date()
     });
   }
@@ -315,6 +277,12 @@ const gracefulShutdown = (signalOrCode = 'SIGTERM') => {
       logger.info('Database connection closed');
     } catch (e) {
       logger.error({ err: e }, 'Error disconnecting database');
+    }
+    try {
+      await closeRedis();
+      logger.info('Redis connection closed');
+    } catch (e) {
+      logger.error({ err: e }, 'Error disconnecting Redis');
     }
     clearTimeout(forceTimer);
     process.exit(typeof signalOrCode === 'number' ? signalOrCode : 0);

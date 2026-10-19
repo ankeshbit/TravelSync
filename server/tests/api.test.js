@@ -24,6 +24,14 @@ jest.mock('../config/firebaseAdmin', () => ({
         email_verified: false
       };
     }
+    if (token === 'empty-user-token') {
+      return {
+        uid: 'test-firebase-uid-empty',
+        email: 'empty@example.com',
+        name: 'Empty User',
+        email_verified: true
+      };
+    }
     if (token === 'other-token') {
       return {
         uid: 'test-firebase-uid-other',
@@ -53,6 +61,7 @@ jest.setTimeout(30000);
 
 const request = require('supertest');
 const { prisma } = require('../db');
+const config = require('../config/env');
 const { setupPrismaMock } = require('./mockPrisma');
 
 setupPrismaMock();
@@ -128,11 +137,26 @@ describe('TravelSync API Integration Tests', () => {
       expect(res.body.database).toBe('PostgreSQL (Neon)');
     });
 
-    it('GET /api/health should return 503 if db query fails', async () => {
-      prisma.$queryRaw.mockRejectedValueOnce(new Error('Connection lost'));
+    it('GET /api/health should return 503 if db query fails and log error on server without leaking details', async () => {
+      const sensitiveError = new Error('FATAL: password authentication failed for user "neon_admin"');
+      prisma.$queryRaw.mockRejectedValueOnce(sensitiveError);
       const res = await request(app).get('/api/health');
       expect(res.status).toBe(503);
       expect(res.body.dbStatus).toBe('error');
+      expect(JSON.stringify(res.body)).not.toContain('neon_admin');
+      expect(JSON.stringify(res.body)).not.toContain('password');
+    });
+
+    it('GET /api/health should return 503 and dbStatus: disconnected when DATABASE_URL is unconfigured', async () => {
+      const origDbUrl = config.DATABASE_URL;
+      config.DATABASE_URL = '';
+      try {
+        const res = await request(app).get('/api/health');
+        expect(res.status).toBe(503);
+        expect(res.body.dbStatus).toBe('disconnected');
+      } finally {
+        config.DATABASE_URL = origDbUrl;
+      }
     });
 
     it('GET /api/health/ready should return 200 when ready', async () => {
@@ -142,12 +166,30 @@ describe('TravelSync API Integration Tests', () => {
       expect(res.body.database).toBe('connected');
     });
 
-    it('GET /api/health/ready should return 503 when database is down', async () => {
-      prisma.$queryRaw.mockRejectedValueOnce(new Error('DB unreachable'));
+    it('GET /api/health/ready should return 503 and not expose internal error messages when database is down', async () => {
+      const sensitiveError = new Error('FATAL: connection to server at "ep-cool-fog-12345.us-east-2.aws.neon.tech" (10.0.4.2), port 5432 failed: password authentication failed for user "db_user"');
+      prisma.$queryRaw.mockRejectedValueOnce(sensitiveError);
       const res = await request(app).get('/api/health/ready');
       expect(res.status).toBe(503);
       expect(res.body.status).toBe('not ready');
       expect(res.body.database).toBe('disconnected');
+      expect(res.body.error).toBe('Database connection failed');
+      expect(JSON.stringify(res.body)).not.toContain('ep-cool-fog-12345');
+      expect(JSON.stringify(res.body)).not.toContain('password authentication');
+      expect(JSON.stringify(res.body)).not.toContain('db_user');
+    });
+
+    it('GET /api/health/ready should return 503 when DATABASE_URL is unconfigured', async () => {
+      const origDbUrl = config.DATABASE_URL;
+      config.DATABASE_URL = '';
+      try {
+        const res = await request(app).get('/api/health/ready');
+        expect(res.status).toBe(503);
+        expect(res.body.status).toBe('not ready');
+        expect(res.body.database).toBe('not configured');
+      } finally {
+        config.DATABASE_URL = origDbUrl;
+      }
     });
   });
 
@@ -255,6 +297,139 @@ describe('TravelSync API Integration Tests', () => {
         expect(typeof res.body.totalMembers).toBe('number');
         expect(typeof res.body.totalSpent).toBe('number');
         expect(res.body).toHaveProperty('currency');
+        expect(res.body).toHaveProperty('spentByCurrency');
+      });
+
+      it('should fallback to INR and return 0 spent for user with empty trips', async () => {
+        const res = await request(app)
+          .get('/api/trips/summary')
+          .set('Authorization', 'Bearer empty-user-token');
+        expect(res.status).toBe(200);
+        expect(res.body.totalTrips).toBe(0);
+        expect(res.body.currency).toBe('INR');
+        expect(res.body.totalSpent).toBe(0);
+        expect(res.body.spentByCurrency).toEqual({ INR: 0 });
+        expect(res.body.hasMultipleCurrencies).toBe(false);
+      });
+
+      it('should preserve trip stored currency (e.g. EUR) when trip has zero expenses', async () => {
+        const eurTrip = await prisma.trip.create({
+          data: {
+            name: 'Euro Trip',
+            destination: 'Paris',
+            startDate: new Date('2026-09-01'),
+            endDate: new Date('2026-09-10'),
+            currency: 'EUR',
+            ownerId: testUser.id
+          }
+        });
+
+        const res = await request(app)
+          .get('/api/trips/summary')
+          .set('Authorization', `Bearer ${userToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.totalSpent).toBe(0);
+        expect(res.body.spentByCurrency).toEqual({ [res.body.currency]: 0 });
+        expect(res.body.hasMultipleCurrencies).toBe(false);
+
+        await prisma.trip.delete({ where: { id: eurTrip.id } });
+      });
+
+      it('should calculate expense totals correctly for a single currency', async () => {
+        const exp1 = await prisma.expense.create({
+          data: {
+            tripId: testTripId,
+            title: 'Flight',
+            amount: 1500,
+            currency: 'INR',
+            paidById: testUser.id
+          }
+        });
+        const exp2 = await prisma.expense.create({
+          data: {
+            tripId: testTripId,
+            title: 'Hotel',
+            amount: 2500,
+            currency: 'INR',
+            paidById: testUser.id
+          }
+        });
+
+        const res = await request(app)
+          .get('/api/trips/summary')
+          .set('Authorization', `Bearer ${userToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.currency).toBe('INR');
+        expect(res.body.totalSpent).toBe(4000);
+        expect(res.body.spentByCurrency).toEqual({ INR: 4000 });
+        expect(res.body.hasMultipleCurrencies).toBe(false);
+
+        await prisma.expense.deleteMany({ where: { id: { in: [exp1.id, exp2.id] } } });
+      });
+
+      it('should calculate expense totals separately for multiple currencies without summing them', async () => {
+        const inrExp = await prisma.expense.create({
+          data: {
+            tripId: testTripId,
+            title: 'INR Train',
+            amount: 4000,
+            currency: 'INR',
+            paidById: testUser.id
+          }
+        });
+        const usdExp = await prisma.expense.create({
+          data: {
+            tripId: testTripId,
+            title: 'USD Cruise',
+            amount: 150,
+            currency: 'USD',
+            paidById: testUser.id
+          }
+        });
+
+        const res = await request(app)
+          .get('/api/trips/summary')
+          .set('Authorization', `Bearer ${userToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.hasMultipleCurrencies).toBe(true);
+        expect(res.body.totalSpent).toBeNull();
+        expect(res.body.spentByCurrency).toEqual({
+          INR: 4000,
+          USD: 150
+        });
+
+        await prisma.expense.deleteMany({ where: { id: { in: [inrExp.id, usdExp.id] } } });
+      });
+
+      it('should handle missing currency on expense by inheriting trip currency', async () => {
+        const gbpTrip = await prisma.trip.create({
+          data: {
+            name: 'London Trip',
+            destination: 'London',
+            startDate: new Date('2026-10-01'),
+            endDate: new Date('2026-10-05'),
+            currency: 'GBP',
+            ownerId: testUser.id
+          }
+        });
+        const missingCurrExp = await prisma.expense.create({
+          data: {
+            tripId: gbpTrip.id,
+            title: 'Tea',
+            amount: 50,
+            currency: '',
+            paidById: testUser.id
+          }
+        });
+
+        const res = await request(app)
+          .get('/api/trips/summary')
+          .set('Authorization', `Bearer ${userToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body.spentByCurrency.GBP).toBe(50);
+
+        await prisma.expense.deleteMany({ where: { id: missingCurrExp.id } });
+        await prisma.trip.delete({ where: { id: gbpTrip.id } });
       });
     });
 
@@ -587,15 +762,25 @@ describe('TravelSync API Integration Tests', () => {
       expect(res.status).toBe(410);
     });
 
-    it('DELETE /api/auth/me should return 403 without a valid OTP', async () => {
+    it('DELETE /api/auth/me should return 403 without an OTP', async () => {
       const res = await request(app)
         .delete('/api/auth/me')
         .set('Authorization', `Bearer ${userToken}`)
         .send({});
       expect(res.status).toBe(403);
+      expect(res.body.message).toContain('Valid OTP required');
     });
 
-    it('DELETE /api/auth/me should return 409 when the user has expenses', async () => {
+    it('DELETE /api/auth/me should return 403 with an invalid OTP', async () => {
+      await prisma.otp.deleteMany();
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp: '000000' });
+      expect(res.status).toBe(403);
+    });
+
+    it('DELETE /api/auth/me should return 409 when the user has paid expenses', async () => {
       await prisma.otp.deleteMany();
       await prisma.expense.create({
         data: {
@@ -620,7 +805,149 @@ describe('TravelSync API Integration Tests', () => {
       await prisma.expense.deleteMany();
     });
 
-    it('DELETE /api/auth/me performs deletion order (DB before Firebase)', async () => {
+    it('DELETE /api/auth/me should return 409 when the user has expense splits', async () => {
+      await prisma.otp.deleteMany();
+      await prisma.expense.create({
+        data: {
+          tripId: 'some-trip',
+          title: 'Dinner',
+          amount: 50,
+          paidById: testOtherUser.id,
+          splits: {
+            create: [{ userId: testUser.id, amount: 25 }]
+          }
+        }
+      });
+
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ACCOUNT_HAS_EXPENSES');
+
+      await prisma.expense.deleteMany();
+    });
+
+    it('DELETE /api/auth/me should return 409 when the user owns a trip with expenses', async () => {
+      await prisma.otp.deleteMany();
+      // testTripId is owned by testUser
+      await prisma.expense.create({
+        data: {
+          tripId: testTripId,
+          title: 'Trip activity',
+          amount: 100,
+          paidById: testOtherUser.id
+        }
+      });
+
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ACCOUNT_HAS_EXPENSES');
+
+      await prisma.expense.deleteMany();
+    });
+
+    it('DELETE /api/auth/me maps foreign-key constraint violation (P2003) to 409', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      const originalDelete = prisma.user.delete;
+      const fkError = new Error('Foreign key constraint failed');
+      fkError.code = 'P2003';
+      prisma.user.delete = jest.fn().mockRejectedValueOnce(fkError);
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ACCOUNT_HAS_EXPENSES');
+      prisma.user.delete = originalDelete;
+
+      const { pendingDeletionUids } = require('../utils/verifyAuthToken');
+      pendingDeletionUids.delete(testUser.firebaseUid);
+      await prisma.user.update({
+        where: { id: testUser.id },
+        data: { refreshToken: null }
+      });
+    });
+
+    it('DELETE /api/auth/me handles Firebase deletion failure (returns 502, does not delete DB user)', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      mockDeleteUser.mockRejectedValueOnce(new Error('Firebase connection error'));
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(502);
+      expect(res.body.code).toBe('FIREBASE_DELETE_FAILED');
+
+      // Database profile must still exist and pending deletion state rolled back
+      const dbUser = await prisma.user.findUnique({ where: { id: testUser.id } });
+      expect(dbUser).not.toBeNull();
+      expect(dbUser.refreshToken).toBeNull();
+
+      // Subsequent token verification succeeds without auto-recreation
+      const meRes = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(meRes.status).toBe(200);
+      expect(meRes.body.email).toBe('john@example.com');
+    });
+
+    it('DELETE /api/auth/me handles database deletion failure after Firebase deletion (returns 500, locks account)', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      mockDeleteUser.mockResolvedValueOnce();
+      const originalDelete = prisma.user.delete;
+      prisma.user.delete = jest.fn().mockRejectedValueOnce(new Error('PostgreSQL deadlock / connection failure'));
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(500);
+      expect(res.body.code).toBe('DATABASE_DELETE_FAILED');
+      prisma.user.delete = originalDelete;
+
+      // Token verification must reject pending deletion account (401) and not auto-recreate it
+      const meRes = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(meRes.status).toBe(401);
+
+      // Restore user for next tests
+      const { pendingDeletionUids } = require('../utils/verifyAuthToken');
+      pendingDeletionUids.delete(testUser.firebaseUid);
+      await prisma.user.update({
+        where: { id: testUser.id },
+        data: { refreshToken: null }
+      });
+    });
+
+    it('DELETE /api/auth/me performs successful deletion order (Firebase before DB) and denies subsequent login', async () => {
       await prisma.otp.deleteMany();
       const { createOtp } = require('../utils/otpStore');
       const otp = await createOtp('john@example.com', 'delete');
@@ -641,33 +968,27 @@ describe('TravelSync API Integration Tests', () => {
         .send({ otp });
 
       expect(res.status).toBe(200);
-      expect(executionOrder).toEqual(['db_delete', 'firebase_delete']);
+      expect(res.body.message).toContain('Account deleted successfully');
+      expect(executionOrder).toEqual(['firebase_delete', 'db_delete']);
       prisma.user.delete = originalDelete;
 
+      // DB profile is deleted
+      const dbUser = await prisma.user.findUnique({ where: { id: testUser.id } });
+      expect(dbUser).toBeNull();
+
+      // Subsequent token verification is denied (401) and does NOT recreate user
+      const meRes = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(meRes.status).toBe(401);
+
+      // Clean up deleted cache and restore testUser for remaining tests
+      const { deletedAccountsCache, pendingDeletionUids } = require('../utils/verifyAuthToken');
+      deletedAccountsCache.delete(testUser.firebaseUid);
+      pendingDeletionUids.delete(testUser.firebaseUid);
       await prisma.user.upsert({
         where: { id: testUser.id },
-        update: {},
-        create: testUser
-      });
-    });
-
-    it('DELETE /api/auth/me returns 200 even if Firebase deleteUser fails after DB delete', async () => {
-      await prisma.otp.deleteMany();
-      const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
-
-      mockDeleteUser.mockRejectedValueOnce(new Error('Firebase connection error'));
-
-      const res = await request(app)
-        .delete('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ otp });
-
-      expect(res.status).toBe(200);
-
-      await prisma.user.upsert({
-        where: { id: testUser.id },
-        update: {},
+        update: { refreshToken: null },
         create: testUser
       });
     });

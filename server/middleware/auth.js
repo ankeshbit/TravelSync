@@ -15,7 +15,8 @@ const verifyToken = async (req, res, next) => {
   }
 
   try {
-    const user = await verifyAuthToken(token);
+    const isDeletionRoute = req.method === 'DELETE' && (req.path === '/me' || req.originalUrl?.includes('/auth/me'));
+    const user = await verifyAuthToken(token, { allowPendingDeletion: isDeletionRoute });
     req.user = user;
     req.userId = user.id;
     next();

@@ -17,6 +17,15 @@ function validateEnv(env = process.env) {
   const DATABASE_URL = (env.DATABASE_URL || '').trim();
   if (!DATABASE_URL && !isTest) {
     errors.push('DATABASE_URL is missing or empty.');
+  } else if (DATABASE_URL) {
+    try {
+      const parsed = new URL(DATABASE_URL);
+      if (!['postgresql:', 'postgres:'].includes(parsed.protocol)) {
+        errors.push('DATABASE_URL must be a valid PostgreSQL connection string starting with postgresql:// or postgres://');
+      }
+    } catch {
+      errors.push('DATABASE_URL is not a valid URL format.');
+    }
   }
 
   // 2. OTP_SECRET validation (required for HMAC in otpStore, min 32 chars)
@@ -39,8 +48,20 @@ function validateEnv(env = process.env) {
     errors.push('ALLOWED_ORIGIN is missing or empty.');
   }
 
-  // Optional: DIRECT_URL validation
+  // DIRECT_URL validation:
+  // In application runtime, DIRECT_URL is optional because PrismaClient uses DATABASE_URL.
+  // If DIRECT_URL is provided, validate that it has a valid PostgreSQL URL format without logging credentials.
   const DIRECT_URL = (env.DIRECT_URL || '').trim();
+  if (DIRECT_URL) {
+    try {
+      const parsed = new URL(DIRECT_URL);
+      if (!['postgresql:', 'postgres:'].includes(parsed.protocol)) {
+        errors.push('DIRECT_URL must be a valid PostgreSQL connection string starting with postgresql:// or postgres://');
+      }
+    } catch {
+      errors.push('DIRECT_URL is not a valid URL format.');
+    }
+  }
 
   // Optional: GROQ_API_KEY
   const GROQ_API_KEY = (env.GROQ_API_KEY || '').trim();
@@ -57,6 +78,9 @@ function validateEnv(env = process.env) {
 
   // Optional: NEON_AUTH_ENABLED (default false)
   const NEON_AUTH_ENABLED = env.NEON_AUTH_ENABLED === 'true';
+
+  // Optional: Redis URL for distributed rate limiting in multi-instance deployments
+  const REDIS_URL = (env.REDIS_URL || '').trim();
 
   // Optional: NEON_AUTH_JWKS_URL
   const NEON_AUTH_JWKS_URL = (env.NEON_AUTH_JWKS_URL || '').trim();
@@ -142,13 +166,111 @@ function validateEnv(env = process.env) {
     FIREBASE_PROJECT_ID,
     FIREBASE_CLIENT_EMAIL,
     FIREBASE_PRIVATE_KEY,
+    REDIS_URL,
     errors
   };
 }
 
 const config = validateEnv(process.env);
 
+/**
+ * Helper to sanitize database URLs by redacting password/credentials for safe logging.
+ */
+function sanitizeDatabaseUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    const parsed = new URL(url);
+    if (parsed.password) {
+      parsed.password = '****';
+    }
+    return parsed.toString();
+  } catch {
+    return '[malformed-url]';
+  }
+}
+
+/**
+ * Validates environment variables required for running database migrations.
+ * - Requires DATABASE_URL.
+ * - If DATABASE_URL uses a connection pooler (e.g. Neon's -pooler or PgBouncer),
+ *   DIRECT_URL is strictly required because transactional DDL and advisory locks fail on poolers.
+ * - If DATABASE_URL is a direct connection and DIRECT_URL is omitted, DIRECT_URL can safely default to DATABASE_URL.
+ *
+ * @param {object} env
+ * @returns {{ valid: boolean, errors: string[], effectiveDirectUrl: string, isPooled: boolean }}
+ */
+function validateMigrationEnv(env = process.env) {
+  const errors = [];
+  const databaseUrl = (env.DATABASE_URL || '').trim();
+  const directUrl = (env.DIRECT_URL || '').trim();
+
+  if (!databaseUrl) {
+    errors.push('DATABASE_URL is missing or empty. A valid PostgreSQL connection string is required.');
+  } else {
+    try {
+      const parsed = new URL(databaseUrl);
+      if (!['postgresql:', 'postgres:'].includes(parsed.protocol)) {
+        errors.push('DATABASE_URL must start with postgresql:// or postgres://');
+      }
+    } catch {
+      errors.push('DATABASE_URL is not a valid URL format.');
+    }
+  }
+
+  const isPooled = Boolean(
+    databaseUrl && (
+      databaseUrl.includes('-pooler') ||
+      databaseUrl.includes('pgbouncer=true') ||
+      databaseUrl.includes(':6543/')
+    )
+  );
+
+  let effectiveDirectUrl = directUrl;
+
+  if (isPooled) {
+    if (!directUrl) {
+      errors.push(
+        'DIRECT_URL is required for database migrations when DATABASE_URL uses a connection pooler (e.g. Neon or PgBouncer). ' +
+        'Please set DIRECT_URL to the direct (non-pooler) database connection string.'
+      );
+    } else {
+      try {
+        const parsed = new URL(directUrl);
+        if (!['postgresql:', 'postgres:'].includes(parsed.protocol)) {
+          errors.push('DIRECT_URL must start with postgresql:// or postgres://');
+        } else if (directUrl.includes('-pooler')) {
+          errors.push('DIRECT_URL must point to a direct database endpoint, not a connection pooler (-pooler).');
+        }
+      } catch {
+        errors.push('DIRECT_URL is not a valid URL format.');
+      }
+    }
+  } else if (!directUrl && databaseUrl) {
+    // Single non-pooled database: directUrl can safely default to databaseUrl
+    effectiveDirectUrl = databaseUrl;
+  } else if (directUrl) {
+    try {
+      const parsed = new URL(directUrl);
+      if (!['postgresql:', 'postgres:'].includes(parsed.protocol)) {
+        errors.push('DIRECT_URL must start with postgresql:// or postgres://');
+      }
+    } catch {
+      errors.push('DIRECT_URL is not a valid URL format.');
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    effectiveDirectUrl,
+    isPooled
+  };
+}
+
 module.exports = config;
 module.exports.config = config;
 module.exports.validateEnv = validateEnv;
+module.exports.validateMigrationEnv = validateMigrationEnv;
+module.exports.sanitizeDatabaseUrl = sanitizeDatabaseUrl;
+
 

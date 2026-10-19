@@ -154,7 +154,8 @@ router.get('/summary', verifyToken, asyncHandler(async (req, res) => {
       expenses: {
         select: {
           amount: true,
-          paidById: true
+          paidById: true,
+          currency: true
         }
       }
     }
@@ -187,25 +188,70 @@ router.get('/summary', verifyToken, asyncHandler(async (req, res) => {
   });
   const totalMembers = memberSet.size;
 
-  let totalSpent = 0;
+  // Track gross spending paid by the user, aggregated per currency
+  const spentByCurrency = {};
+
   userTrips.forEach(t => {
+    const tripCurrency = (typeof t.currency === 'string' && t.currency.trim())
+      ? t.currency.trim().toUpperCase()
+      : 'INR';
+
     if (Array.isArray(t.expenses)) {
       t.expenses.forEach(e => {
         if (e.paidById === req.userId) {
-          totalSpent += Number(e.amount) || 0;
+          const rawAmount = Number(e.amount);
+          if (!isNaN(rawAmount) && rawAmount > 0) {
+            const expCurrency = (typeof e.currency === 'string' && e.currency.trim())
+              ? e.currency.trim().toUpperCase()
+              : tripCurrency;
+            spentByCurrency[expCurrency] = (spentByCurrency[expCurrency] || 0) + rawAmount;
+          }
         }
       });
     }
   });
 
-  const currency = userTrips[0]?.currency || 'USD';
+  // Round amounts to 2 decimal places
+  for (const curr of Object.keys(spentByCurrency)) {
+    spentByCurrency[curr] = Math.round(spentByCurrency[curr] * 100) / 100;
+  }
+
+  // Determine fallback/primary currency: preserve trip's stored currency, default to INR only when needed
+  const primaryTripCurrency = userTrips.find(t => typeof t.currency === 'string' && t.currency.trim())?.currency?.trim().toUpperCase();
+  const defaultCurrency = primaryTripCurrency || 'INR';
+
+  const distinctCurrencies = Object.keys(spentByCurrency);
+
+  let totalSpent;
+  let currency;
+  let hasMultipleCurrencies = false;
+
+  if (distinctCurrencies.length === 0) {
+    // Zero expenses
+    currency = defaultCurrency;
+    totalSpent = 0;
+    spentByCurrency[currency] = 0;
+    hasMultipleCurrencies = false;
+  } else if (distinctCurrencies.length === 1) {
+    // Single currency: safe scalar total
+    currency = distinctCurrencies[0];
+    totalSpent = spentByCurrency[currency];
+    hasMultipleCurrencies = false;
+  } else {
+    // Multiple currencies: DO NOT add different currencies without conversion
+    hasMultipleCurrencies = true;
+    totalSpent = null;
+    currency = defaultCurrency || distinctCurrencies[0];
+  }
 
   res.json({
     totalTrips,
     upcomingTrips,
     totalMembers,
-    totalSpent: Math.round(totalSpent * 100) / 100,
-    currency
+    totalSpent,
+    currency,
+    spentByCurrency,
+    hasMultipleCurrencies
   });
 }));
 

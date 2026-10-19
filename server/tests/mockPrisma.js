@@ -122,6 +122,18 @@ function setupPrismaMock() {
     return { ...user };
   });
 
+  prisma.user.delete = jest.fn(async ({ where }) => {
+    let user = null;
+    if (where.id) {
+      user = users.get(where.id);
+      if (user) users.delete(where.id);
+    } else if (where.email) {
+      user = Array.from(users.values()).find(u => u.email.toLowerCase() === where.email.toLowerCase());
+      if (user) users.delete(user.id);
+    }
+    return user || null;
+  });
+
   prisma.user.findMany = jest.fn(async ({ where, select } = {}) => {
     let results = Array.from(users.values());
     if (where?.id?.in) {
@@ -264,9 +276,10 @@ function setupPrismaMock() {
     }
     if (select) {
       return results.map(t => {
+        const populated = populateTrip(t);
         const item = {};
         for (const k of Object.keys(select)) {
-          if (select[k]) item[k] = t[k];
+          if (select[k]) item[k] = populated[k];
         }
         return item;
       });
@@ -425,7 +438,7 @@ function setupPrismaMock() {
       tripId: data.tripId,
       title: data.title || '',
       amount: data.amount || 0,
-      currency: data.currency || 'INR',
+      currency: data.currency !== undefined ? data.currency : (trips.get(data.tripId)?.currency || 'INR'),
       category: data.category || 'other',
       receiptUrl: data.receiptUrl || '',
       paidById: data.paidById,
@@ -460,6 +473,7 @@ function setupPrismaMock() {
     let results = Array.from(expenses.values());
     if (where?.tripId) results = results.filter(e => e.tripId === where.tripId);
     if (where?.paidById) results = results.filter(e => e.paidById === where.paidById);
+    if (where?.trip?.ownerId) results = results.filter(e => trips.get(e.tripId)?.ownerId === where.trip.ownerId);
     return results.length;
   });
 

@@ -7,6 +7,31 @@ const logger = require('./logger');
 const neonSessionCache = new Map();
 const NEON_SESSION_TTL_MS = 10 * 1000; // 10 seconds cache
 
+const deletedAccountsCache = new Set();
+const pendingDeletionUids = new Set();
+
+function markUserPendingDeletion(firebaseUid) {
+  if (firebaseUid) pendingDeletionUids.add(firebaseUid);
+}
+
+function unmarkUserPendingDeletion(firebaseUid) {
+  if (firebaseUid) pendingDeletionUids.delete(firebaseUid);
+}
+
+function markUserDeleted(firebaseUid) {
+  if (firebaseUid) {
+    pendingDeletionUids.delete(firebaseUid);
+    deletedAccountsCache.add(firebaseUid);
+  }
+}
+
+function isUserDeletedOrPending(user) {
+  if (!user) return false;
+  if (user.deletedAt) return true;
+  if (user.refreshToken === 'pending_deletion' || user.refreshToken === 'deleted') return true;
+  return false;
+}
+
 /**
  * Determine if a caught error indicates that the database server is down or unreachable.
  *
@@ -62,7 +87,8 @@ let neonAuthMissingTableLogged = false;
  * @param {string} token - Raw token string
  * @returns {Promise<object>} Prisma user object
  */
-async function verifyAuthToken(token) {
+async function verifyAuthToken(token, options = {}) {
+  const allowPendingDeletion = options.allowPendingDeletion === true;
   if (!token || typeof token !== 'string') {
     const error = new Error('No token provided. Authorization denied.');
     error.statusCode = 401;
@@ -116,7 +142,15 @@ async function verifyAuthToken(token) {
         if (!user) {
           user = await ensureUserSynced(verifiedUserId);
         }
-        if (user) return user;
+        if (user) {
+          if (isUserDeletedOrPending(user)) {
+            const err = new Error('Account has been deleted or is pending deletion.');
+            err.statusCode = 401;
+            err.code = 'ACCOUNT_DELETED';
+            throw err;
+          }
+          return user;
+        }
       } catch (dbErr) {
         handleDatabaseError(dbErr, 'user lookup by neon session userId');
       }
@@ -133,10 +167,24 @@ async function verifyAuthToken(token) {
       const firebasePicture = decodedFirebaseToken.picture || '';
       const isEmailVerified = decodedFirebaseToken.email_verified === true;
 
+      // Deny immediately if UID is marked deleted, or pending deletion (unless allowPendingDeletion)
+      if (deletedAccountsCache.has(firebaseUid) || (!allowPendingDeletion && pendingDeletionUids.has(firebaseUid))) {
+        const err = new Error('Account has been deleted or is pending deletion.');
+        err.statusCode = 401;
+        err.code = 'ACCOUNT_DELETED';
+        throw err;
+      }
+
       try {
         // Look up user by firebaseUid (fast path for returning users)
         let user = await prisma.user.findFirst({ where: { firebaseUid } });
         if (user) {
+          if (!allowPendingDeletion && isUserDeletedOrPending(user)) {
+            const err = new Error('Account has been deleted or is pending deletion.');
+            err.statusCode = 401;
+            err.code = 'ACCOUNT_DELETED';
+            throw err;
+          }
           return user;
         }
 
@@ -160,12 +208,26 @@ async function verifyAuthToken(token) {
         if (firebaseEmail) {
           user = await prisma.user.findUnique({ where: { email: firebaseEmail } });
           if (user) {
+            if (isUserDeletedOrPending(user)) {
+              const err = new Error('Account has been deleted or is pending deletion.');
+              err.statusCode = 401;
+              err.code = 'ACCOUNT_DELETED';
+              throw err;
+            }
             user = await prisma.user.update({
               where: { id: user.id },
               data: { firebaseUid }
             });
             return user;
           }
+        }
+
+        // Do not auto-provision if marked deleted or pending deletion
+        if (deletedAccountsCache.has(firebaseUid) || pendingDeletionUids.has(firebaseUid)) {
+          const err = new Error('Account has been deleted or is pending deletion.');
+          err.statusCode = 401;
+          err.code = 'ACCOUNT_DELETED';
+          throw err;
         }
 
         // First-time login — auto-provision user record with P2002 retry
@@ -190,7 +252,15 @@ async function verifyAuthToken(token) {
                 ]
               }
             });
-            if (user) return user;
+            if (user) {
+              if (isUserDeletedOrPending(user)) {
+                const err = new Error('Account has been deleted or is pending deletion.');
+                err.statusCode = 401;
+                err.code = 'ACCOUNT_DELETED';
+                throw err;
+              }
+              return user;
+            }
           }
           throw createErr;
         }
@@ -217,5 +287,10 @@ module.exports = {
   verifyAuthToken,
   isDatabaseDownError,
   neonSessionCache,
-  NEON_SESSION_TTL_MS
+  NEON_SESSION_TTL_MS,
+  markUserPendingDeletion,
+  unmarkUserPendingDeletion,
+  markUserDeleted,
+  deletedAccountsCache,
+  pendingDeletionUids
 };

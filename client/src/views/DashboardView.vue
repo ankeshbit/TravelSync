@@ -86,9 +86,9 @@
           </div>
           <div>
             <p class="text-xs font-medium text-slate-400">Total Spent</p>
-            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5" :title="formattedTotalSpent">
               <span v-if="summaryLoading" class="inline-block w-16 h-6 bg-slate-800 animate-pulse rounded"></span>
-              <span v-else>{{ formatCurrency(summary.totalSpent, summary.currency) }}</span>
+              <span v-else>{{ formattedTotalSpent }}</span>
             </h3>
           </div>
         </div>
@@ -189,9 +189,26 @@ const summary = ref({
   upcomingTrips: 0,
   totalMembers: 0,
   totalSpent: 0,
-  currency: 'USD'
+  currency: 'INR',
+  spentByCurrency: {},
+  hasMultipleCurrencies: false
 });
 const summaryLoading = ref(true);
+
+const formattedTotalSpent = computed(() => {
+  if (summary.value?.spentByCurrency && typeof summary.value.spentByCurrency === 'object') {
+    const entries = Object.entries(summary.value.spentByCurrency).filter(([, amt]) => typeof amt === 'number' && amt > 0);
+    if (entries.length > 1) {
+      return entries.map(([curr, amt]) => formatCurrency(amt, curr)).join(' + ');
+    }
+    if (entries.length === 1) {
+      const [curr, amt] = entries[0];
+      return formatCurrency(amt, curr);
+    }
+  }
+  const fallbackCurrency = summary.value?.currency || 'INR';
+  return formatCurrency(summary.value?.totalSpent ?? 0, fallbackCurrency);
+});
 
 const fetchSummary = async () => {
   try {

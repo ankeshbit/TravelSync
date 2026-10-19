@@ -81,6 +81,14 @@ const { validate } = require('../middleware/validate');
 const { updateProfileSchema, sendOtpSchema, verifyOtpSchema } = require('../validators/auth');
 const { sendOtpEmail } = require('../utils/mailer');
 const { createOtp, verifyOtp } = require('../utils/otpStore');
+const { markUserPendingDeletion, unmarkUserPendingDeletion, markUserDeleted } = require('../utils/verifyAuthToken');
+const {
+  sendOtpIpLimiter,
+  sendOtpEmailLimiter,
+  verifyOtpIpLimiter,
+  verifyOtpEmailLimiter,
+  resolveOtpTargetEmail
+} = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
 
 // ─── Multer Setup ─────────────────────────────────────────────────────────────
@@ -251,13 +259,14 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'User not found.' });
   }
 
-  // Pre-check: if the user has any expenses paid or splits, reject with 409 before burning the OTP
-  const [expensesPaidCount, expenseSplitsCount] = await Promise.all([
+  // Pre-check: if the user has any expenses paid or splits, or owns trips that have expenses, reject with 409 before burning the OTP
+  const [expensesPaidCount, expenseSplitsCount, tripExpensesCount] = await Promise.all([
     prisma.expense.count({ where: { paidById: req.userId } }),
-    prisma.expenseSplit.count({ where: { userId: req.userId } })
+    prisma.expenseSplit.count({ where: { userId: req.userId } }),
+    prisma.expense.count({ where: { trip: { ownerId: req.userId } } })
   ]);
 
-  if (expensesPaidCount > 0 || expenseSplitsCount > 0) {
+  if (expensesPaidCount > 0 || expenseSplitsCount > 0 || tripExpensesCount > 0) {
     return res.status(409).json({
       message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
       code: 'ACCOUNT_HAS_EXPENSES'
@@ -269,20 +278,18 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
     return res.status(403).json({ message: otpResult.reason || 'Invalid or expired OTP.' });
   }
 
-  // Delete DB user first inside a try/catch mapping P2003 to 409
+  // Stage user as pending deletion to prevent race condition or auto-recreation
+  markUserPendingDeletion(user.firebaseUid);
   try {
-    await prisma.user.delete({ where: { id: req.userId } });
-  } catch (dbErr) {
-    if (dbErr.code === 'P2003') {
-      return res.status(409).json({
-        message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
-        code: 'ACCOUNT_HAS_EXPENSES'
-      });
-    }
-    throw dbErr;
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { refreshToken: 'pending_deletion' }
+    });
+  } catch (stageErr) {
+    logger.warn({ err: stageErr }, 'Failed to set user status to pending_deletion');
   }
 
-  // Delete Firebase user via firebase-admin if firebaseUid is present (log failure and still return 200)
+  // Delete Firebase user via firebase-admin if firebaseUid is present
   if (user.firebaseUid) {
     try {
       const { getAdminApp } = require('../config/firebaseAdmin');
@@ -290,9 +297,50 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       const adminApp = getAdminApp();
       await getAuth(adminApp).deleteUser(user.firebaseUid);
     } catch (fbErr) {
-      logger.error({ err: fbErr }, 'Failed to delete Firebase user during account deletion (DB user already deleted)');
+      const isNotFound = fbErr && (
+        fbErr.code === 'auth/user-not-found' ||
+        String(fbErr.message || '').includes('user-not-found')
+      );
+      if (!isNotFound) {
+        logger.error({ err: fbErr }, 'Failed to delete Firebase user during account deletion');
+        // Rollback pending deletion state so user can retry or use account
+        unmarkUserPendingDeletion(user.firebaseUid);
+        try {
+          await prisma.user.update({
+            where: { id: req.userId },
+            data: { refreshToken: null }
+          });
+        } catch (_rollbackErr) {
+          // ignore rollback error
+        }
+        return res.status(502).json({
+          message: 'Failed to delete authentication account. Please try again.',
+          code: 'FIREBASE_DELETE_FAILED'
+        });
+      }
     }
   }
+
+  // Delete DB user inside a transaction mapping P2003 to 409
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id: req.userId } });
+    });
+  } catch (dbErr) {
+    if (dbErr.code === 'P2003') {
+      return res.status(409).json({
+        message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
+        code: 'ACCOUNT_HAS_EXPENSES'
+      });
+    }
+    logger.error({ err: dbErr }, 'Failed to delete user profile from database');
+    return res.status(500).json({
+      message: 'Failed to delete user profile from database. Account deletion incomplete.',
+      code: 'DATABASE_DELETE_FAILED'
+    });
+  }
+
+  markUserDeleted(user.firebaseUid);
 
   // Remove the user's uploaded photo file
   if (user.picture && user.picture.startsWith('/uploads/')) {
@@ -386,51 +434,58 @@ router.post('/upload-photo', verifyToken, (req, res, next) => {
  *     summary: Send OTP code to email (account deletion only)
  *     tags: [Auth]
  */
-router.post('/send-otp', validate({ body: sendOtpSchema }), asyncHandler(async (req, res) => {
-  const { email, purpose = 'register' } = req.body;
+router.post(
+  '/send-otp',
+  resolveOtpTargetEmail,
+  sendOtpIpLimiter,
+  sendOtpEmailLimiter,
+  validate({ body: sendOtpSchema }),
+  asyncHandler(async (req, res) => {
+    const { purpose = 'register' } = req.body;
 
-  let targetEmail = email.toLowerCase().trim();
+    let targetEmail = req.targetEmail || (typeof req.body.email === 'string' ? req.body.email.toLowerCase().trim() : '');
 
-  // For delete, look up the authenticated user's email
-  if (purpose === 'delete') {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) return res.status(401).json({ message: 'Authentication required.' });
+    // For delete, look up the authenticated user's email
+    if (purpose === 'delete') {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+      if (!token) return res.status(401).json({ message: 'Authentication required.' });
 
+      try {
+        const { verifyFirebaseToken } = require('../config/firebaseAdmin');
+        const decoded = await verifyFirebaseToken(token);
+        targetEmail = (decoded.email || targetEmail).toLowerCase().trim();
+      } catch {
+        return res.status(401).json({ message: 'Invalid or expired token.' });
+      }
+    }
+
+    let otp;
     try {
-      const { verifyFirebaseToken } = require('../config/firebaseAdmin');
-      const decoded = await verifyFirebaseToken(token);
-      targetEmail = decoded.email || targetEmail;
-    } catch {
-      return res.status(401).json({ message: 'Invalid or expired token.' });
+      otp = await createOtp(targetEmail, purpose);
+    } catch (err) {
+      if (err.statusCode === 429) {
+        return res.status(429).json({ message: err.message, cooldownSeconds: err.cooldownSeconds });
+      }
+      throw err;
     }
-  }
 
-  let otp;
-  try {
-    otp = await createOtp(targetEmail, purpose);
-  } catch (err) {
-    if (err.statusCode === 429) {
-      return res.status(429).json({ message: err.message, cooldownSeconds: err.cooldownSeconds });
+    const mailResult = await sendOtpEmail(targetEmail, otp, purpose);
+
+    const isProd = config.isProduction || process.env.NODE_ENV === 'production';
+    const responseData = {
+      message: mailResult?.dev
+        ? 'Verification code generated (check terminal or dev hint).'
+        : 'Verification code sent to your email.'
+    };
+
+    if (!isProd && otp) {
+      responseData.devOtp = otp;
     }
-    throw err;
-  }
 
-  const mailResult = await sendOtpEmail(targetEmail, otp, purpose);
-
-  const isProd = config.isProduction || process.env.NODE_ENV === 'production';
-  const responseData = {
-    message: mailResult?.dev
-      ? 'Verification code generated (check terminal or dev hint).'
-      : 'Verification code sent to your email.'
-  };
-
-  if (!isProd && otp) {
-    responseData.devOtp = otp;
-  }
-
-  res.json(responseData);
-}));
+    res.json(responseData);
+  })
+);
 
 /**
  * @swagger
@@ -439,15 +494,22 @@ router.post('/send-otp', validate({ body: sendOtpSchema }), asyncHandler(async (
  *     summary: Verify OTP code
  *     tags: [Auth]
  */
-router.post('/verify-otp', validate({ body: verifyOtpSchema }), asyncHandler(async (req, res) => {
-  const { email, otp, purpose = 'register' } = req.body;
+router.post(
+  '/verify-otp',
+  resolveOtpTargetEmail,
+  verifyOtpIpLimiter,
+  verifyOtpEmailLimiter,
+  validate({ body: verifyOtpSchema }),
+  asyncHandler(async (req, res) => {
+    const { email, otp, purpose = 'register' } = req.body;
 
-  const result = await verifyOtp(email.toLowerCase().trim(), otp, purpose);
-  if (!result.ok) {
-    return res.status(400).json({ message: result.reason });
-  }
+    const result = await verifyOtp(email.toLowerCase().trim(), otp, purpose);
+    if (!result.ok) {
+      return res.status(400).json({ message: result.reason });
+    }
 
-  res.json({ verified: true, message: 'Email verified successfully.' });
-}));
+    res.json({ verified: true, message: 'Email verified successfully.' });
+  })
+);
 
 module.exports = router;

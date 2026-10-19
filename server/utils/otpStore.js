@@ -91,7 +91,6 @@ async function createOtp(email, purpose) {
     const existing = await tx.otp.findFirst({
       where: {
         email: normalizedEmail,
-        purpose,
         expiresAt: { gt: now }
       },
       orderBy: { createdAt: 'desc' }
@@ -110,8 +109,7 @@ async function createOtp(email, purpose) {
 
     await tx.otp.deleteMany({
       where: {
-        email: normalizedEmail,
-        purpose
+        email: normalizedEmail
       }
     });
 
