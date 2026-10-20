@@ -8,7 +8,7 @@ import { useAuthStore } from '../stores/auth';
 import { useTripsStore } from '../stores/trips';
 
 describe('EarthLoadingOverlay component', () => {
-  it('renders correctly when visible is true with default message', () => {
+  it('renders correctly when visible is true with default message, logo and branding', () => {
     const wrapper = mount(EarthLoadingOverlay, {
       props: {
         visible: true,
@@ -19,6 +19,12 @@ describe('EarthLoadingOverlay component', () => {
     expect(wrapper.text()).toContain('Getting your journey ready…');
     expect(wrapper.find('[role="status"]').exists()).toBe(true);
     expect(wrapper.find('[role="status"]').attributes('aria-live')).toBe('polite');
+
+    // Logo image and progress bar
+    const logoImg = wrapper.find('img[alt="TravelSync"]');
+    expect(logoImg.exists()).toBe(true);
+    expect(logoImg.attributes('src')).toBeTruthy();
+    expect(wrapper.find('.earth-progress-shimmer').exists()).toBe(true);
   });
 
   it('renders custom loading message when provided', () => {
@@ -52,6 +58,22 @@ describe('EarthLoadingOverlay component', () => {
     });
 
     expect(wrapper.find('[role="status"]').exists()).toBe(false);
+  });
+
+  it('handles visibility toggle cleanly without error', async () => {
+    const wrapper = mount(EarthLoadingOverlay, {
+      props: {
+        visible: true,
+      },
+    });
+
+    expect(wrapper.find('[role="status"]').exists()).toBe(true);
+
+    await wrapper.setProps({ visible: false });
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+
+    await wrapper.setProps({ visible: true });
+    expect(wrapper.find('[role="status"]').exists()).toBe(true);
   });
 
   it('unmounts cleanly without throwing errors', () => {

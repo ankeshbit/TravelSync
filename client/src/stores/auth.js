@@ -33,6 +33,8 @@ export const useAuthStore = defineStore('auth', {
     initialized: false,
     // General loading flag used by login / register actions
     loading: false,
+    // Error state if syncing profile with backend database fails
+    syncError: null,
   }),
 
   getters: {
@@ -60,34 +62,6 @@ export const useAuthStore = defineStore('auth', {
       onAuthStateChanged(auth, async (firebaseUser) => {
         clearTimeout(fallbackTimer);
         this.firebaseUser = firebaseUser;
-
-        if (!firebaseUser && import.meta.env.DEV && typeof window !== 'undefined') {
-          let devUser = null;
-          try {
-            const raw = localStorage.getItem('travelsync_dev_user');
-            devUser = raw ? JSON.parse(raw) : {
-              id: 'dev-user-id',
-              name: 'Ankesh Srivastava',
-              email: 'ankeshsrivastava61289@gmail.com'
-            };
-          } catch {
-            devUser = {
-              id: 'dev-user-id',
-              name: 'Ankesh Srivastava',
-              email: 'ankeshsrivastava61289@gmail.com'
-            };
-          }
-          if (devUser) {
-            this.firebaseUser = {
-              uid: devUser.firebaseUid || devUser.id || 'dev-uid',
-              email: devUser.email || 'ankeshsrivastava61289@gmail.com',
-              displayName: devUser.name || 'Ankesh Srivastava',
-              emailVerified: true,
-              getIdToken: async () => 'dev-token',
-            };
-            this.currentUser = devUser;
-          }
-        }
 
         // Immediately mark initialized and unblock app before DB sync
         if (!this.initialized) {

@@ -98,12 +98,6 @@ async function verifyAuthToken(token, options = {}) {
   const cleanToken = token.trim();
   let verifiedUserId = null;
 
-  // 0. Development fallback token for automated visual testing and inspection
-  if (config.NODE_ENV !== 'production' && cleanToken === 'dev-token') {
-    const devUser = await prisma.user.findFirst({ where: { email: 'ankeshsrivastava61289@gmail.com' } });
-    if (devUser) return devUser;
-  }
-
   // 1. Neon Auth session check (only if config.NEON_AUTH_ENABLED is true)
   if (config.NEON_AUTH_ENABLED) {
     const cached = neonSessionCache.get(cleanToken);

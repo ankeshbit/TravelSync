@@ -256,12 +256,13 @@
                       @error="e => e.target.style.display = 'none'"
                     />
                     <div v-else class="w-8 h-8 rounded-full bg-[#EFECE6] dark:bg-[#292A25] text-[#1C1D1A] dark:text-[#D5D3CA] flex items-center justify-center font-bold text-xs border border-[#E3E0D8] dark:border-[#414239] flex-shrink-0">
-                      {{ debt.name ? debt.name.charAt(0).toUpperCase() : 'U' }}
+                      {{ (debt.type === 'peer_debt' ? debt.fromName : debt.name)?.charAt(0)?.toUpperCase() || 'M' }}
                     </div>
                     <div class="min-w-0 flex-1">
                       <p class="text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] truncate">
-                        <span v-if="debt.type === 'owes_you'">{{ debt.name }} owes you</span>
-                        <span v-else>You owe {{ debt.name }}</span>
+                        <span v-if="debt.type === 'owes_you'">{{ debt.fromName }} owes you</span>
+                        <span v-else-if="debt.type === 'you_owe'">You owe {{ debt.toName }}</span>
+                        <span v-else>{{ debt.fromName }} owes {{ debt.toName }}</span>
                       </p>
                       <p v-if="debt.email" class="text-[10px] text-[#7E8075] dark:text-[#85867C] truncate">{{ debt.email }}</p>
                     </div>
@@ -272,7 +273,9 @@
                       'text-xs font-bold px-3 py-1 rounded-xl border flex-shrink-0',
                       debt.type === 'owes_you'
                         ? 'text-[#86A98B] bg-[#86A98B]/15 border-[#86A98B]/30'
-                        : 'text-[#C77F78] bg-[#C77F78]/15 border-[#C77F78]/30'
+                        : debt.type === 'you_owe'
+                          ? 'text-[#C77F78] bg-[#C77F78]/15 border-[#C77F78]/30'
+                          : 'text-[#A7A99A] bg-[#A7A99A]/15 border-[#A7A99A]/30'
                     ]"
                   >
                     {{ formatCurrency(debt.amount, currentTripCurrency) }}
@@ -323,8 +326,9 @@
           >
             <div>
               <p class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">
-                <span v-if="debt.type === 'owes_you'">{{ debt.name }} → You</span>
-                <span v-else>You → {{ debt.name }}</span>
+                <span v-if="debt.type === 'owes_you'">{{ debt.fromName }} → You</span>
+                <span v-else-if="debt.type === 'you_owe'">You → {{ debt.toName }}</span>
+                <span v-else>{{ debt.fromName }} → {{ debt.toName }}</span>
               </p>
               <p class="text-[11px] text-[#7E8075] dark:text-[#85867C] mt-0.5">Amount: {{ formatCurrency(debt.amount, currentTripCurrency) }}</p>
             </div>
@@ -423,13 +427,18 @@ const displayOwesList = computed(() => {
   const settlements = currData?.settlements || expensesStore.settlements || []
   return settlements.map((s, idx) => {
     const isYouOwe = s.from === currentUserId
-    const partnerName = isYouOwe ? s.toName : s.fromName
+    const isOwesYou = s.to === currentUserId
+    const type = isYouOwe ? 'you_owe' : (isOwesYou ? 'owes_you' : 'peer_debt')
+    const fromName = s.fromName || 'Member'
+    const toName = s.toName || 'Member'
     return {
       id: `${s.from}-${s.to}-${idx}`,
-      name: partnerName || `Member ${idx + 1}`,
+      name: isYouOwe ? toName : fromName,
+      fromName,
+      toName,
       email: '',
       avatar: null,
-      type: isYouOwe ? 'you_owe' : 'owes_you',
+      type,
       amount: s.amount
     }
   })

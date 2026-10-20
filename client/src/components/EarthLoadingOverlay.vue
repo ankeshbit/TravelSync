@@ -2,15 +2,20 @@
   <Transition name="earth-fade">
     <div
       v-if="visible"
-      class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#111210]/95 backdrop-blur-md select-none overflow-hidden"
+      class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#111210]/95 backdrop-blur-md select-none overflow-hidden p-6"
       role="status"
       aria-live="polite"
       :aria-label="message || 'Loading'"
     >
       <span class="sr-only">{{ message }}</span>
 
-      <!-- Brand Header -->
-      <div class="mb-4 flex flex-col items-center pointer-events-none">
+      <!-- Brand Header with Logo -->
+      <div class="mb-4 sm:mb-6 flex flex-col items-center gap-2 pointer-events-none">
+        <img
+          :src="logoUrl"
+          alt="TravelSync"
+          class="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]"
+        />
         <span class="text-[11px] font-semibold tracking-[0.35em] text-[#A7A99A]/80 uppercase">
           TRAVELSYNC
         </span>
@@ -19,7 +24,7 @@
       <!-- 3D Earth Canvas or Fallback Container -->
       <div
         ref="containerRef"
-        class="relative w-64 h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 flex items-center justify-center"
+        class="relative w-64 h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 flex items-center justify-center my-1 sm:my-2"
       >
         <!-- WebGL Canvas Mount Target -->
         <canvas
@@ -49,13 +54,13 @@
 
       <!-- Loading Message -->
       <p
-        class="mt-6 text-sm sm:text-base font-medium text-[#E4E6DC] tracking-wide text-center max-w-sm px-6"
+        class="mt-4 sm:mt-6 text-sm sm:text-base font-medium text-[#E4E6DC] tracking-wide text-center max-w-sm px-6"
       >
         {{ message }}
       </p>
 
       <!-- Minimalist Progress Indicator -->
-      <div class="w-28 sm:w-36 h-0.5 bg-[#30312C] rounded-full overflow-hidden mt-4 relative">
+      <div class="w-32 sm:w-40 h-1 bg-[#30312C] rounded-full overflow-hidden mt-3 sm:mt-4 relative">
         <div class="absolute inset-0 bg-gradient-to-r from-transparent via-[#A7A99A] to-transparent earth-progress-shimmer"></div>
       </div>
     </div>
@@ -65,6 +70,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import * as THREE from 'three';
+import logoUrl from '../assets/logo.png';
 
 const props = defineProps({
   visible: {
@@ -85,7 +91,7 @@ function isWebGLSupported() {
     if (typeof window === 'undefined' || !window.WebGLRenderingContext) return false;
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    return Boolean(gl);
+    return Boolean(gl && typeof gl.getParameter === 'function');
   } catch {
     return false;
   }
@@ -101,15 +107,18 @@ let renderer = null;
 let scene = null;
 let camera = null;
 let earthMesh = null;
+let cloudsMesh = null;
 let atmosphereMesh = null;
 let earthGroup = null;
 let earthTexture = null;
+let cloudsTexture = null;
 let animationFrameId = null;
 let resizeObserver = null;
 let mediaQuery = null;
+let motionHandler = null;
 
 /**
- * Generate a procedural 2D canvas texture for Earth if the image asset fails to load.
+ * Generate a procedural 2D canvas texture for Earth if the image asset is loading or unavailable.
  */
 function generateFallbackTexture() {
   const canvas = document.createElement('canvas');
@@ -118,8 +127,16 @@ function generateFallbackTexture() {
   const ctx = canvas.getContext('2d');
   if (!ctx) return new THREE.Texture();
 
-  // Oceans (deep navy charcoal)
-  ctx.fillStyle = '#0f202b';
+  // Oceans (deep navy graphite)
+  ctx.fillStyle = '#0e1a22';
+  ctx.fillRect(0, 0, 1024, 512);
+
+  // Subtle ocean depth variations
+  const oceanGrad = ctx.createLinearGradient(0, 0, 0, 512);
+  oceanGrad.addColorStop(0, 'rgba(20, 36, 48, 0.4)');
+  oceanGrad.addColorStop(0.5, 'rgba(10, 20, 28, 0.2)');
+  oceanGrad.addColorStop(1, 'rgba(20, 36, 48, 0.4)');
+  ctx.fillStyle = oceanGrad;
   ctx.fillRect(0, 0, 1024, 512);
 
   // Continents (muted sage green / khaki)
@@ -155,11 +172,48 @@ function generateFallbackTexture() {
   ctx.ellipse(835, 360, 55, 40, 0.2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Soft clouds
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
-  for (let i = 0; i < 7; i++) {
+  // Polar Ice Caps
+  ctx.fillStyle = '#7a9e92';
+  ctx.beginPath();
+  ctx.ellipse(512, 18, 480, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(512, 498, 450, 20, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * Generate a procedural clouds texture for subtle atmospheric realism.
+ */
+function generateCloudsTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.Texture();
+
+  ctx.clearRect(0, 0, 1024, 512);
+
+  // Soft atmospheric cloud bands
+  for (let i = 0; i < 16; i++) {
+    const cx = (i * 142) % 1024;
+    const cy = 70 + ((i * 71) % 360);
+    const rx = 70 + ((i * 29) % 110);
+    const ry = 16 + ((i * 13) % 30);
+    const rot = (i * 0.18) - 0.4;
+
+    const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy, rx);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+    grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.ellipse(90 + i * 150, 90 + (i % 3) * 110, 100, 22, i * 0.15, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -192,29 +246,46 @@ function initThree() {
       antialias: true,
       powerPreference: 'high-performance',
     });
-    renderer.setSize(width, height);
+    renderer.setSize(width, height, false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
-    // Earth group tilted by 23.5° (Earth's axial obliquity)
+    // Earth group tilted by 23.4° (Earth's axial obliquity)
     earthGroup = new THREE.Group();
-    earthGroup.rotation.z = (23.5 * Math.PI) / 180;
+    earthGroup.rotation.z = (23.4 * Math.PI) / 180;
+    earthGroup.rotation.x = (8 * Math.PI) / 180; // Subtle pitch toward camera
     scene.add(earthGroup);
 
     // Earth Sphere Geometry
     const earthGeometry = new THREE.SphereGeometry(1, 64, 64);
 
-    // Initial Material with dark placeholder until texture finishes loading
+    // Initial Material with procedural texture immediately to prevent any blank frame
+    const initialMap = generateFallbackTexture();
+    earthTexture = initialMap;
+
     const earthMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.65,
-      metalness: 0.05,
+      map: initialMap,
+      roughness: 0.68,
+      metalness: 0.08,
     });
 
     earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
     earthGroup.add(earthMesh);
 
-    // Atmospheric Glow Mesh (outer shell with custom Fresnel shader)
-    const atmosphereGeometry = new THREE.SphereGeometry(1.035, 64, 64);
+    // Semi-transparent procedural clouds layer
+    const cloudsGeometry = new THREE.SphereGeometry(1.014, 64, 64);
+    cloudsTexture = generateCloudsTexture();
+    const cloudsMaterial = new THREE.MeshStandardMaterial({
+      map: cloudsTexture,
+      transparent: true,
+      opacity: 0.28,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    cloudsMesh = new THREE.Mesh(cloudsGeometry, cloudsMaterial);
+    earthGroup.add(cloudsMesh);
+
+    // Atmospheric Glow Mesh (outer shell with custom Fresnel shader in sage tone)
+    const atmosphereGeometry = new THREE.SphereGeometry(1.036, 64, 64);
     const atmosphereMaterial = new THREE.ShaderMaterial({
       vertexShader: `
         varying vec3 vNormal;
@@ -226,8 +297,8 @@ function initThree() {
       fragmentShader: `
         varying vec3 vNormal;
         void main() {
-          float intensity = pow(0.68 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.2);
-          gl_FragColor = vec4(0.48, 0.68, 0.62, 1.0) * intensity * 0.8;
+          float intensity = pow(0.66 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.2);
+          gl_FragColor = vec4(0.48, 0.68, 0.62, 1.0) * intensity * 0.9;
         }
       `,
       blending: THREE.AdditiveBlending,
@@ -239,38 +310,36 @@ function initThree() {
     atmosphereMesh = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
     earthGroup.add(atmosphereMesh);
 
-    // Ambient light: subtle illumination so the unlit side is dark graphite
-    const ambientLight = new THREE.AmbientLight(0x28302c, 1.2);
+    // Ambient light: subtle illumination matching dark graphite and muted sage
+    const ambientLight = new THREE.AmbientLight(0x242d28, 1.2);
     scene.add(ambientLight);
 
     // Directional sunlight illuminating from top-left
-    const sunLight = new THREE.DirectionalLight(0xfffef8, 2.4);
-    sunLight.position.set(-4, 3, 3);
+    const sunLight = new THREE.DirectionalLight(0xfffef5, 2.6);
+    sunLight.position.set(-5, 3.5, 3.5);
     scene.add(sunLight);
 
-    // Load Earth Texture with graceful fallback
+    // Upgrade to high-resolution asset /textures/earth.jpg if available
     const loader = new THREE.TextureLoader();
     loader.load(
       '/textures/earth.jpg',
       (texture) => {
         if (!earthMaterial) return;
         texture.colorSpace = THREE.SRGBColorSpace;
+        if (earthTexture && earthTexture !== texture) {
+          earthTexture.dispose();
+        }
         earthTexture = texture;
         earthMaterial.map = texture;
         earthMaterial.needsUpdate = true;
       },
       undefined,
       () => {
-        // Fallback procedural canvas texture if the image fails to load
-        if (!earthMaterial) return;
-        const fallbackTex = generateFallbackTexture();
-        earthTexture = fallbackTex;
-        earthMaterial.map = fallbackTex;
-        earthMaterial.needsUpdate = true;
+        // Keep procedural fallback seamlessly
       }
     );
 
-    // Setup ResizeObserver
+    // Setup ResizeObserver for responsive sizing
     if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
       resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
@@ -278,7 +347,7 @@ function initThree() {
           if (w > 0 && h > 0 && camera && renderer) {
             camera.aspect = w / h;
             camera.updateProjectionMatrix();
-            renderer.setSize(w, h);
+            renderer.setSize(w, h, false);
           }
         }
       });
@@ -308,8 +377,13 @@ function startAnimation() {
       return;
     }
 
-    if (earthMesh && !reducedMotion.value) {
-      earthMesh.rotation.y += 0.0035;
+    if (!reducedMotion.value) {
+      if (earthMesh) {
+        earthMesh.rotation.y += 0.003;
+      }
+      if (cloudsMesh) {
+        cloudsMesh.rotation.y += 0.0036;
+      }
     }
 
     renderer.render(scene, camera);
@@ -327,7 +401,7 @@ function stopAnimation() {
 }
 
 /**
- * Dispose Three.js objects to prevent memory leaks.
+ * Dispose Three.js objects to prevent memory leaks and clean up resources.
  */
 function cleanupThree() {
   stopAnimation();
@@ -343,6 +417,12 @@ function cleanupThree() {
     earthMesh = null;
   }
 
+  if (cloudsMesh) {
+    if (cloudsMesh.geometry) cloudsMesh.geometry.dispose();
+    if (cloudsMesh.material) cloudsMesh.material.dispose();
+    cloudsMesh = null;
+  }
+
   if (atmosphereMesh) {
     if (atmosphereMesh.geometry) atmosphereMesh.geometry.dispose();
     if (atmosphereMesh.material) atmosphereMesh.material.dispose();
@@ -352,6 +432,11 @@ function cleanupThree() {
   if (earthTexture) {
     earthTexture.dispose();
     earthTexture = null;
+  }
+
+  if (cloudsTexture) {
+    cloudsTexture.dispose();
+    cloudsTexture = null;
   }
 
   if (renderer) {
@@ -364,19 +449,17 @@ function cleanupThree() {
   earthGroup = null;
 }
 
-// Watch visibility to pause/resume animation loop and prevent background GPU/CPU burn
+// Watch visibility: clean up Three.js when hidden, initialize when shown
 watch(
   () => props.visible,
   async (newVal) => {
     if (newVal) {
       await nextTick();
-      if (!renderer && hasWebGL.value) {
+      if (hasWebGL.value) {
         initThree();
-      } else {
-        startAnimation();
       }
     } else {
-      stopAnimation();
+      cleanupThree();
     }
   }
 );
@@ -386,11 +469,13 @@ onMounted(() => {
   if (typeof window !== 'undefined' && window.matchMedia) {
     mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     reducedMotion.value = mediaQuery.matches;
-    const motionHandler = (e) => {
+    motionHandler = (e) => {
       reducedMotion.value = e.matches;
     };
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', motionHandler);
+    } else if (mediaQuery.addListener) {
+      mediaQuery.addListener(motionHandler);
     }
   }
 
@@ -405,6 +490,15 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (mediaQuery && motionHandler) {
+    if (mediaQuery.removeEventListener) {
+      mediaQuery.removeEventListener('change', motionHandler);
+    } else if (mediaQuery.removeListener) {
+      mediaQuery.removeListener(motionHandler);
+    }
+    mediaQuery = null;
+    motionHandler = null;
+  }
   cleanupThree();
 });
 </script>
@@ -448,6 +542,13 @@ onBeforeUnmount(() => {
   }
   100% {
     transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .earth-fallback-orbit,
+  .earth-progress-shimmer {
+    animation: none;
   }
 }
 </style>
