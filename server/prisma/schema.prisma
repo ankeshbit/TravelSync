@@ -17,6 +17,7 @@ model User {
   picture      String         @default("")
   refreshToken String?        // kept for backward compat; no longer used after Firebase migration
   createdAt    DateTime       @default(now())
+  deletedAt    DateTime?
 
   ownedTrips    Trip[]         @relation("TripOwner")
   memberTrips   TripMember[]

@@ -7,6 +7,7 @@
           <span class="brand-text">Travel Sync</span>
         </div>
         <nav class="header-nav">
+          <ThemeToggle />
           <router-link class="nav-link" to="/login">Sign In</router-link>
         </nav>
       </div>
@@ -150,6 +151,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getFirebaseErrorMessage } from '../services/authService'
+import ThemeToggle from '../components/ThemeToggle.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -236,11 +238,10 @@ const handleGoogleRegister = async () => {
 
 /* ── Header ── */
 .header {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(247, 246, 242, 0.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 1px 4px rgba(0, 53, 95, 0.06);
+  border-bottom: 1px solid #E3E0D8;
   position: fixed;
   top: 0; left: 0; right: 0;
   z-index: 50;
@@ -248,8 +249,8 @@ const handleGoogleRegister = async () => {
 }
 
 :global(.dark) .header {
-  background: rgba(15, 23, 42, 0.8);
-  border-bottom-color: rgba(30, 41, 59, 0.5);
+  background: rgba(20, 21, 18, 0.85);
+  border-bottom-color: #30312C;
 }
 .header-inner {
   display: flex;
@@ -268,32 +269,32 @@ const handleGoogleRegister = async () => {
   height: 36px;
   width: auto;
   object-fit: contain;
-  mix-blend-mode: multiply;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
 }
 .brand-text {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 1.25rem;
   font-weight: 800;
-  color: #00355f;
+  color: #1C1D1A;
   letter-spacing: -0.02em;
 }
 :global(.dark) .brand-text {
-  color: #38bdf8;
+  color: #D5D3CA;
 }
 .header-nav { display: flex; gap: 1rem; align-items: center; }
 .nav-link {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #00355f;
+  color: #1C1D1A;
   padding: 0.5rem 1.25rem;
   border-radius: 0.5rem;
-  border: 1.5px solid #00355f;
+  border: 1.5px solid #D1CEC7;
   text-decoration: none;
   transition: all 0.2s ease;
 }
-.nav-link:hover { background: #00355f; color: #fff; }
-:global(.dark) .nav-link { color: #38bdf8; border-color: #38bdf8; }
-:global(.dark) .nav-link:hover { background: #38bdf8; color: #020617; }
+.nav-link:hover { background: #EFECE6; }
+:global(.dark) .nav-link { color: #D5D3CA; border-color: #30312C; }
+:global(.dark) .nav-link:hover { background: #22231F; border-color: #414239; }
 
 /* ── Main ── */
 .main {
@@ -302,10 +303,10 @@ const handleGoogleRegister = async () => {
   align-items: center;
   justify-content: center;
   padding: 6rem 1rem 2rem;
-  background: #f9f9ff;
+  background: #F7F6F2;
   transition: background-color 0.2s;
 }
-:global(.dark) .main { background: #020617; }
+:global(.dark) .main { background: #111210; }
 
 /* ── Card ── */
 .card {
@@ -313,20 +314,18 @@ const handleGoogleRegister = async () => {
   max-width: 960px;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: #FAF9F5;
+  border: 1px solid #E3E0D8;
   border-radius: 1.5rem;
   overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 53, 95, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
   margin-bottom: 2rem;
   transition: background-color 0.2s, border-color 0.2s;
 }
 :global(.dark) .card {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(30, 41, 59, 0.5);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  background: #1B1C19;
+  border-color: #30312C;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
 }
 @media (min-width: 768px) {
   .card { flex-direction: row; }
@@ -337,16 +336,15 @@ const handleGoogleRegister = async () => {
   display: none;
   position: relative;
   overflow: hidden;
-  background: #00355f;
+  background: #141512;
 }
 @media (min-width: 768px) {
   .panel-left { display: block; width: 50%; min-height: 560px; }
 }
 .panel-overlay {
   position: absolute; inset: 0;
-  background: linear-gradient(135deg, #00355f 0%, #006970 100%);
+  background: linear-gradient(135deg, rgba(17,18,16,0.92) 0%, rgba(17,18,16,0.65) 100%);
   opacity: 0.9;
-  mix-blend-mode: multiply;
   z-index: 1;
 }
 .panel-bg {
@@ -361,7 +359,7 @@ const handleGoogleRegister = async () => {
   flex-direction: column;
   justify-content: flex-end;
   padding: 3rem;
-  color: #fff;
+  color: #D5D3CA;
 }
 .panel-title {
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -370,33 +368,36 @@ const handleGoogleRegister = async () => {
   line-height: 1.2;
   letter-spacing: -0.02em;
   margin-bottom: 1rem;
+  color: #FFFFFF;
 }
 .panel-sub {
   font-size: 1.05rem;
   line-height: 1.6;
   opacity: 0.9;
   max-width: 320px;
+  color: #D5D3CA;
 }
 .features { margin-top: 2.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
-.feature { display: flex; align-items: center; gap: 1rem; font-size: 0.875rem; font-weight: 600; }
+.feature { display: flex; align-items: center; gap: 1rem; font-size: 0.875rem; font-weight: 600; color: #D5D3CA; }
 .feature-icon {
   width: 40px; height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  color: #A7A99A;
 }
 
 /* ── Right Panel ── */
 .panel-right {
   width: 100%;
-  background: rgba(255, 255, 255, 0.4);
+  background: #FAF9F5;
   padding: 2.5rem;
   transition: background-color 0.2s;
 }
 :global(.dark) .panel-right {
-  background: transparent;
+  background: #1B1C19;
 }
 @media (min-width: 768px) { .panel-right { width: 50%; padding: 3rem 2.5rem; } }
 
@@ -407,13 +408,13 @@ const handleGoogleRegister = async () => {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 2rem;
   font-weight: 700;
-  color: #00355f;
+  color: #1C1D1A;
   letter-spacing: -0.02em;
   margin-bottom: 0.35rem;
 }
-:global(.dark) .form-title { color: #f1f5f9; }
-.form-sub { font-size: 0.95rem; color: #42474f; }
-:global(.dark) .form-sub { color: #94a3b8; }
+:global(.dark) .form-title { color: #D5D3CA; }
+.form-sub { font-size: 0.95rem; color: #575851; }
+:global(.dark) .form-sub { color: #85867C; }
 
 /* Google Button */
 .google-btn {
@@ -423,31 +424,30 @@ const handleGoogleRegister = async () => {
   justify-content: center;
   gap: 0.75rem;
   padding: 0.85rem 1.25rem;
-  background: #ffffff;
-  border: 1.5px solid #e2e8f0;
+  background: #FFFFFF;
+  border: 1.5px solid #D1CEC7;
   border-radius: 0.75rem;
   font-size: 0.95rem;
   font-weight: 600;
   font-family: inherit;
-  color: #161c27;
+  color: #1C1D1A;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 :global(.dark) .google-btn {
-  background: #1e293b;
-  border-color: #334155;
-  color: #f8fafc;
+  background: #141512;
+  border-color: #30312C;
+  color: #D5D3CA;
 }
 .google-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+  background: #EFECE6;
+  border-color: #B9BBAA;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 :global(.dark) .google-btn:hover:not(:disabled) {
-  background: #273549;
-  border-color: #475569;
+  background: #22231F;
+  border-color: #414239;
 }
 .google-btn:disabled {
   opacity: 0.65;
@@ -459,8 +459,8 @@ const handleGoogleRegister = async () => {
   display: inline-block;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(2, 132, 199, 0.25);
-  border-top-color: #0284c7;
+  border: 2px solid rgba(167, 169, 154, 0.25);
+  border-top-color: #A7A99A;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -472,17 +472,17 @@ const handleGoogleRegister = async () => {
   gap: 1rem;
   margin: 1.5rem 0;
 }
-.divider-line { flex: 1; height: 1px; background: rgba(194, 199, 209, 0.4); }
-:global(.dark) .divider-line { background: rgba(51, 65, 85, 0.4); }
+.divider-line { flex: 1; height: 1px; background: #E3E0D8; }
+:global(.dark) .divider-line { background: #30312C; }
 .divider-text {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #64748b;
+  color: #85867C;
   white-space: nowrap;
 }
-:global(.dark) .divider-text { color: #94a3b8; }
+:global(.dark) .divider-text { color: #85867C; }
 
 /* ── Form ── */
 .form { display: flex; flex-direction: column; gap: 1.15rem; }
@@ -493,49 +493,50 @@ const handleGoogleRegister = async () => {
 .field-label {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #42474f;
+  color: #1C1D1A;
 }
-:global(.dark) .field-label { color: #e2e8f0; }
+:global(.dark) .field-label { color: #D5D3CA; }
 
 .input-wrap { position: relative; }
 .input-icon {
   position: absolute;
   left: 12px; top: 50%;
   transform: translateY(-50%);
-  color: #727780;
+  color: #85867C;
   font-size: 20px;
   pointer-events: none;
 }
-.input-wrap:focus-within .input-icon { color: #00355f; }
-:global(.dark) .input-wrap:focus-within .input-icon { color: #38bdf8; }
+.input-wrap:focus-within .input-icon { color: #1C1D1A; }
+:global(.dark) .input-wrap:focus-within .input-icon { color: #A7A99A; }
 
 .input {
   width: 100%;
   padding: 0.75rem 1rem 0.75rem 2.75rem;
   font-size: 0.95rem;
   font-family: inherit;
-  background: #F7FAFC !important;
-  border: 2px solid transparent;
+  background: #FAF9F5 !important;
+  border: 1.5px solid #D1CEC7;
   border-radius: 0.75rem;
-  color: #000000 !important;
+  color: #1C1D1A !important;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 :global(.dark) .input {
-  background: #1e293b !important;
-  color: #ffffff !important;
+  background: #141512 !important;
+  border-color: #30312C;
+  color: #D5D3CA !important;
 }
-.input::placeholder { color: #b0b8bc !important; }
-:global(.dark) .input::placeholder { color: #94a3b8 !important; }
+.input::placeholder { color: #85867C !important; }
+:global(.dark) .input::placeholder { color: #85867C !important; }
 .input:focus {
-  background: #fff !important;
-  border-color: #a0c9ff;
-  box-shadow: 0 0 0 4px rgba(160, 201, 255, 0.2);
+  background: #FFFFFF !important;
+  border-color: #A7A99A;
+  box-shadow: 0 0 0 3px rgba(167, 169, 154, 0.15);
 }
 :global(.dark) .input:focus {
-  background: #0f172a !important;
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
+  background: #141512 !important;
+  border-color: #A7A99A;
+  box-shadow: 0 0 0 3px rgba(167, 169, 154, 0.15);
 }
 
 /* ── Terms ── */
@@ -543,60 +544,60 @@ const handleGoogleRegister = async () => {
 .checkbox {
   width: 18px; height: 18px;
   margin-top: 2px;
-  accent-color: #00355f;
+  accent-color: #A7A99A;
   cursor: pointer;
   flex-shrink: 0;
 }
-.terms label { font-size: 0.85rem; color: #42474f; line-height: 1.4; cursor: pointer; }
-:global(.dark) .terms label { color: #94a3b8; }
-.terms a { color: #00355f; font-weight: 600; text-decoration: none; }
-:global(.dark) .terms a { color: #38bdf8; }
+.terms label { font-size: 0.85rem; color: #575851; line-height: 1.4; cursor: pointer; }
+:global(.dark) .terms label { color: #85867C; }
+.terms a { color: #1C1D1A; font-weight: 600; text-decoration: none; }
+:global(.dark) .terms a { color: #A7A99A; }
 .terms a:hover { text-decoration: underline; }
 
 /* ── Error ── */
 .error-msg {
   display: flex; align-items: center; gap: 0.5rem;
-  background: #fff0f0;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
+  background: rgba(199, 127, 120, 0.12);
+  border: 1px solid rgba(199, 127, 120, 0.3);
+  color: #C77F78;
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
 }
 :global(.dark) .error-msg {
-  background: #450a0a;
-  border-color: #7f1d1d;
-  color: #fca5a5;
+  background: rgba(199, 127, 120, 0.12);
+  border-color: rgba(199, 127, 120, 0.3);
+  color: #C77F78;
 }
 
 /* ── Submit Button ── */
 .btn-submit {
   width: 100%;
-  background: linear-gradient(135deg, #00355f 0%, #006970 100%);
-  color: #fff;
+  background: #A7A99A;
+  color: #171813;
   font-size: 0.95rem;
   font-weight: 600;
   font-family: inherit;
-  padding: 0.9rem;
+  padding: 0.85rem;
   border: none;
   border-radius: 0.75rem;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 53, 95, 0.2);
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: background-color 0.2s, transform 0.15s;
 }
 :global(.dark) .btn-submit {
-  background: linear-gradient(135deg, #0369a1 0%, #0891b2 100%);
+  background: #A7A99A;
+  color: #171813;
 }
-.btn-submit:hover:not(:disabled) { opacity: 0.95; transform: translateY(-1px); }
-.btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-submit:hover:not(:disabled) { background: #B9BBAA; transform: translateY(-1px); }
+.btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Spinner ── */
 .spinner {
   display: inline-block;
   width: 18px; height: 18px;
-  border: 2.5px solid rgba(255,255,255,0.35);
-  border-top-color: #fff;
+  border: 2.5px solid rgba(23, 24, 19, 0.3);
+  border-top-color: #171813;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -607,25 +608,29 @@ const handleGoogleRegister = async () => {
   margin-top: 1.5rem;
   text-align: center;
   font-size: 0.95rem;
-  color: #42474f;
+  color: #575851;
 }
-:global(.dark) .signin-link { color: #94a3b8; }
+:global(.dark) .signin-link { color: #85867C; }
 .signin-link a {
-  color: #00355f;
-  font-weight: 700;
+  color: #1C1D1A;
+  font-weight: 600;
   text-decoration: none;
   margin-left: 4px;
 }
-:global(.dark) .signin-link a { color: #38bdf8; }
+:global(.dark) .signin-link a { color: #A7A99A; }
 .signin-link a:hover { text-decoration: underline; }
 
 /* ── Footer ── */
 .footer {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(247, 246, 242, 0.85);
   backdrop-filter: blur(8px);
-  transition: background-color 0.2s;
+  border-top: 1px solid #E3E0D8;
+  transition: background-color 0.2s, border-color 0.2s;
 }
-:global(.dark) .footer { background: rgba(15, 23, 42, 0.8); }
+:global(.dark) .footer {
+  background: rgba(20, 21, 18, 0.85);
+  border-top-color: #30312C;
+}
 .footer-inner {
   max-width: 1280px;
   margin: 0 auto;
@@ -635,17 +640,17 @@ const handleGoogleRegister = async () => {
   align-items: center;
   gap: 1rem;
   font-size: 0.875rem;
-  color: #42474f;
+  color: #85867C;
 }
-:global(.dark) .footer-inner { color: #94a3b8; }
+:global(.dark) .footer-inner { color: #85867C; }
 @media (min-width: 768px) {
   .footer-inner { flex-direction: row; justify-content: space-between; }
 }
 .footer-links { display: flex; gap: 1.5rem; }
-.footer-links a { color: #42474f; text-decoration: none; font-weight: 600; font-size: 0.875rem; transition: color 0.2s; }
-:global(.dark) .footer-links a { color: #94a3b8; }
-.footer-links a:hover { color: #00355f; }
-:global(.dark) .footer-links a:hover { color: #38bdf8; }
+.footer-links a { color: #85867C; text-decoration: none; font-weight: 600; font-size: 0.875rem; transition: color 0.2s; }
+:global(.dark) .footer-links a { color: #85867C; }
+.footer-links a:hover { color: #1C1D1A; }
+:global(.dark) .footer-links a:hover { color: #D5D3CA; }
 
 /* ── Transitions ── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }

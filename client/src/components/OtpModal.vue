@@ -218,8 +218,8 @@ async function handleResend() {
 <style scoped>
 /* ── Card ── */
 .otp-card {
-  background: #0f172a;
-  border: 1px solid rgba(255,255,255,0.10);
+  background: #1B1C19;
+  border: 1px solid #30312C;
   border-radius: 20px;
   padding: 40px 36px 32px;
   width: 100%;
@@ -235,29 +235,29 @@ async function handleResend() {
 .otp-icon-wrap {
   width: 64px; height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #00355f, #0891b2);
+  background: #22231F;
+  border: 1px solid #30312C;
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 20px;
-  box-shadow: 0 8px 24px rgba(8,145,178,0.35);
 }
-.otp-icon { color: #fff; font-size: 32px; }
+.otp-icon { color: #A7A99A; font-size: 32px; }
 
 /* ── Text ── */
 .otp-title {
-  color: #f1f5f9;
+  color: #D5D3CA;
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0 0 8px;
   letter-spacing: -0.02em;
 }
 .otp-sub {
-  color: #94a3b8;
+  color: #85867C;
   font-size: 0.9rem;
   text-align: center;
   line-height: 1.6;
   margin: 0 0 28px;
 }
-.otp-email { color: #38bdf8; font-weight: 700; }
+.otp-email { color: #D5D3CA; font-weight: 700; }
 
 /* ── Digit Boxes ── */
 .otp-boxes {
@@ -272,24 +272,24 @@ async function handleResend() {
   max-width: 46px;
   height: 56px;
   border-radius: 12px;
-  border: 2px solid rgba(255,255,255,0.12);
-  background: #1e293b;
-  color: #f1f5f9;
+  border: 1.5px solid #30312C;
+  background: #141512;
+  color: #D5D3CA;
   font-size: 1.5rem;
   font-weight: 700;
   text-align: center;
-  caret-color: #38bdf8;
+  caret-color: #A7A99A;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
   font-variant-numeric: tabular-nums;
 }
 .otp-box:focus {
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 3px rgba(56,189,248,0.18);
+  border-color: #A7A99A;
+  box-shadow: 0 0 0 3px rgba(167, 169, 154, 0.15);
 }
 .otp-box--error {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239,68,68,0.18) !important;
+  border-color: #C77F78 !important;
+  box-shadow: 0 0 0 3px rgba(199, 127, 120, 0.18) !important;
   animation: shake 0.35s ease;
 }
 @keyframes shake {
@@ -301,9 +301,9 @@ async function handleResend() {
 /* ── Error ── */
 .otp-error {
   display: flex; align-items: center; gap: 6px;
-  background: rgba(239,68,68,0.12);
-  border: 1px solid rgba(239,68,68,0.30);
-  color: #fca5a5;
+  background: rgba(199, 127, 120, 0.12);
+  border: 1px solid rgba(199, 127, 120, 0.30);
+  color: #C77F78;
   border-radius: 10px;
   padding: 10px 14px;
   font-size: 0.85rem;
@@ -314,60 +314,59 @@ async function handleResend() {
 /* ── Verify button ── */
 .otp-btn-verify {
   width: 100%;
-  background: linear-gradient(135deg, #00355f, #0891b2);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 700;
+  background: #A7A99A;
+  color: #171813;
+  font-size: 0.95rem;
+  font-weight: 600;
   font-family: inherit;
-  padding: 14px;
+  padding: 13px;
   border: none;
   border-radius: 12px;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   gap: 8px;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: background-color 0.2s, transform 0.15s;
   margin-top: 4px;
-  box-shadow: 0 4px 16px rgba(0,53,95,0.4);
 }
-.otp-btn-verify:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+.otp-btn-verify:hover:not(:disabled) { background: #B9BBAA; transform: translateY(-1px); }
 .otp-btn-verify:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ── Resend ── */
 .otp-resend {
   margin-top: 16px;
   font-size: 0.875rem;
-  color: #64748b;
+  color: #85867C;
   text-align: center;
   min-height: 24px;
 }
-.otp-resend-wait { color: #64748b; }
+.otp-resend-wait { color: #85867C; }
 .otp-resend-btn {
   background: none; border: none;
-  color: #38bdf8; font-weight: 700;
+  color: #A7A99A; font-weight: 600;
   font-size: 0.875rem; font-family: inherit;
   cursor: pointer; padding: 0;
   display: inline-flex; align-items: center; gap: 6px;
   transition: opacity 0.2s;
 }
-.otp-resend-btn:hover:not(:disabled) { opacity: 0.75; }
+.otp-resend-btn:hover:not(:disabled) { opacity: 0.8; }
 .otp-resend-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Cancel ── */
 .otp-btn-cancel {
   background: none; border: none;
-  color: #64748b; font-size: 0.875rem; font-family: inherit;
+  color: #85867C; font-size: 0.875rem; font-family: inherit;
   cursor: pointer; padding: 4px;
   margin-top: 8px;
   transition: color 0.2s;
 }
-.otp-btn-cancel:hover { color: #94a3b8; }
+.otp-btn-cancel:hover { color: #D5D3CA; }
 
 /* ── Spinner ── */
 .otp-spinner {
   display: inline-block;
   width: 18px; height: 18px;
-  border: 2.5px solid rgba(255,255,255,0.3);
-  border-top-color: #fff;
+  border: 2.5px solid rgba(23,24,19,0.3);
+  border-top-color: #171813;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -377,9 +376,9 @@ async function handleResend() {
 .otp-dev-badge {
   margin: 0 auto 16px;
   font-size: 13px;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #C4A36B;
+  background: rgba(196, 163, 107, 0.12);
+  border: 1px solid rgba(196, 163, 107, 0.3);
   padding: 8px 14px;
   border-radius: 8px;
   cursor: pointer;
@@ -389,7 +388,7 @@ async function handleResend() {
   transition: all 0.2s;
 }
 .otp-dev-badge:hover {
-  background: rgba(56, 189, 248, 0.22);
+  background: rgba(196, 163, 107, 0.22);
 }
 
 /* ── Fade transition ── */

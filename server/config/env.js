@@ -79,8 +79,18 @@ function validateEnv(env = process.env) {
   // Optional: NEON_AUTH_ENABLED (default false)
   const NEON_AUTH_ENABLED = env.NEON_AUTH_ENABLED === 'true';
 
-  // Optional: Redis URL for distributed rate limiting in multi-instance deployments
+  // Optional: Redis URL for distributed rate limiting and caching
   const REDIS_URL = (env.REDIS_URL || '').trim();
+  if (REDIS_URL) {
+    try {
+      const parsed = new URL(REDIS_URL);
+      if (!['redis:', 'rediss:'].includes(parsed.protocol)) {
+        errors.push('REDIS_URL must start with redis:// or rediss://');
+      }
+    } catch {
+      errors.push('REDIS_URL is not a valid URL format.');
+    }
+  }
 
   // Optional: NEON_AUTH_JWKS_URL
   const NEON_AUTH_JWKS_URL = (env.NEON_AUTH_JWKS_URL || '').trim();

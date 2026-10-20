@@ -14,7 +14,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "node scripts/migrate.js deploy",
-    "db:migrate:status": "node scripts/migrate.js status"
+    "db:migrate:status": "node scripts/migrate.js status",
+    "db:reconcile": "node scripts/reconcile.js"
   },
   "keywords": [],
   "author": "",

@@ -9,39 +9,39 @@
 
       <!-- Modal Content -->
       <div 
-        class="relative bg-surface-container-lowest dark:bg-slate-900 w-[92%] sm:w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up"
+        class="relative bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] w-[92%] sm:w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up"
         role="dialog"
         aria-modal="true"
       >
         <!-- Header -->
-        <div class="relative h-32 w-full bg-primary-container">
-          <img alt="Trip Planning" class="w-full h-full object-cover mix-blend-overlay" src="https://images.unsplash.com/photo-1504280741564-9694ce213903?auto=format&fit=crop&q=80&w=1000" />
-          <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-6">
-            <h2 class="font-h2 text-h2 text-white">Create New Trip</h2>
-            <p class="font-body-md text-body-md text-white/80">Start your next collaborative adventure</p>
+        <div class="relative h-32 w-full bg-[#141512]">
+          <img alt="Trip Planning" class="w-full h-full object-cover dark:brightness-75" src="https://images.unsplash.com/photo-1504280741564-9694ce213903?auto=format&fit=crop&q=80&w=1000" />
+          <div class="absolute inset-0 bg-gradient-to-t from-[#111210]/90 via-[#111210]/40 to-transparent flex flex-col justify-end p-6">
+            <h2 class="text-xl sm:text-2xl font-extrabold text-white">Create New Trip</h2>
+            <p class="text-xs text-[#D5D3CA] mt-0.5">Start your next collaborative adventure</p>
           </div>
           <button 
             @click="closeModal" 
-            class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors bg-black/20 rounded-full p-1"
+            class="absolute top-4 right-4 text-white/80 hover:text-white transition-colors bg-black/40 rounded-full p-1 border border-white/10"
           >
-            <span class="material-symbols-outlined">close</span>
+            <span class="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
 
         <!-- Form -->
-        <form @submit.prevent="submitForm" class="p-6 space-y-5">
-          <div v-if="error" class="bg-error-container text-on-error-container p-3 rounded-lg text-sm mb-2">
+        <form @submit.prevent="submitForm" class="p-6 sm:p-8 space-y-5">
+          <div v-if="error" class="bg-[#C77F78]/10 text-[#C77F78] border border-[#C77F78]/30 p-3.5 rounded-xl text-sm mb-2">
             {{ error }}
           </div>
 
           <!-- Trip Name -->
           <div class="space-y-1.5">
-            <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="trip-name">
-                Trip Name <span class="text-error dark:text-red-400">*</span>
+            <label class="block text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]" for="trip-name">
+                Trip Name <span class="text-[#C77F78]">*</span>
             </label>
             <input 
               v-model="form.name" 
-              class="w-full px-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white" 
+              class="w-full px-4 py-3 bg-[#F7F6F2] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] placeholder-[#7E8075] dark:placeholder-[#85867C] rounded-xl focus:ring-1 focus:ring-[#A7A99A]/30 focus:border-[#A7A99A] transition-all text-sm outline-none" 
               id="trip-name" 
               placeholder="e.g., European Summer" 
               required 
@@ -51,14 +51,14 @@
 
           <!-- Destination -->
           <div class="space-y-1.5">
-            <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="destination">
-                Destination <span class="text-error dark:text-red-400">*</span>
+            <label class="block text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]" for="destination">
+                Destination <span class="text-[#C77F78]">*</span>
             </label>
             <div class="relative">
-              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline" data-icon="location_on">location_on</span>
+              <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] text-[18px]" data-icon="location_on">location_on</span>
               <input 
                 v-model="form.destination" 
-                class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white" 
+                class="w-full pl-11 pr-4 py-3 bg-[#F7F6F2] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] placeholder-[#7E8075] dark:placeholder-[#85867C] rounded-xl focus:ring-1 focus:ring-[#A7A99A]/30 focus:border-[#A7A99A] transition-all text-sm outline-none" 
                 id="destination" 
                 placeholder="e.g., Paris, France" 
                 required 
@@ -70,14 +70,14 @@
           <!-- Dates Grid -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="start-date">
-                  Start Date <span class="text-error dark:text-red-400">*</span>
+              <label class="block text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]" for="start-date">
+                  Start Date <span class="text-[#C77F78]">*</span>
               </label>
               <div class="relative">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline" data-icon="calendar_today">calendar_today</span>
+                <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] text-[18px]" data-icon="calendar_today">calendar_today</span>
                 <input 
                   v-model="form.startDate" 
-                  class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white" 
+                  class="w-full pl-11 pr-4 py-3 bg-[#F7F6F2] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] placeholder-[#7E8075] dark:placeholder-[#85867C] rounded-xl focus:ring-1 focus:ring-[#A7A99A]/30 focus:border-[#A7A99A] transition-all text-sm outline-none" 
                   id="start-date" 
                   required 
                   type="date"
@@ -85,14 +85,14 @@
               </div>
             </div>
             <div class="space-y-1.5">
-              <label class="block font-label-sm text-label-sm text-on-surface dark:text-slate-200" for="end-date">
-                  End Date <span class="text-error dark:text-red-400">*</span>
+              <label class="block text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]" for="end-date">
+                  End Date <span class="text-[#C77F78]">*</span>
               </label>
               <div class="relative">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline" data-icon="event">event</span>
+                <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] text-[18px]" data-icon="event">event</span>
                 <input 
                   v-model="form.endDate" 
-                  class="w-full pl-10 pr-4 py-2.5 bg-surface dark:bg-slate-800 border border-outline-variant dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md outline-none dark:text-white" 
+                  class="w-full pl-11 pr-4 py-3 bg-[#F7F6F2] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] placeholder-[#7E8075] dark:placeholder-[#85867C] rounded-xl focus:ring-1 focus:ring-[#A7A99A]/30 focus:border-[#A7A99A] transition-all text-sm outline-none" 
                   id="end-date" 
                   required 
                   type="date"
@@ -101,23 +101,23 @@
             </div>
           </div>
           
-          <div v-if="validationError" class="text-error text-sm font-medium mt-1">
+          <div v-if="validationError" class="text-[#C77F78] text-xs font-medium mt-1">
             {{ validationError }}
           </div>
 
           <!-- Actions -->
-          <div class="pt-4 border-t border-outline-variant dark:border-slate-700 flex flex-col sm:flex-row-reverse items-center gap-3 mt-6">
+          <div class="pt-5 border-t border-[#E3E0D8] dark:border-[#30312C] flex flex-col sm:flex-row-reverse items-center gap-3 mt-6">
             <button 
               :disabled="loading" 
-              class="w-full sm:w-auto px-6 py-2.5 bg-primary-container dark:bg-blue-600 text-on-secondary dark:text-white rounded-lg font-h3 text-h3 hover:bg-primary hover:text-white transition-all active:scale-95 shadow-sm disabled:opacity-70 flex items-center justify-center min-w-[120px]" 
+              class="w-full sm:w-auto px-6 py-2.5 bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] rounded-xl text-xs font-semibold transition-all active:scale-95 shadow-sm border border-[#A7A99A]/40 disabled:opacity-70 flex items-center justify-center min-w-[120px]" 
               type="submit"
             >
-              <span v-if="loading" class="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+              <span v-if="loading" class="animate-spin h-3.5 w-3.5 border-2 border-[#171813] border-t-transparent rounded-full mr-2"></span>
               {{ loading ? 'Creating...' : 'Create Trip' }}
             </button>
             <button 
               @click="closeModal" 
-              class="w-full sm:w-auto px-6 py-2.5 bg-transparent border border-outline-variant dark:border-slate-700 text-on-surface-variant dark:text-slate-300 rounded-lg font-h3 text-h3 hover:bg-surface-variant dark:hover:bg-slate-800 transition-all active:scale-95" 
+              class="w-full sm:w-auto px-6 py-2.5 bg-transparent border border-[#E3E0D8] dark:border-[#30312C] text-[#575851] dark:text-[#A5A69B] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] rounded-xl text-xs font-semibold transition-all active:scale-95" 
               type="button"
             >
               Cancel

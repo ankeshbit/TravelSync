@@ -1,10 +1,6 @@
 <template>
-  <div class="bg-surface text-on-surface min-h-screen dark:bg-slate-950 transition-colors duration-200">
-    <Navbar />
-    <Sidebar />
-
-    <main class="md:ml-16 lg:ml-64 pt-24 pb-20 px-4 md:px-8 min-h-[calc(100vh-64px)] flex items-center justify-center transition-all duration-300">
-      <div class="w-full max-w-2xl bg-surface-container-lowest dark:bg-slate-900 border border-outline-variant dark:border-slate-800 rounded-xl shadow-[0_12px_24px_rgba(0,0,0,0.05)] overflow-hidden">
+  <AppLayout mainClass="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-10 flex items-center justify-center min-w-0">
+      <div class="w-full max-w-2xl bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl shadow-sm overflow-hidden">
         <div class="relative h-48 w-full">
           <img 
             class="w-full h-full object-cover dark:brightness-90" 
@@ -12,72 +8,70 @@
             :alt="form.name || form.destination || 'Edit Trip'"
             @error="onImgError"
           />
-          <div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest dark:from-slate-900 via-transparent to-transparent"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-[#111210]/90 via-[#111210]/40 to-transparent"></div>
           <div class="absolute bottom-6 left-8">
-            <h1 class="font-h1 text-h1 text-primary dark:text-blue-400">Edit Trip</h1>
-            <p class="font-body-md text-body-md text-on-surface-variant dark:text-slate-400">Update the details of your adventure</p>
+            <h1 class="text-3xl font-extrabold text-white">Edit Trip</h1>
+            <p class="text-sm text-[#D5D3CA] mt-1">Update the details of your adventure</p>
           </div>
         </div>
 
-        <div v-if="loading" class="p-8 text-center text-on-surface-variant dark:text-slate-400">
+        <div v-if="loading" class="p-8 text-center text-[#575851] dark:text-[#A5A69B]">
           Loading trip data...
         </div>
 
         <form v-else @submit.prevent="submitForm" class="p-8 space-y-6">
-          <div v-if="error" class="bg-error-container text-on-error-container p-3 rounded-lg text-sm">
+          <div v-if="error" class="bg-[#C77F78]/10 border border-[#C77F78]/30 text-[#C77F78] p-3.5 rounded-xl text-sm">
             {{ error }}
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="md:col-span-2">
-              <label class="block font-label-sm text-label-sm text-on-surface-variant dark:text-slate-300 mb-2" for="trip-name">Trip Name</label>
+              <label class="block text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2" for="trip-name">Trip Name</label>
               <div class="relative">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline dark:text-slate-400 text-lg" data-icon="edit">edit</span>
-                <input v-model="form.name" class="w-full pl-10 pr-4 py-3 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg font-body-md text-body-md focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" id="trip-name" type="text" required />
+                <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] text-lg" data-icon="edit">edit</span>
+                <input v-model="form.name" class="w-full pl-10 pr-4 py-2.5 bg-[#F7F6F2] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] rounded-xl text-sm focus:outline-none focus:border-[#A7A99A] focus:ring-1 focus:ring-[#A7A99A]/30 transition-all" id="trip-name" type="text" required />
               </div>
             </div>
             <div class="md:col-span-2">
-              <label class="block font-label-sm text-label-sm text-on-surface-variant dark:text-slate-300 mb-2" for="destination">Destination</label>
+              <label class="block text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2" for="destination">Destination</label>
               <div class="relative">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline dark:text-slate-400 text-lg" data-icon="location_on">location_on</span>
-                <input v-model="form.destination" class="w-full pl-10 pr-4 py-3 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg font-body-md text-body-md focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" id="destination" type="text" required />
+                <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] text-lg" data-icon="location_on">location_on</span>
+                <input v-model="form.destination" class="w-full pl-10 pr-4 py-2.5 bg-[#F7F6F2] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] rounded-xl text-sm focus:outline-none focus:border-[#A7A99A] focus:ring-1 focus:ring-[#A7A99A]/30 transition-all" id="destination" type="text" required />
               </div>
             </div>
             <div>
-              <label class="block font-label-sm text-label-sm text-on-surface-variant dark:text-slate-300 mb-2" for="start-date">Start Date</label>
+              <label class="block text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2" for="start-date">Start Date</label>
               <div class="relative">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline dark:text-slate-400 text-lg" data-icon="calendar_today">calendar_today</span>
-                <input v-model="form.startDate" class="w-full pl-10 pr-4 py-3 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg font-body-md text-body-md focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" id="start-date" type="date" required />
+                <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] text-lg" data-icon="calendar_today">calendar_today</span>
+                <input v-model="form.startDate" class="w-full pl-10 pr-4 py-2.5 bg-[#F7F6F2] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] rounded-xl text-sm focus:outline-none focus:border-[#A7A99A] focus:ring-1 focus:ring-[#A7A99A]/30 transition-all" id="start-date" type="date" required />
               </div>
             </div>
             <div>
-              <label class="block font-label-sm text-label-sm text-on-surface-variant dark:text-slate-300 mb-2" for="end-date">End Date</label>
+              <label class="block text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2" for="end-date">End Date</label>
               <div class="relative">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline dark:text-slate-400 text-lg" data-icon="event">event</span>
-                <input v-model="form.endDate" class="w-full pl-10 pr-4 py-3 bg-transparent border border-outline-variant dark:border-slate-700 dark:text-slate-100 rounded-lg font-body-md text-body-md focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" id="end-date" type="date" required />
+                <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] text-lg" data-icon="event">event</span>
+                <input v-model="form.endDate" class="w-full pl-10 pr-4 py-2.5 bg-[#F7F6F2] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] rounded-xl text-sm focus:outline-none focus:border-[#A7A99A] focus:ring-1 focus:ring-[#A7A99A]/30 transition-all" id="end-date" type="date" required />
               </div>
             </div>
           </div>
-          <div class="pt-6 border-t border-outline-variant dark:border-slate-800 flex flex-col md:flex-row gap-4 items-center justify-end">
-            <button @click="$router.push(`/trips/${route.params.id}`)" class="w-full md:w-auto px-8 py-3 rounded-full font-body-md font-semibold text-on-surface-variant dark:text-slate-300 hover:bg-surface-container dark:hover:bg-slate-800 transition-colors border border-outline-variant dark:border-slate-700 active:scale-95 duration-150" type="button">
+          <div class="pt-6 border-t border-[#E3E0D8] dark:border-[#30312C] flex flex-col sm:flex-row gap-3 items-center justify-end">
+            <button @click="$router.push(`/trips/${route.params.id}`)" class="w-full sm:w-auto px-6 py-2.5 rounded-xl text-sm font-semibold text-[#575851] dark:text-[#A5A69B] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] transition-colors border border-[#E3E0D8] dark:border-[#30312C] active:scale-95" type="button">
                 Cancel
             </button>
-            <button :disabled="saving" class="w-full md:w-auto px-10 py-3 bg-primary dark:bg-blue-600 text-white rounded-full font-body-md font-bold shadow-lg hover:shadow-xl hover:opacity-95 transition-all active:scale-95 duration-150 disabled:opacity-70" type="submit">
+            <button :disabled="saving" class="w-full sm:w-auto px-6 py-2.5 bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] rounded-xl text-sm font-bold shadow-sm border border-[#A7A99A]/40 transition-all active:scale-95 disabled:opacity-70" type="submit">
                 {{ saving ? 'Updating...' : 'Update Trip' }}
             </button>
           </div>
         </form>
       </div>
-    </main>
-  </div>
+  </AppLayout>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
-import Navbar from '../components/Navbar.vue';
-import Sidebar from '../components/Sidebar.vue';
+import AppLayout from '../components/AppLayout.vue';
 import { DEFAULT_TRIP_COVER_IMAGE } from '../constants';
 
 const route = useRoute();

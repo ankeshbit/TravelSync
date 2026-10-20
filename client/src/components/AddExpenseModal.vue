@@ -1,37 +1,37 @@
 <template>
-  <div v-if="isOpen" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+  <div v-if="isOpen" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
       <!-- Header -->
-      <div class="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10">
-        <h2 class="text-xl font-bold text-on-surface dark:text-slate-100">Add Expense</h2>
+      <div class="sticky top-0 flex items-center justify-between p-6 border-b border-[#E3E0D8] dark:border-[#30312C] bg-[#FFFFFF] dark:bg-[#1B1C19] z-10">
+        <h2 class="text-xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">Add Expense</h2>
         <button
           @click="closeModal"
-          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          class="text-gray-400 text-[#7E8075] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] transition-colors"
         >
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
 
       <!-- Form -->
-      <form @submit.prevent="handleSubmit" class="p-6 space-y-4">
+      <form @submit.prevent="handleSubmit" class="p-6 sm:p-8 space-y-5">
         <!-- Title Input -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-2">
-            Title <span class="text-error dark:text-red-400">*</span>
+          <label class="block text-xs sm:text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2">
+            Title <span class="text-[#C77F78]">*</span>
           </label>
           <input
             v-model="form.title"
             type="text"
             placeholder="e.g., Dinner at restaurant"
-            class="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+            class="w-full px-4 py-2.5 sm:py-3 border border-[#E3E0D8] dark:border-[#30312C] rounded-xl focus:ring-1 focus:ring-[#A7A99A]/30 focus:border-[#A7A99A] outline-none transition-all bg-[#F7F6F2] dark:bg-[#141512] text-[#1C1D1A] dark:text-[#D5D3CA] placeholder-[#7E8075] dark:placeholder-[#85867C] text-sm"
           />
-          <p v-if="errors.title" class="text-xs text-error mt-1">{{ errors.title }}</p>
+          <p v-if="errors.title" class="text-xs text-[#C77F78] mt-1.5">{{ errors.title }}</p>
         </div>
 
         <!-- Amount Input -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-2">
-            Amount <span class="text-error dark:text-red-400">*</span>
+          <label class="block text-xs sm:text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2">
+            Amount <span class="text-[#C77F78]">*</span>
           </label>
           <input
             v-model.number="form.amount"
@@ -39,17 +39,17 @@
             step="0.01"
             min="0"
             placeholder="0.00"
-            class="w-full px-3 py-2 border border-outline dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:text-white"
+            class="w-full px-4 py-2.5 sm:py-3 border border-[#E3E0D8] dark:border-[#30312C] rounded-xl focus:ring-1 focus:ring-[#A7A99A]/30 focus:border-[#A7A99A] outline-none transition-all bg-[#F7F6F2] dark:bg-[#141512] text-[#1C1D1A] dark:text-[#D5D3CA] placeholder-[#7E8075] dark:placeholder-[#85867C] text-sm"
           />
-          <p v-if="errors.amount" class="text-xs text-error mt-1">{{ errors.amount }}</p>
+          <p v-if="errors.amount" class="text-xs text-[#C77F78] mt-1.5">{{ errors.amount }}</p>
         </div>
 
         <!-- Currency Selector -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-2">Currency</label>
+          <label class="block text-xs sm:text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2">Currency</label>
           <select
             v-model="form.currency"
-            class="w-full px-3 py-2 border border-outline dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:text-white"
+            class="w-full px-4 py-2.5 sm:py-3 border border-[#E3E0D8] dark:border-[#30312C] rounded-xl focus:ring-1 focus:ring-[#A7A99A]/30 focus:border-[#A7A99A] outline-none transition-all bg-[#F7F6F2] dark:bg-[#141512] text-[#1C1D1A] dark:text-[#D5D3CA] text-sm"
           >
             <option v-for="c in currencyOptions" :key="c.code" :value="c.code">
               {{ c.label }}
@@ -59,45 +59,45 @@
 
         <!-- Paid By Dropdown -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-2">
-            Paid By <span class="text-error dark:text-red-400">*</span>
+          <label class="block text-xs sm:text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2">
+            Paid By <span class="text-[#C77F78]">*</span>
           </label>
           <select
             v-model="form.paidBy"
-            class="w-full px-3 py-2 border border-outline dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all dark:bg-slate-800 dark:text-white"
+            class="w-full px-4 py-2.5 sm:py-3 border border-[#E3E0D8] dark:border-[#30312C] rounded-xl focus:ring-1 focus:ring-[#A7A99A]/30 focus:border-[#A7A99A] outline-none transition-all bg-[#F7F6F2] dark:bg-[#141512] text-[#1C1D1A] dark:text-[#D5D3CA] text-sm"
           >
             <option value="">Select a member...</option>
             <option v-for="member in allMembers" :key="member.id" :value="member.id">
               {{ member.name }}
             </option>
           </select>
-          <p v-if="errors.paidBy" class="text-xs text-error mt-1">{{ errors.paidBy }}</p>
+          <p v-if="errors.paidBy" class="text-xs text-[#C77F78] mt-1.5">{{ errors.paidBy }}</p>
         </div>
 
         <!-- Split Among Checkboxes -->
         <div>
-          <label class="block text-sm font-semibold text-on-surface dark:text-slate-200 mb-3">
-            Split Among <span class="text-error dark:text-red-400">*</span>
+          <label class="block text-xs sm:text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2.5">
+            Split Among <span class="text-[#C77F78]">*</span>
           </label>
           <div class="space-y-2 max-h-[200px] overflow-y-auto">
-            <label v-for="member in allMembers" :key="member.id" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low dark:hover:bg-slate-800 transition-colors cursor-pointer">
+            <label v-for="member in allMembers" :key="member.id" class="flex items-center gap-3.5 p-3 rounded-xl hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] transition-colors cursor-pointer border border-transparent hover:border-[#E3E0D8] dark:hover:border-[#30312C]">
               <input
                 type="checkbox"
                 :value="member.id"
                 v-model="form.splitAmong"
-                class="w-4 h-4 rounded border-gray-300 dark:border-slate-600 text-primary focus:ring-primary cursor-pointer bg-white dark:bg-slate-800"
+                class="w-4 h-4 rounded border-[#E3E0D8] dark:border-[#30312C] text-[#A7A99A] focus:ring-[#A7A99A] cursor-pointer bg-[#FFFFFF] dark:bg-[#141512]"
               />
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-on-surface dark:text-slate-200 truncate">{{ member.name }}</p>
-                <p class="text-xs text-outline-variant dark:text-slate-400 truncate">{{ member.email }}</p>
+                <p class="text-sm font-medium text-[#1C1D1A] dark:text-[#D5D3CA] truncate">{{ member.name }}</p>
+                <p class="text-xs text-[#575851] dark:text-[#A5A69B] truncate">{{ member.email }}</p>
               </div>
             </label>
           </div>
-          <p v-if="errors.splitAmong" class="text-xs text-error mt-2">{{ errors.splitAmong }}</p>
+          <p v-if="errors.splitAmong" class="text-xs text-[#C77F78] mt-2">{{ errors.splitAmong }}</p>
         </div>
 
         <!-- Error Message -->
-        <div v-if="errors.general || props.error" class="bg-error-container text-on-error-container text-xs p-3 rounded-lg">
+        <div v-if="errors.general || props.error" class="bg-[#C77F78]/10 border border-[#C77F78]/30 text-[#C77F78] text-xs p-3.5 rounded-xl">
           {{ errors.general || props.error }}
         </div>
 
@@ -105,10 +105,10 @@
         <button
           type="submit"
           :disabled="loading"
-          class="w-full bg-primary text-on-primary px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 mt-6 flex items-center justify-center gap-2"
+          class="w-full bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] py-3 px-4 rounded-xl text-sm font-semibold transition-all shadow-sm border border-[#A7A99A]/40 active:scale-95 disabled:opacity-50 mt-6 flex items-center justify-center gap-2"
         >
           <span v-if="!loading">Add Expense</span>
-          <span v-if="loading" class="material-symbols-outlined animate-spin">hourglass_bottom</span>
+          <span v-if="loading" class="material-symbols-outlined animate-spin text-[18px]">hourglass_bottom</span>
         </button>
       </form>
     </div>

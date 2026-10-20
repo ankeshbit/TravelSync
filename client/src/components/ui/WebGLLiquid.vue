@@ -31,7 +31,7 @@
     <!-- ── CSS fallback when WebGL is unavailable ─────────────────────── -->
     <div
       v-if="glFailed"
-      class="absolute inset-0 bg-gradient-to-br from-[#04050b] via-[#134d93] to-[#8cecff]/30"
+      class="absolute inset-0 bg-gradient-to-br from-[#111210] via-[#1B1C19] to-[#292A25]"
     />
 
     <!-- ── Content slot (title / subtitle / description / children) ────── -->

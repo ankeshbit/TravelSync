@@ -9,36 +9,36 @@
 
       <!-- Modal Content -->
       <div
-        class="relative bg-surface-container-lowest dark:bg-slate-900 w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden animate-fade-in-up max-h-[90vh] flex flex-col"
+        class="relative bg-[#FAF9F5] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up max-h-[90vh] flex flex-col"
         role="dialog"
         aria-modal="true"
       >
         <!-- Header -->
-        <div class="relative h-24 w-full bg-primary-container flex-shrink-0">
-          <div class="absolute inset-0 bg-gradient-to-br from-sky-600 to-indigo-700 opacity-90"></div>
-          <div class="absolute inset-0 flex flex-col justify-end p-6">
-            <div class="flex items-center gap-3 mb-1">
-              <span class="material-symbols-outlined text-white text-2xl">auto_awesome</span>
-              <h2 class="font-h2 text-h2 text-white">AI Trip Planner</h2>
+        <div class="relative h-20 w-full bg-[#F0EEE9] dark:bg-[#141512] border-b border-[#E3E0D8] dark:border-[#30312C] flex-shrink-0 flex items-center justify-between px-6">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-[#A7A99A] text-2xl">auto_awesome</span>
+            <div>
+              <h2 class="font-h2 text-lg sm:text-xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">AI Trip Planner</h2>
+              <p class="text-xs text-[#575851] dark:text-[#85867C]">Generate a customized, curated day-by-day travel itinerary</p>
             </div>
           </div>
           <button
             @click="closeModal"
-            class="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors bg-black/20 rounded-full p-1"
+            class="text-[#575851] dark:text-[#85867C] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] transition-colors bg-[#E8E6DF] dark:bg-[#22231F] border border-[#D1CEC7] dark:border-[#30312C] rounded-lg p-1.5 flex items-center justify-center"
           >
-            <span class="material-symbols-outlined">close</span>
+            <span class="material-symbols-outlined text-lg">close</span>
           </button>
         </div>
 
         <!-- Scrollable Body -->
-        <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-slate-900">
+        <div class="flex-1 overflow-y-auto bg-[#F7F6F2] dark:bg-[#111210]">
           <!-- Form -->
-          <div v-if="!itinerary && !loading" class="p-6 space-y-5 bg-white dark:bg-slate-800 m-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
-            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-200 mb-4">Tell us your preferences</h3>
-            <div class="space-y-4">
+          <div v-if="!itinerary && !loading" class="p-6 sm:p-8 space-y-6 bg-[#FFFFFF] dark:bg-[#1B1C19] m-6 rounded-2xl shadow-sm border border-[#E3E0D8] dark:border-[#30312C]">
+            <h3 class="text-base font-bold text-[#1C1D1A] dark:text-[#D5D3CA] mb-4">Trip Preferences</h3>
+            <div class="space-y-5">
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Budget</label>
-                <select v-model="form.budget" class="w-full p-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 outline-none">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-[#575851] dark:text-[#85867C] mb-2">Budget</label>
+                <select v-model="form.budget" class="w-full px-4 py-2.5 border border-[#D1CEC7] dark:border-[#30312C] rounded-xl bg-[#F7F6F2] dark:bg-[#141512] text-[#1C1D1A] dark:text-[#D5D3CA] focus:border-[#A7A99A] outline-none text-sm transition-colors">
                   <option value="economy">Economy</option>
                   <option value="moderate">Moderate</option>
                   <option value="luxury">Luxury</option>
@@ -46,25 +46,25 @@
               </div>
               
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Interests</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-[#575851] dark:text-[#85867C] mb-2">Interests</label>
                 <input 
                   type="text" 
                   v-model="form.interests" 
-                  placeholder="e.g. food, culture, nightlife, shopping" 
-                  class="w-full p-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 outline-none"
+                  placeholder="e.g. food, culture, architecture, quiet cafes" 
+                  class="w-full px-4 py-2.5 border border-[#D1CEC7] dark:border-[#30312C] rounded-xl bg-[#F7F6F2] dark:bg-[#141512] text-[#1C1D1A] dark:text-[#D5D3CA] focus:border-[#A7A99A] outline-none text-sm transition-colors"
                 />
               </div>
 
-              <div v-if="errorMessage" class="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm flex items-start gap-2">
-                <span class="material-symbols-outlined text-[18px] text-red-500 mt-0.5">error</span>
+              <div v-if="errorMessage" class="p-3.5 bg-[#C77F78]/10 border border-[#C77F78]/30 rounded-xl text-[#C77F78] text-sm flex items-start gap-2">
+                <span class="material-symbols-outlined text-[18px] text-[#C77F78] mt-0.5">error</span>
                 <span>{{ errorMessage }}</span>
               </div>
 
-              <div class="pt-4 flex justify-end gap-3">
-                <button @click="closeModal" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors">Cancel</button>
-                <button @click="generatePlan" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
+              <div class="pt-4 flex justify-end gap-3 border-t border-[#E3E0D8] dark:border-[#30312C]">
+                <button @click="closeModal" class="px-5 py-2.5 text-[#575851] dark:text-[#A5A69B] hover:bg-[#EFECE6] dark:hover:bg-[#292A25] rounded-xl text-sm font-semibold transition-colors">Cancel</button>
+                <button @click="generatePlan" class="px-6 py-2.5 bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] font-semibold rounded-xl text-sm shadow-sm transition-all flex items-center gap-2">
                   <span class="material-symbols-outlined text-sm">auto_awesome</span>
-                  Generate Itinerary
+                  <span>Generate Itinerary</span>
                 </button>
               </div>
             </div>
@@ -72,39 +72,42 @@
 
           <!-- Loading Spinner -->
           <div v-if="loading" class="p-12 flex flex-col items-center justify-center space-y-4">
-            <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
-            <p class="text-gray-500 dark:text-gray-400 font-medium">Crafting your perfect trip...</p>
+            <div class="animate-spin rounded-full h-12 w-12 border-3 border-[#A7A99A] border-t-transparent"></div>
+            <p class="text-[#575851] dark:text-[#85867C] font-medium text-sm">Curating your customized itinerary...</p>
           </div>
 
           <!-- AI Response -->
           <div v-if="itinerary && !loading" class="p-6 space-y-6">
             <!-- Summary Banner -->
-            <div class="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-4 rounded-r-lg">
-              <h3 class="text-blue-800 dark:text-blue-300 font-semibold mb-1">Overview</h3>
-              <p class="text-blue-900 dark:text-blue-200 text-sm">{{ itinerary.summary }}</p>
+            <div class="bg-[#F0EEE9] dark:bg-[#22231F] border-l-4 border-[#A7A99A] p-4 rounded-r-xl border border-l-0 border-[#E3E0D8] dark:border-[#30312C]">
+              <h3 class="text-[#1C1D1A] dark:text-[#D5D3CA] font-semibold text-sm mb-1 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#A7A99A] text-base">explore</span>
+                Trip Overview
+              </h3>
+              <p class="text-[#575851] dark:text-[#A5A69B] text-sm leading-relaxed">{{ itinerary.summary }}</p>
             </div>
 
             <!-- Day-by-Day Accordion -->
             <div class="space-y-4">
-              <div v-for="dayData in itinerary.days" :key="dayData.day" class="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm">
+              <div v-for="dayData in itinerary.days" :key="dayData.day" class="border border-[#E3E0D8] dark:border-[#30312C] rounded-xl overflow-hidden bg-[#FFFFFF] dark:bg-[#1B1C19] shadow-sm">
                 
-                <div class="bg-gray-50 dark:bg-slate-750 px-4 py-3 flex justify-between items-center cursor-pointer border-b border-gray-200 dark:border-slate-700">
+                <div class="bg-[#F7F6F2] dark:bg-[#22231F] px-4 py-3 flex justify-between items-center cursor-pointer border-b border-[#E3E0D8] dark:border-[#30312C]">
                   <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white">Day {{ dayData.day }}</h4>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ dayData.theme }}</p>
+                    <h4 class="font-bold text-[#1C1D1A] dark:text-[#D5D3CA] text-sm">Day {{ dayData.day }}</h4>
+                    <p class="text-xs text-[#575851] dark:text-[#85867C]">{{ dayData.theme }}</p>
                   </div>
                 </div>
 
                 <div class="p-4 space-y-4">
-                  <div v-for="(place, index) in dayData.places" :key="index" class="flex gap-4 items-start p-3 rounded-lg border border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+                  <div v-for="(place, index) in dayData.places" :key="index" class="flex gap-4 items-start p-3 rounded-xl border border-[#E3E0D8] dark:border-[#30312C] hover:bg-[#F7F6F2] dark:hover:bg-[#22231F] transition-colors">
                     
                     <div class="flex-1">
                       <div class="flex items-center gap-2 mb-1">
-                        <h5 class="font-bold text-gray-900 dark:text-white">{{ place.name }}</h5>
-                        <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-gray-300">{{ place.type }}</span>
+                        <h5 class="font-bold text-[#1C1D1A] dark:text-[#D5D3CA] text-sm">{{ place.name }}</h5>
+                        <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-[#EFECE6] dark:bg-[#292A25] text-[#575851] dark:text-[#A5A69B] border border-[#D1CEC7] dark:border-[#30312C]">{{ place.type }}</span>
                       </div>
-                      <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">{{ place.description }}</p>
-                      <div class="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+                      <p class="text-xs text-[#575851] dark:text-[#A5A69B] mb-2 leading-relaxed">{{ place.description }}</p>
+                      <div class="flex gap-4 text-xs text-[#85867C]">
                         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">schedule</span> {{ place.bestTime }}</span>
                         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">timer</span> {{ place.estimatedDuration }}</span>
                       </div>
@@ -113,8 +116,8 @@
                     <button 
                       @click="addPlaceToItinerary(place, dayData.day, index)"
                       :disabled="addedPlaces.has(`${dayData.day}-${index}`)"
-                      class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border"
-                      :class="addedPlaces.has(`${dayData.day}-${index}`) ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-primary border-primary/30 hover:bg-primary hover:text-white'"
+                      class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border"
+                      :class="addedPlaces.has(`${dayData.day}-${index}`) ? 'bg-[#86A98B]/15 text-[#86A98B] border-[#86A98B]/30' : 'bg-transparent text-[#1C1D1A] dark:text-[#D5D3CA] border-[#D1CEC7] dark:border-[#30312C] hover:border-[#A7A99A] hover:text-[#A7A99A]'"
                     >
                       <span class="material-symbols-outlined text-[16px]">{{ addedPlaces.has(`${dayData.day}-${index}`) ? 'check' : 'add' }}</span>
                       {{ addedPlaces.has(`${dayData.day}-${index}`) ? 'Added' : 'Add to itinerary' }}
@@ -125,22 +128,22 @@
             </div>
 
             <!-- Tips Section -->
-            <div v-if="itinerary.tips && itinerary.tips.length" class="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50 rounded-xl p-5">
-              <h4 class="font-bold text-amber-800 dark:text-amber-400 mb-3 flex items-center gap-2">
+            <div v-if="itinerary.tips && itinerary.tips.length" class="bg-[#C4A36B]/10 border border-[#C4A36B]/30 rounded-xl p-4">
+              <h4 class="font-bold text-[#C4A36B] mb-2 text-xs flex items-center gap-2 uppercase tracking-wider">
                 <span class="material-symbols-outlined text-sm">lightbulb</span>
                 Practical Tips
               </h4>
-              <ul class="list-disc list-inside space-y-1 text-sm text-amber-900 dark:text-amber-200/80">
+              <ul class="list-disc list-inside space-y-1 text-xs text-[#85867C] dark:text-[#A5A69B]">
                 <li v-for="(tip, index) in itinerary.tips" :key="index">{{ tip }}</li>
               </ul>
             </div>
 
             <!-- Actions -->
-            <div class="flex justify-between items-center pt-4">
-              <button @click="resetForm" class="text-gray-500 hover:text-primary text-sm font-medium flex items-center gap-1">
+            <div class="flex justify-between items-center pt-4 border-t border-[#E3E0D8] dark:border-[#30312C]">
+              <button @click="resetForm" class="text-[#575851] dark:text-[#85867C] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] text-xs font-semibold flex items-center gap-1">
                 <span class="material-symbols-outlined text-sm">refresh</span> Try Again
               </button>
-              <button @click="onDone" class="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium hover:opacity-90">
+              <button @click="onDone" class="px-6 py-2 bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] font-semibold rounded-lg text-xs transition-colors">
                 Done
               </button>
             </div>

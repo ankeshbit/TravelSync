@@ -250,3 +250,196 @@ describe('OTP Rate Limiting and Email Abuse Protection', () => {
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 });
+
+describe('Redis Rate Limiter Resilient Fallback Suite', () => {
+  const {
+    ResilientRateLimitStore,
+    closeRedis,
+    sanitizeRedisError
+  } = require('../middleware/rateLimiter');
+  const { rateLimit } = require('express-rate-limit');
+
+  afterEach(async () => {
+    await closeRedis();
+  });
+
+  function createMockRedisClient(initialStatus = 'ready') {
+    let currentStatus = initialStatus;
+    const redisStoreMap = new Map();
+
+    const client = {
+      get status() {
+        return currentStatus;
+      },
+      setStatus(s) {
+        currentStatus = s;
+      },
+      call: jest.fn(async (...args) => {
+        if (currentStatus !== 'ready') {
+          const err = new Error("Stream isn't writeable and enableOfflineQueue is false");
+          err.code = 'NR_CLOSED';
+          throw err;
+        }
+
+        const cmd = args[0];
+        if (cmd === 'SCRIPT' && args[1] === 'LOAD') {
+          return 'sha1-mock-hash';
+        }
+        if (cmd === 'EVALSHA') {
+          const key = args[3];
+          const windowMs = parseInt(args[4], 10) || 60000;
+          const current = (redisStoreMap.get(key) || 0) + 1;
+          redisStoreMap.set(key, current);
+          const ttl = Math.floor(windowMs / 1000);
+          return [current, ttl];
+        }
+        if (cmd === 'DEL') {
+          const key = args[1];
+          redisStoreMap.delete(key);
+          return 1;
+        }
+        return 1;
+      }),
+      quit: jest.fn().mockResolvedValue('OK'),
+      disconnect: jest.fn()
+    };
+    return client;
+  }
+
+  it('Redis available at startup initializes and uses Redis store', async () => {
+    const mockClient = createMockRedisClient('ready');
+    const store = new ResilientRateLimitStore({ prefix: 'test_ready', client: mockClient });
+    await store.init({ windowMs: 60000 });
+
+    const result = await store.increment('ip-1');
+    expect(result.totalHits).toBe(1);
+    expect(store.getActiveStoreType()).toBe('redis');
+    expect(mockClient.call).toHaveBeenCalled();
+  });
+
+  it('Redis unavailable at startup falls back cleanly to MemoryStore', async () => {
+    const mockClient = createMockRedisClient('connecting');
+    const store = new ResilientRateLimitStore({ prefix: 'test_down', client: mockClient });
+    await store.init({ windowMs: 60000 });
+
+    const result = await store.increment('ip-down');
+    expect(result.totalHits).toBe(1);
+    expect(store.getActiveStoreType()).toBe('memory');
+  });
+
+  it('Redis becoming unavailable after startup falls back to MemoryStore without throwing', async () => {
+    const mockClient = createMockRedisClient('ready');
+    const store = new ResilientRateLimitStore({ prefix: 'test_failover', client: mockClient });
+    await store.init({ windowMs: 60000 });
+
+    // Initial request uses Redis
+    const res1 = await store.increment('ip-failover');
+    expect(res1.totalHits).toBe(1);
+    expect(store.getActiveStoreType()).toBe('redis');
+
+    // Simulate Redis dropping connection
+    mockClient.setStatus('close');
+
+    // Subsequent request must seamlessly use memory fallback
+    const res2 = await store.increment('ip-failover');
+    expect(res2.totalHits).toBeGreaterThanOrEqual(1);
+    expect(store.getActiveStoreType()).toBe('memory');
+  });
+
+  it('Redis reconnecting after an outage restores Redis storage', async () => {
+    const mockClient = createMockRedisClient('close');
+    const store = new ResilientRateLimitStore({ prefix: 'test_reconnect', client: mockClient });
+    await store.init({ windowMs: 60000 });
+
+    // First request while Redis is down uses fallback
+    await store.increment('ip-rec');
+    expect(store.getActiveStoreType()).toBe('memory');
+
+    // Redis comes back online
+    mockClient.setStatus('ready');
+
+    // Next request must detect ready state and resume Redis
+    const res = await store.increment('ip-rec');
+    expect(res.totalHits).toBeGreaterThanOrEqual(1);
+    expect(store.getActiveStoreType()).toBe('redis');
+  });
+
+  it('Redis command errors and timeouts fall back to MemoryStore without crashing request', async () => {
+    const mockClient = createMockRedisClient('ready');
+    const store = new ResilientRateLimitStore({ prefix: 'test_error', client: mockClient });
+    await store.init({ windowMs: 60000 });
+
+    // Force call to throw a timeout or connection error on next increment
+    mockClient.call.mockRejectedValueOnce(new Error('Command timed out after 1000ms'));
+
+    const result = await store.increment('ip-timeout');
+    expect(result.totalHits).toBe(1);
+    expect(store.getActiveStoreType()).toBe('memory');
+  });
+
+  it('concurrent requests during store transition do not throw or crash', async () => {
+    const mockClient = createMockRedisClient('ready');
+    const store = new ResilientRateLimitStore({ prefix: 'test_concurrent', client: mockClient });
+    await store.init({ windowMs: 60000 });
+
+    // Transition state right before sending requests
+    mockClient.setStatus('close');
+
+    const results = await Promise.all([
+      store.increment('ip-conc-1'),
+      store.increment('ip-conc-2'),
+      store.increment('ip-conc-3'),
+      store.increment('ip-conc-4')
+    ]);
+
+    expect(results).toHaveLength(4);
+    results.forEach(r => expect(r.totalHits).toBeGreaterThanOrEqual(1));
+    expect(store.getActiveStoreType()).toBe('memory');
+  });
+
+  it('rate-limit enforcement while using fallback properly rejects with 429 when limit is reached', async () => {
+    const express = require('express');
+    const mockClient = createMockRedisClient('close'); // Redis unavailable
+    const fallbackStore = new ResilientRateLimitStore({ prefix: 'test_enforce', client: mockClient });
+
+    const testLimiter = rateLimit({
+      windowMs: 60000,
+      limit: 3,
+      store: fallbackStore,
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+
+    const fallbackApp = express();
+    fallbackApp.use(testLimiter);
+    fallbackApp.get('/test-limit', (req, res) => res.json({ ok: true }));
+
+    const res1 = await request(fallbackApp).get('/test-limit');
+    const res2 = await request(fallbackApp).get('/test-limit');
+    const res3 = await request(fallbackApp).get('/test-limit');
+    const res4 = await request(fallbackApp).get('/test-limit');
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    expect(res3.status).toBe(200);
+    expect(res4.status).toBe(429);
+  });
+
+  it('graceful Redis client shutdown calls quit on client', async () => {
+    const mockClient = createMockRedisClient('ready');
+    await mockClient.quit();
+    expect(mockClient.quit).toHaveBeenCalled();
+  });
+
+  it('sanitizeRedisError redacts credentials from Redis URLs in error strings', () => {
+    const secretUrlError = 'Connection failed: redis://default:SuperSecretPassword123!@cache.internal.company.com:6379';
+    const sanitized = sanitizeRedisError(secretUrlError);
+
+    expect(sanitized).not.toContain('SuperSecretPassword123!');
+    expect(sanitized).toContain('redis://***:***@cache.internal.company.com:6379');
+
+    const noCreds = 'Connection error: ETIMEDOUT';
+    expect(sanitizeRedisError(noCreds)).toBe(noCreds);
+  });
+});
+

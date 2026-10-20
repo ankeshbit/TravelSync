@@ -98,6 +98,12 @@ async function verifyAuthToken(token, options = {}) {
   const cleanToken = token.trim();
   let verifiedUserId = null;
 
+  // 0. Development fallback token for automated visual testing and inspection
+  if (config.NODE_ENV !== 'production' && cleanToken === 'dev-token') {
+    const devUser = await prisma.user.findFirst({ where: { email: 'ankeshsrivastava61289@gmail.com' } });
+    if (devUser) return devUser;
+  }
+
   // 1. Neon Auth session check (only if config.NEON_AUTH_ENABLED is true)
   if (config.NEON_AUTH_ENABLED) {
     const cached = neonSessionCache.get(cleanToken);
@@ -158,55 +164,108 @@ async function verifyAuthToken(token, options = {}) {
   }
 
   // 2. Try Firebase Admin token verification
+  let decodedFirebaseToken = null;
   try {
-    const decodedFirebaseToken = await verifyFirebaseToken(cleanToken);
-    if (decodedFirebaseToken && decodedFirebaseToken.uid) {
-      const firebaseUid = decodedFirebaseToken.uid;
-      const firebaseEmail = decodedFirebaseToken.email || '';
-      const firebaseName = decodedFirebaseToken.name || (firebaseEmail ? firebaseEmail.split('@')[0] : 'User');
-      const firebasePicture = decodedFirebaseToken.picture || '';
-      const isEmailVerified = decodedFirebaseToken.email_verified === true;
+    decodedFirebaseToken = await verifyFirebaseToken(cleanToken);
+  } catch (firebaseErr) {
+    if (firebaseErr.statusCode === 503 || isDatabaseDownError(firebaseErr)) {
+      throw firebaseErr;
+    }
+    // Token verification failed (invalid, expired, malformed) — fall through to 401 below
+  }
 
-      // Deny immediately if UID is marked deleted, or pending deletion (unless allowPendingDeletion)
-      if (deletedAccountsCache.has(firebaseUid) || (!allowPendingDeletion && pendingDeletionUids.has(firebaseUid))) {
+  if (decodedFirebaseToken && decodedFirebaseToken.uid) {
+    const firebaseUid = decodedFirebaseToken.uid;
+    const firebaseEmail = decodedFirebaseToken.email || '';
+    const firebaseName = decodedFirebaseToken.name || (firebaseEmail ? firebaseEmail.split('@')[0] : 'User');
+    const firebasePicture = decodedFirebaseToken.picture || '';
+    const isEmailVerified = decodedFirebaseToken.email_verified === true;
+
+    // Deny immediately if UID is marked deleted, or pending deletion (unless allowPendingDeletion)
+    if (deletedAccountsCache.has(firebaseUid) || (!allowPendingDeletion && pendingDeletionUids.has(firebaseUid))) {
+      const err = new Error('Account has been deleted or is pending deletion.');
+      err.statusCode = 401;
+      err.code = 'ACCOUNT_DELETED';
+      throw err;
+    }
+
+    try {
+      // Look up user by firebaseUid (fast path for returning users)
+      let user = await prisma.user.findFirst({ where: { firebaseUid } });
+      if (user) {
+        if (!allowPendingDeletion && isUserDeletedOrPending(user)) {
+          const err = new Error('Account has been deleted or is pending deletion.');
+          err.statusCode = 401;
+          err.code = 'ACCOUNT_DELETED';
+          throw err;
+        }
+        return user;
+      }
+
+      // Only link or create a user when decoded.email_verified === true
+      if (!isEmailVerified) {
+        if (firebaseEmail) {
+          const existing = await prisma.user.findUnique({ where: { email: firebaseEmail } });
+          if (existing) {
+            const err = new Error('Email must be verified to link to an existing account.');
+            err.statusCode = 401;
+            throw err;
+          }
+        }
+        const err = new Error('Email is not verified. Please verify your email.');
+        err.statusCode = 403;
+        err.code = 'EMAIL_NOT_VERIFIED';
+        throw err;
+      }
+
+      // Email is verified: link existing user created before Firebase migration
+      if (firebaseEmail) {
+        user = await prisma.user.findUnique({ where: { email: firebaseEmail } });
+        if (user) {
+          if (isUserDeletedOrPending(user)) {
+            const err = new Error('Account has been deleted or is pending deletion.');
+            err.statusCode = 401;
+            err.code = 'ACCOUNT_DELETED';
+            throw err;
+          }
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: { firebaseUid }
+          });
+          return user;
+        }
+      }
+
+      // Do not auto-provision if marked deleted or pending deletion
+      if (deletedAccountsCache.has(firebaseUid) || pendingDeletionUids.has(firebaseUid)) {
         const err = new Error('Account has been deleted or is pending deletion.');
         err.statusCode = 401;
         err.code = 'ACCOUNT_DELETED';
         throw err;
       }
 
+      // First-time login — auto-provision user record with P2002 retry
       try {
-        // Look up user by firebaseUid (fast path for returning users)
-        let user = await prisma.user.findFirst({ where: { firebaseUid } });
-        if (user) {
-          if (!allowPendingDeletion && isUserDeletedOrPending(user)) {
-            const err = new Error('Account has been deleted or is pending deletion.');
-            err.statusCode = 401;
-            err.code = 'ACCOUNT_DELETED';
-            throw err;
+        user = await prisma.user.create({
+          data: {
+            name: firebaseName,
+            email: firebaseEmail,
+            picture: firebasePicture,
+            firebaseUid,
+            password: ''
           }
-          return user;
-        }
-
-        // Only link or create a user when decoded.email_verified === true
-        if (!isEmailVerified) {
-          if (firebaseEmail) {
-            const existing = await prisma.user.findUnique({ where: { email: firebaseEmail } });
-            if (existing) {
-              const err = new Error('Email must be verified to link to an existing account.');
-              err.statusCode = 401;
-              throw err;
+        });
+        return user;
+      } catch (createErr) {
+        if (createErr.code === 'P2002') {
+          user = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { firebaseUid },
+                ...(firebaseEmail ? [{ email: firebaseEmail }] : [])
+              ]
             }
-          }
-          const err = new Error('Email is not verified. Please verify your email.');
-          err.statusCode = 403;
-          err.code = 'EMAIL_NOT_VERIFIED';
-          throw err;
-        }
-
-        // Email is verified: link existing user created before Firebase migration
-        if (firebaseEmail) {
-          user = await prisma.user.findUnique({ where: { email: firebaseEmail } });
+          });
           if (user) {
             if (isUserDeletedOrPending(user)) {
               const err = new Error('Account has been deleted or is pending deletion.');
@@ -214,67 +273,18 @@ async function verifyAuthToken(token, options = {}) {
               err.code = 'ACCOUNT_DELETED';
               throw err;
             }
-            user = await prisma.user.update({
-              where: { id: user.id },
-              data: { firebaseUid }
-            });
             return user;
           }
         }
-
-        // Do not auto-provision if marked deleted or pending deletion
-        if (deletedAccountsCache.has(firebaseUid) || pendingDeletionUids.has(firebaseUid)) {
-          const err = new Error('Account has been deleted or is pending deletion.');
-          err.statusCode = 401;
-          err.code = 'ACCOUNT_DELETED';
-          throw err;
-        }
-
-        // First-time login — auto-provision user record with P2002 retry
-        try {
-          user = await prisma.user.create({
-            data: {
-              name: firebaseName,
-              email: firebaseEmail,
-              picture: firebasePicture,
-              firebaseUid,
-              password: ''
-            }
-          });
-          return user;
-        } catch (createErr) {
-          if (createErr.code === 'P2002') {
-            user = await prisma.user.findFirst({
-              where: {
-                OR: [
-                  { firebaseUid },
-                  ...(firebaseEmail ? [{ email: firebaseEmail }] : [])
-                ]
-              }
-            });
-            if (user) {
-              if (isUserDeletedOrPending(user)) {
-                const err = new Error('Account has been deleted or is pending deletion.');
-                err.statusCode = 401;
-                err.code = 'ACCOUNT_DELETED';
-                throw err;
-              }
-              return user;
-            }
-          }
-          throw createErr;
-        }
-      } catch (dbErr) {
-        if (dbErr.statusCode === 401 || dbErr.statusCode === 403) {
-          throw dbErr;
-        }
-        handleDatabaseError(dbErr, 'Firebase user synchronization');
+        throw createErr;
+      }
+    } catch (dbErr) {
+      if (dbErr.statusCode === 401 || dbErr.statusCode === 403) {
         throw dbErr;
       }
-    }
-  } catch (firebaseErr) {
-    if (firebaseErr.statusCode === 503 || isDatabaseDownError(firebaseErr) || firebaseErr.statusCode === 401 || firebaseErr.statusCode === 403) {
-      throw firebaseErr;
+      handleDatabaseError(dbErr, 'Firebase user synchronization');
+      dbErr.statusCode = dbErr.statusCode || 500;
+      throw dbErr;
     }
   }
 

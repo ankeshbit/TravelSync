@@ -45,7 +45,10 @@
       </section>
 
       <!-- ── Right Panel ── -->
-      <section class="panel-right">
+      <section class="panel-right relative">
+        <div class="absolute top-4 right-4 z-10">
+          <ThemeToggle />
+        </div>
         <div class="form-container">
 
           <!-- Mobile Branding -->
@@ -167,6 +170,7 @@ import { useAuthStore } from '../stores/auth'
 import { getFirebaseErrorMessage } from '../services/authService'
 import { safeRedirect } from '../utils/url'
 import api from '../api'
+import ThemeToggle from '../components/ThemeToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -292,7 +296,7 @@ const handleGoogleLogin = async () => {
 }
 .panel-gradient {
   position: absolute; inset: 0;
-  background: linear-gradient(to top right, rgba(0,53,95,0.88) 0%, rgba(0,53,95,0.5) 50%, transparent 100%);
+  background: linear-gradient(to top right, rgba(17,18,16,0.92) 0%, rgba(17,18,16,0.65) 50%, rgba(17,18,16,0.2) 100%);
 }
 
 .panel-brand {
@@ -303,14 +307,13 @@ const handleGoogleLogin = async () => {
   height: 42px;
   width: auto;
   object-fit: contain;
-  mix-blend-mode: multiply;
-  filter: brightness(1.1);
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
 }
 .brand-name {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 1.35rem;
   font-weight: 700;
-  color: white;
+  color: #D5D3CA;
   letter-spacing: -0.02em;
 }
 
@@ -323,14 +326,14 @@ const handleGoogleLogin = async () => {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 2.5rem;
   font-weight: 700;
-  color: white;
+  color: #FFFFFF;
   line-height: 1.2;
   letter-spacing: -0.02em;
   margin-bottom: 0.75rem;
 }
 .hero-sub {
   font-size: 1.125rem;
-  color: rgba(255,255,255,0.85);
+  color: rgba(213, 211, 202, 0.9);
   line-height: 1.6;
 }
 .chips {
@@ -340,17 +343,17 @@ const handleGoogleLogin = async () => {
 .chip {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.4rem 1.1rem;
-  background: rgba(255,255,255,0.15);
+  background: rgba(27, 28, 25, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.25);
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: 9999px;
-  color: white;
+  color: #D5D3CA;
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
-.chip-icon { font-size: 18px; color: #8df2fc; }
+.chip-icon { font-size: 18px; color: #A7A99A; }
 
 .panel-footer { position: relative; z-index: 2; }
 .trusted-text {
@@ -358,7 +361,7 @@ const handleGoogleLogin = async () => {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.6);
+  color: rgba(213,211,202,0.6);
 }
 
 /* ── Right Panel ── */
@@ -367,13 +370,13 @@ const handleGoogleLogin = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: #F7F6F2;
   padding: 2.5rem 1.5rem;
   transition: background-color 0.2s;
 }
 
 :global(.dark) .panel-right {
-  background: #0f172a;
+  background: #111210;
 }
 @media (min-width: 1024px) {
   .panel-right { width: 50%; padding: 3.5rem 2.5rem; }
@@ -388,26 +391,26 @@ const handleGoogleLogin = async () => {
   justify-content: center;
   gap: 0.5rem;
   margin-bottom: 2rem;
-  color: #00355f;
+  color: #1C1D1A;
 }
 :global(.dark) .mobile-brand {
-  color: #38bdf8;
+  color: #D5D3CA;
 }
 .mobile-brand-logo {
   height: 38px;
   width: auto;
   object-fit: contain;
-  mix-blend-mode: multiply;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
 }
 .mobile-brand-name {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #00355f;
+  color: #1C1D1A;
 }
 :global(.dark) .mobile-brand-name {
-  color: #38bdf8;
+  color: #D5D3CA;
 }
 @media (min-width: 1024px) { .mobile-brand { display: none; } }
 
@@ -417,13 +420,13 @@ const handleGoogleLogin = async () => {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 2rem;
   font-weight: 700;
-  color: #161c27;
+  color: #1C1D1A;
   letter-spacing: -0.02em;
   margin-bottom: 0.35rem;
 }
-:global(.dark) .form-title { color: #f1f5f9; }
-.form-sub { font-size: 0.95rem; color: #64748b; }
-:global(.dark) .form-sub { color: #94a3b8; }
+:global(.dark) .form-title { color: #D5D3CA; }
+.form-sub { font-size: 0.95rem; color: #575851; }
+:global(.dark) .form-sub { color: #85867C; }
 
 /* Google Button */
 .google-btn {
@@ -433,31 +436,30 @@ const handleGoogleLogin = async () => {
   justify-content: center;
   gap: 0.75rem;
   padding: 0.85rem 1.25rem;
-  background: #ffffff;
-  border: 1.5px solid #e2e8f0;
+  background: #FFFFFF;
+  border: 1.5px solid #D1CEC7;
   border-radius: 0.75rem;
   font-size: 0.95rem;
   font-weight: 600;
   font-family: inherit;
-  color: #161c27;
+  color: #1C1D1A;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 :global(.dark) .google-btn {
-  background: #1e293b;
-  border-color: #334155;
-  color: #f8fafc;
+  background: #1B1C19;
+  border-color: #30312C;
+  color: #D5D3CA;
 }
 .google-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  background: #EFECE6;
+  border-color: #B9BBAA;
   transform: translateY(-1px);
 }
 :global(.dark) .google-btn:hover:not(:disabled) {
-  background: #273549;
-  border-color: #475569;
+  background: #22231F;
+  border-color: #414239;
 }
 .google-btn:disabled {
   opacity: 0.65;
@@ -469,8 +471,8 @@ const handleGoogleLogin = async () => {
   display: inline-block;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(2, 132, 199, 0.25);
-  border-top-color: #0284c7;
+  border: 2px solid rgba(167, 169, 154, 0.25);
+  border-top-color: #A7A99A;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -482,32 +484,32 @@ const handleGoogleLogin = async () => {
   gap: 1rem;
   margin: 1.75rem 0;
 }
-.divider-line { flex: 1; height: 1px; background: #e2e8f0; }
-:global(.dark) .divider-line { background: #334155; }
+.divider-line { flex: 1; height: 1px; background: #E3E0D8; }
+:global(.dark) .divider-line { background: #30312C; }
 .divider-text {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #64748b;
+  color: #85867C;
   white-space: nowrap;
 }
-:global(.dark) .divider-text { color: #94a3b8; }
+:global(.dark) .divider-text { color: #85867C; }
 
 /* Form */
 .form { display: flex; flex-direction: column; gap: 1.25rem; }
 .field { display: flex; flex-direction: column; gap: 0.4rem; }
 .field-label-row { display: flex; justify-content: space-between; align-items: center; }
-.field-label { font-size: 0.875rem; font-weight: 600; color: #161c27; }
-:global(.dark) .field-label { color: #e2e8f0; }
+.field-label { font-size: 0.875rem; font-weight: 600; color: #1C1D1A; }
+:global(.dark) .field-label { color: #D5D3CA; }
 
 .forgot-link {
   font-size: 0.75rem;
-  font-weight: 700;
-  color: #00355f;
+  font-weight: 600;
+  color: #575851;
   text-decoration: none;
 }
-:global(.dark) .forgot-link { color: #38bdf8; }
+:global(.dark) .forgot-link { color: #A7A99A; }
 .forgot-link:hover { text-decoration: underline; }
 
 .input-wrap { position: relative; }
@@ -515,41 +517,42 @@ const handleGoogleLogin = async () => {
   position: absolute;
   left: 14px; top: 50%;
   transform: translateY(-50%);
-  color: #727780;
+  color: #85867C;
   font-size: 20px;
   pointer-events: none;
   transition: color 0.2s;
 }
-.input-wrap:focus-within .input-icon { color: #00355f; }
-:global(.dark) .input-wrap:focus-within .input-icon { color: #38bdf8; }
+.input-wrap:focus-within .input-icon { color: #1C1D1A; }
+:global(.dark) .input-wrap:focus-within .input-icon { color: #A7A99A; }
 
 .input {
   width: 100%;
   padding: 0.85rem 1rem 0.85rem 3rem;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-family: inherit;
-  background: #f1f3ff !important;
-  border: 2px solid transparent;
+  background: #FAF9F5 !important;
+  border: 1.5px solid #D1CEC7;
   border-radius: 0.75rem;
-  color: #000000 !important;
+  color: #1C1D1A !important;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 :global(.dark) .input {
-  background: #1e293b !important;
-  color: #ffffff !important;
+  background: #141512 !important;
+  border-color: #30312C;
+  color: #D5D3CA !important;
 }
-.input::placeholder { color: #727780 !important; }
-:global(.dark) .input::placeholder { color: #94a3b8 !important; }
+.input::placeholder { color: #85867C !important; }
+:global(.dark) .input::placeholder { color: #85867C !important; }
 .input:focus {
-  background: #fff !important;
-  border-color: #00355f;
-  box-shadow: 0 0 0 4px rgba(0, 53, 95, 0.08);
+  background: #FFFFFF !important;
+  border-color: #A7A99A;
+  box-shadow: 0 0 0 3px rgba(167, 169, 154, 0.15);
 }
 :global(.dark) .input:focus {
-  background: #0f172a !important;
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
+  background: #141512 !important;
+  border-color: #A7A99A;
+  box-shadow: 0 0 0 3px rgba(167, 169, 154, 0.15);
 }
 .input-password { padding-right: 3rem; }
 
@@ -560,56 +563,57 @@ const handleGoogleLogin = async () => {
   background: none;
   border: none;
   cursor: pointer;
-  color: #727780;
+  color: #85867C;
   display: flex; align-items: center;
   padding: 0;
 }
-.visibility-btn:hover { color: #42474f; }
+.visibility-btn:hover { color: #1C1D1A; }
+:global(.dark) .visibility-btn:hover { color: #D5D3CA; }
 
 /* Error */
 .error-msg {
   display: flex; align-items: center; gap: 0.5rem;
-  background: #fff0f0;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
+  background: rgba(199, 127, 120, 0.12);
+  border: 1px solid rgba(199, 127, 120, 0.3);
+  color: #C77F78;
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
 }
 :global(.dark) .error-msg {
-  background: #450a0a;
-  border-color: #7f1d1d;
-  color: #fca5a5;
+  background: rgba(199, 127, 120, 0.12);
+  border-color: rgba(199, 127, 120, 0.3);
+  color: #C77F78;
 }
 
 /* Submit */
 .btn-submit {
   width: 100%;
-  padding: 0.9rem 1rem;
-  background: linear-gradient(to right, #00355f, #006970);
-  color: white;
+  padding: 0.85rem 1rem;
+  background: #A7A99A;
+  color: #171813;
   font-size: 0.95rem;
   font-weight: 600;
   font-family: inherit;
   border: none;
   border-radius: 0.75rem;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 53, 95, 0.2);
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: background-color 0.2s, transform 0.15s;
 }
 :global(.dark) .btn-submit {
-  background: linear-gradient(to right, #0369a1, #0891b2);
+  background: #A7A99A;
+  color: #171813;
 }
-.btn-submit:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
-.btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-submit:hover:not(:disabled) { background: #B9BBAA; transform: translateY(-1px); }
+.btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Spinner */
 .spinner {
   display: inline-block;
   width: 18px; height: 18px;
-  border: 2.5px solid rgba(255,255,255,0.35);
-  border-top-color: #fff;
+  border: 2.5px solid rgba(23, 24, 19, 0.3);
+  border-top-color: #171813;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -620,16 +624,16 @@ const handleGoogleLogin = async () => {
   margin-top: 1.75rem;
   text-align: center;
   font-size: 0.95rem;
-  color: #64748b;
+  color: #85867C;
 }
-:global(.dark) .signup-link { color: #94a3b8; }
+:global(.dark) .signup-link { color: #85867C; }
 .signup-link a {
-  color: #00355f;
-  font-weight: 700;
+  color: #1C1D1A;
+  font-weight: 600;
   text-decoration: none;
   margin-left: 4px;
 }
-:global(.dark) .signup-link a { color: #38bdf8; }
+:global(.dark) .signup-link a { color: #A7A99A; }
 .signup-link a:hover { text-decoration: underline; }
 
 /* FAB */
@@ -638,22 +642,23 @@ const handleGoogleLogin = async () => {
   bottom: 2rem; right: 2rem;
   z-index: 40;
   width: 52px; height: 52px;
-  background: white;
-  color: #00355f;
-  border: 1.5px solid #c2c7d1;
+  background: #FAF9F5;
+  color: #1C1D1A;
+  border: 1.5px solid #D1CEC7;
   border-radius: 50%;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   transition: background 0.2s, color 0.2s, transform 0.15s, border-color 0.2s;
 }
 :global(.dark) .fab {
-  background: #1e293b;
-  border-color: #334155;
-  color: #38bdf8;
+  background: #1B1C19;
+  border-color: #30312C;
+  color: #D5D3CA;
 }
-.fab:hover { background: #00355f; color: white; }
-.fab:active { transform: scale(0.9); }
+.fab:hover { background: #EFECE6; }
+:global(.dark) .fab:hover { background: #22231F; }
+.fab:active { transform: scale(0.95); }
 
 /* Transitions */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }

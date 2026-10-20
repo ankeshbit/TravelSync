@@ -1,53 +1,42 @@
 <template>
-  <div class="bg-[#080D1A] min-h-screen text-slate-100 flex flex-col font-sans selection:bg-blue-500/30">
-    <Navbar />
-
-    <div class="flex flex-1">
-      <Sidebar />
-
-      <!-- Main Canvas -->
-      <main class="flex-1 md:ml-64 p-5 md:p-8 pb-20 max-w-7xl">
+  <AppLayout>
         <!-- Top Header Bar -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight">Expenses</h1>
-            <p class="text-xs md:text-sm text-slate-400 mt-1">Track and split expenses for this trip.</p>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight">Expenses</h1>
+            <p class="text-xs sm:text-sm text-[#575851] dark:text-[#A5A69B] mt-1">Track and split expenses for this trip.</p>
           </div>
 
-          <div class="flex items-center gap-3">
+          <div class="flex flex-wrap items-center gap-3">
             <TripPresence :activeMembers="activeMembers" />
 
             <button
               @click="openSettleUpModal"
-              class="px-4 py-2.5 rounded-xl bg-[#111C33] hover:bg-[#162442] border border-[#1E2E4E] text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5"
+              class="px-4 py-2.5 rounded-xl bg-[#FFFFFF] dark:bg-[#1B1C19] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] text-[#575851] dark:text-[#D5D3CA] text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 h-[48px]"
             >
-              <span class="material-symbols-outlined text-[16px] text-blue-400">handshake</span>
-              Settle Up
+              <span class="material-symbols-outlined text-[16px] text-[#A7A99A]">handshake</span>
+              <span>Settle Up</span>
             </button>
 
-            <button
+            <NewTransactionCard
               @click="() => { error = ''; showAddExpenseModal = true }"
-              class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-all shadow-lg shadow-blue-600/30 flex items-center gap-1.5"
-            >
-              <span class="material-symbols-outlined text-[16px]">add</span>
-              Add Expense
-            </button>
+            />
           </div>
         </div>
 
         <!-- Full page load error with Retry -->
-        <div v-if="loadError" class="p-8 text-center bg-[#0D1527] border border-red-500/30 rounded-2xl mb-6">
-          <span class="material-symbols-outlined text-4xl text-red-400 mb-2">error</span>
-          <p class="text-sm font-semibold text-white">{{ loadError }}</p>
-          <button @click="loadAllData" class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl">
+        <div v-if="loadError" class="p-8 text-center bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#C77F78]/40 rounded-2xl mb-6 shadow-sm">
+          <span class="material-symbols-outlined text-4xl text-[#C77F78] mb-2">error</span>
+          <p class="text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">{{ loadError }}</p>
+          <button @click="loadAllData" class="mt-4 px-4 py-2 bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] text-xs font-semibold rounded-xl">
             Retry
           </button>
         </div>
 
         <!-- Currency Selector / Tabs -->
-        <div v-if="availableCurrencies.length > 0" class="flex items-center gap-2 mb-6">
-          <span class="text-xs font-semibold text-slate-400">Currency:</span>
-          <div class="flex items-center bg-[#090F1E] border border-[#16233F] rounded-xl p-1 gap-1">
+        <div v-if="availableCurrencies.length > 0" class="flex items-center gap-2.5 mb-6 overflow-x-auto pb-1">
+          <span class="text-xs font-semibold text-[#575851] dark:text-[#A5A69B] flex-shrink-0">Currency:</span>
+          <div class="flex items-center bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-xl p-1.5 gap-1.5 shadow-sm flex-shrink-0">
             <button
               v-for="curr in availableCurrencies"
               :key="curr"
@@ -55,10 +44,10 @@
               :data-test="`currency-tab-${curr}`"
               @click="selectedCurrency = curr"
               :class="[
-                'px-3 py-1 text-xs font-semibold rounded-lg transition-all',
+                'px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all',
                 selectedCurrency === curr
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#14203A]'
+                  ? 'bg-[#1C1D1A] dark:bg-[#A7A99A] text-white dark:text-[#171813] shadow-sm'
+                  : 'text-[#575851] dark:text-[#A5A69B] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F]'
               ]"
             >
               {{ curr }}
@@ -69,52 +58,52 @@
         <!-- 4 Stat Cards Row -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <!-- Total Expenses -->
-          <div class="bg-[#0D1527] border border-[#16233F] rounded-2xl p-4 flex items-center gap-3.5 hover:border-slate-700/60 transition-all">
-            <div class="w-11 h-11 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 flex-shrink-0">
+          <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-5 sm:p-6 flex items-center gap-4 hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-all shadow-sm min-h-[104px] h-full">
+            <div class="w-12 h-12 rounded-xl bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] flex-shrink-0">
               <span class="material-symbols-outlined text-2xl">receipt_long</span>
             </div>
-            <div>
-              <p class="text-[11px] font-medium text-slate-400">Total Expenses</p>
-              <p class="text-xl font-bold text-white tracking-tight mt-0.5">
+            <div class="min-w-0 flex-1">
+              <p class="text-[11px] font-semibold text-[#7E8075] dark:text-[#85867C] truncate">Total Expenses</p>
+              <p class="text-xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight mt-1 truncate" :title="formatCurrency(computedTotalExpenses, currentTripCurrency)">
                 {{ formatCurrency(computedTotalExpenses, currentTripCurrency) }}
               </p>
             </div>
           </div>
 
           <!-- Your Share -->
-          <div class="bg-[#0D1527] border border-[#16233F] rounded-2xl p-4 flex items-center gap-3.5 hover:border-slate-700/60 transition-all">
-            <div class="w-11 h-11 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 flex-shrink-0">
+          <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-5 sm:p-6 flex items-center gap-4 hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-all shadow-sm min-h-[104px] h-full">
+            <div class="w-12 h-12 rounded-xl bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] flex-shrink-0">
               <span class="material-symbols-outlined text-2xl">pie_chart</span>
             </div>
-            <div>
-              <p class="text-[11px] font-medium text-slate-400">Your Share</p>
-              <p class="text-xl font-bold text-white tracking-tight mt-0.5">
+            <div class="min-w-0 flex-1">
+              <p class="text-[11px] font-semibold text-[#7E8075] dark:text-[#85867C] truncate">Your Share</p>
+              <p class="text-xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight mt-1 truncate" :title="formatCurrency(computedYourShare, currentTripCurrency)">
                 {{ formatCurrency(computedYourShare, currentTripCurrency) }}
               </p>
             </div>
           </div>
 
           <!-- You Owe -->
-          <div class="bg-[#0D1527] border border-[#16233F] rounded-2xl p-4 flex items-center gap-3.5 hover:border-slate-700/60 transition-all">
-            <div class="w-11 h-11 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 flex-shrink-0">
+          <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-5 sm:p-6 flex items-center gap-4 hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-all shadow-sm min-h-[104px] h-full">
+            <div class="w-12 h-12 rounded-xl bg-[#C77F78]/10 border border-[#C77F78]/30 flex items-center justify-center text-[#C77F78] flex-shrink-0">
               <span class="material-symbols-outlined text-2xl">arrow_downward</span>
             </div>
-            <div>
-              <p class="text-[11px] font-medium text-slate-400">You Owe</p>
-              <p class="text-xl font-bold text-red-400 tracking-tight mt-0.5">
+            <div class="min-w-0 flex-1">
+              <p class="text-[11px] font-semibold text-[#7E8075] dark:text-[#85867C] truncate">You Owe</p>
+              <p class="text-xl font-bold text-[#C77F78] tracking-tight mt-1 truncate" :title="formatCurrency(computedYouOwe, currentTripCurrency)">
                 {{ formatCurrency(computedYouOwe, currentTripCurrency) }}
               </p>
             </div>
           </div>
 
           <!-- You Are Owed -->
-          <div class="bg-[#0D1527] border border-[#16233F] rounded-2xl p-4 flex items-center gap-3.5 hover:border-slate-700/60 transition-all">
-            <div class="w-11 h-11 rounded-xl bg-green-500/15 border border-green-500/30 flex items-center justify-center text-green-400 flex-shrink-0">
+          <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-5 sm:p-6 flex items-center gap-4 hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-all shadow-sm min-h-[104px] h-full">
+            <div class="w-12 h-12 rounded-xl bg-[#86A98B]/10 border border-[#86A98B]/30 flex items-center justify-center text-[#86A98B] flex-shrink-0">
               <span class="material-symbols-outlined text-2xl">arrow_upward</span>
             </div>
-            <div>
-              <p class="text-[11px] font-medium text-slate-400">You Are Owed</p>
-              <p class="text-xl font-bold text-green-400 tracking-tight mt-0.5">
+            <div class="min-w-0 flex-1">
+              <p class="text-[11px] font-semibold text-[#7E8075] dark:text-[#85867C] truncate">You Are Owed</p>
+              <p class="text-xl font-bold text-[#86A98B] tracking-tight mt-1 truncate" :title="formatCurrency(computedYouAreOwed, currentTripCurrency)">
                 {{ formatCurrency(computedYouAreOwed, currentTripCurrency) }}
               </p>
             </div>
@@ -122,104 +111,106 @@
         </div>
 
         <!-- Error Notification -->
-        <div v-if="error" class="bg-red-500/10 border border-red-500/30 text-red-300 text-xs px-4 py-3 rounded-xl mb-6 flex items-center justify-between">
+        <div v-if="error" class="bg-[#C77F78]/10 border border-[#C77F78]/30 text-[#C77F78] text-xs px-4 py-3 rounded-xl mb-6 flex items-center justify-between">
           <span>{{ error }}</span>
-          <button @click="error = ''" class="text-slate-400 hover:text-white">✕</button>
+          <button @click="error = ''" class="text-[#7E8075] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA]">✕</button>
         </div>
 
         <!-- 2-Column Split: Expenses Log & Who Owes What -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <!-- Left Column: Expenses Log (7 cols) -->
-          <div class="lg:col-span-8 bg-[#0D1527] border border-[#16233F] rounded-2xl p-5 md:p-6 shadow-xl">
-            <div class="flex items-center justify-between mb-4">
-              <h2 class="text-base font-bold text-white tracking-tight">Expenses Log</h2>
-              <span class="text-xs text-slate-400">{{ displayExpenses.length }} transactions</span>
+          <!-- Left Column: Expenses Log (8 cols) -->
+          <div class="lg:col-span-8 min-w-0 bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-3xl p-6 sm:p-8 shadow-sm">
+            <div class="flex items-center justify-between mb-5">
+              <h2 class="text-base font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight">Expenses Log</h2>
+              <span class="text-xs text-[#7E8075] dark:text-[#85867C] font-medium">{{ displayExpenses.length }} transactions</span>
             </div>
 
             <!-- Table (Desktop & Tablet) -->
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-xs">
+            <div class="overflow-x-auto custom-scrollbar">
+              <table class="w-full text-left text-xs min-w-[620px]">
                 <thead>
-                  <tr class="border-b border-[#1A2644] text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                    <th class="py-3 px-3">Description</th>
-                    <th class="py-3 px-3">Date</th>
-                    <th class="py-3 px-3">Paid By</th>
-                    <th class="py-3 px-3 text-right">Amount</th>
-                    <th class="py-3 px-3 text-center">Split Among</th>
-                    <th class="py-3 px-3 text-right">Your Share</th>
-                    <th class="py-3 px-2 text-center"></th>
+                  <tr class="border-b border-[#E3E0D8] dark:border-[#30312C] text-[10px] uppercase font-bold text-[#7E8075] dark:text-[#85867C] tracking-wider">
+                    <th class="py-3.5 px-4">Description</th>
+                    <th class="py-3.5 px-4">Date</th>
+                    <th class="py-3.5 px-4">Paid By</th>
+                    <th class="py-3.5 px-4 text-right">Amount</th>
+                    <th class="py-3.5 px-4 text-center">Split Among</th>
+                    <th class="py-3.5 px-4 text-right">Your Share</th>
+                    <th class="py-3.5 px-3 text-center"></th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-[#16233F]/70">
+                <tbody class="divide-y divide-[#E3E0D8] dark:divide-[#30312C]">
                   <tr v-if="displayExpenses.length === 0">
-                    <td colspan="7" class="py-12 text-center text-slate-400">
-                      <div class="flex flex-col items-center justify-center">
-                        <span class="material-symbols-outlined text-4xl text-slate-500 mb-2">receipt_long</span>
-                        <p class="text-sm font-medium text-slate-300">No expenses recorded yet</p>
-                        <p class="text-xs text-slate-500 mt-1">Click "Add Expense" to track shared trip costs.</p>
+                    <td colspan="7" class="py-14 text-center text-[#7E8075]">
+                      <div class="flex flex-col items-center justify-center max-w-sm mx-auto">
+                        <div class="w-12 h-12 rounded-xl bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] mb-3 flex-shrink-0">
+                          <span class="material-symbols-outlined text-2xl">receipt_long</span>
+                        </div>
+                        <p class="text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">No expenses recorded yet</p>
+                        <p class="text-xs text-[#575851] dark:text-[#A5A69B] mt-1 leading-relaxed">Click "Add Expense" to track shared trip costs and calculate balances.</p>
                       </div>
                     </td>
                   </tr>
                   <tr
                     v-for="(item, idx) in displayExpenses"
                     :key="item.id || item._id || idx"
-                    class="hover:bg-[#111C33]/50 transition-colors group"
+                    class="hover:bg-[#F7F6F2] dark:hover:bg-[#22231F]/50 transition-colors group"
                   >
                     <!-- Description -->
-                    <td class="py-3.5 px-3">
-                      <div class="flex items-center gap-2.5">
-                        <div class="w-7 h-7 rounded-lg bg-[#14203A] border border-[#1E2E4E] flex items-center justify-center text-blue-400 flex-shrink-0">
-                          <span class="material-symbols-outlined text-[15px]">{{ getCategoryIcon(item.title) }}</span>
+                    <td class="py-4 px-4">
+                      <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] flex-shrink-0">
+                          <span class="material-symbols-outlined text-[16px]">{{ getCategoryIcon(item.title) }}</span>
                         </div>
-                        <span class="font-medium text-slate-200 group-hover:text-white transition-colors truncate max-w-[140px] md:max-w-[170px]">
+                        <span class="font-medium text-[#1C1D1A] dark:text-[#D5D3CA] truncate max-w-[140px] md:max-w-[170px]">
                           {{ item.title }}
                         </span>
                       </div>
                     </td>
 
                     <!-- Date -->
-                    <td class="py-3.5 px-3 text-slate-400 whitespace-nowrap">
+                    <td class="py-4 px-4 text-[#575851] dark:text-[#A5A69B] whitespace-nowrap">
                       {{ formatDate(item.date || item.createdAt) }}
                     </td>
 
                     <!-- Paid By -->
-                    <td class="py-3.5 px-3 whitespace-nowrap">
+                    <td class="py-4 px-4 whitespace-nowrap">
                       <div class="flex items-center gap-2">
-                        <div class="w-5 h-5 rounded-full bg-blue-600/40 text-blue-300 font-semibold text-[10px] flex items-center justify-center border border-blue-400/30 flex-shrink-0">
+                        <div class="w-6 h-6 rounded-full bg-[#EFECE6] dark:bg-[#292A25] text-[#1C1D1A] dark:text-[#D5D3CA] font-semibold text-[10px] flex items-center justify-center border border-[#E3E0D8] dark:border-[#414239] flex-shrink-0">
                           {{ (item.paidByName || item.paidBy?.name || 'U').charAt(0).toUpperCase() }}
                         </div>
-                        <span class="text-slate-300 font-medium">{{ item.paidByName || item.paidBy?.name || 'Unknown' }}</span>
+                        <span class="text-[#1C1D1A] dark:text-[#D5D3CA] font-medium">{{ item.paidByName || item.paidBy?.name || 'Unknown' }}</span>
                       </div>
                     </td>
 
                     <!-- Amount -->
-                    <td class="py-3.5 px-3 text-right font-semibold text-slate-100 whitespace-nowrap">
+                    <td class="py-4 px-4 text-right font-bold text-[#1C1D1A] dark:text-[#D5D3CA] whitespace-nowrap">
                       {{ formatCurrency(item.amount, item.currency || currentTripCurrency) }}
                     </td>
 
                     <!-- Split Among -->
-                    <td class="py-3.5 px-3 text-center text-slate-400 whitespace-nowrap">
+                    <td class="py-4 px-4 text-center text-[#575851] dark:text-[#A5A69B] whitespace-nowrap">
                       {{ item.splitText || `${(item.splitAmong?.length || 1)} ${(item.splitAmong?.length === 1 ? 'person' : 'people')}` }}
                     </td>
 
                     <!-- Your Share -->
-                    <td class="py-3.5 px-3 text-right font-medium text-slate-300 whitespace-nowrap">
+                    <td class="py-4 px-4 text-right font-semibold text-[#575851] dark:text-[#A5A69B] whitespace-nowrap">
                       {{ formatCurrency(item.yourShare !== undefined ? item.yourShare : (item.amount / (item.splitAmong?.length || 1)), item.currency || currentTripCurrency) }}
                     </td>
 
                     <!-- Actions -->
-                    <td class="py-3.5 px-2 text-center whitespace-nowrap">
+                    <td class="py-4 px-3 text-center whitespace-nowrap">
                       <button
                         v-if="canDeleteExpense(item)"
                         @click="handleDeleteExpense(item.id || item._id)"
-                        class="p-1 rounded hover:bg-red-500/20 text-slate-500 hover:text-red-400 transition-colors"
+                        class="p-1.5 rounded-lg hover:bg-[#C77F78]/10 text-[#7E8075] hover:text-[#C77F78] transition-colors"
                         title="Delete expense"
                       >
                         <span class="material-symbols-outlined text-[16px]">delete</span>
                       </button>
                       <button
                         v-else
-                        class="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
+                        class="p-1.5 rounded-lg hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] text-[#7E8075] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] transition-colors"
                       >
                         <span class="material-symbols-outlined text-[16px]">more_vert</span>
                       </button>
@@ -231,13 +222,13 @@
           </div>
 
           <!-- Right Column: Who Owes What (4 cols) -->
-          <div class="lg:col-span-4 bg-[#0D1527] border border-[#16233F] rounded-2xl p-5 md:p-6 shadow-xl flex flex-col justify-between">
+          <div class="lg:col-span-4 min-w-0 bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col justify-between">
             <div>
               <div class="flex items-center justify-between mb-5">
-                <h2 class="text-base font-bold text-white tracking-tight">Who Owes What</h2>
+                <h2 class="text-base font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight">Who Owes What</h2>
                 <button
                   @click="refreshBalances"
-                  class="text-slate-400 hover:text-blue-400 transition-colors"
+                  class="text-[#7E8075] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] transition-colors p-1 rounded-lg"
                   title="Refresh balances"
                 >
                   <span class="material-symbols-outlined text-[16px]">refresh</span>
@@ -246,42 +237,42 @@
 
               <!-- List of Debtors / Creditors -->
               <div v-if="displayOwesList.length === 0" class="text-center py-10">
-                <span class="material-symbols-outlined text-3xl text-emerald-400/80 mb-2">check_circle</span>
-                <p class="text-xs font-semibold text-slate-300">All settled up!</p>
-                <p class="text-[11px] text-slate-500 mt-0.5">No outstanding balances among members.</p>
+                <span class="material-symbols-outlined text-3xl text-[#86A98B] mb-2">check_circle</span>
+                <p class="text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">All settled up!</p>
+                <p class="text-[11px] text-[#7E8075] dark:text-[#85867C] mt-0.5">No outstanding balances among members.</p>
               </div>
               <div v-else class="space-y-3.5">
                 <div
                   v-for="(debt, idx) in displayOwesList"
                   :key="debt.id || idx"
-                  class="flex items-center justify-between p-3 rounded-xl bg-[#090F1E] border border-[#14203A] hover:border-[#1E2E4E] transition-all"
+                  class="flex items-center justify-between p-4 rounded-2xl bg-[#F7F6F2] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-all gap-3.5"
                 >
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-3 min-w-0 flex-1">
                     <img
                       v-if="debt.avatar"
                       :src="debt.avatar"
                       :alt="debt.name"
-                      class="w-8 h-8 rounded-full object-cover border border-slate-700/60"
+                      class="w-8 h-8 rounded-full object-cover border border-[#E3E0D8] dark:border-[#414239] flex-shrink-0"
                       @error="e => e.target.style.display = 'none'"
                     />
-                    <div v-else class="w-8 h-8 rounded-full bg-blue-600/30 text-blue-300 flex items-center justify-center font-bold text-xs border border-blue-500/30">
+                    <div v-else class="w-8 h-8 rounded-full bg-[#EFECE6] dark:bg-[#292A25] text-[#1C1D1A] dark:text-[#D5D3CA] flex items-center justify-center font-bold text-xs border border-[#E3E0D8] dark:border-[#414239] flex-shrink-0">
                       {{ debt.name ? debt.name.charAt(0).toUpperCase() : 'U' }}
                     </div>
-                    <div>
-                      <p class="text-xs font-semibold text-slate-200">
+                    <div class="min-w-0 flex-1">
+                      <p class="text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] truncate">
                         <span v-if="debt.type === 'owes_you'">{{ debt.name }} owes you</span>
                         <span v-else>You owe {{ debt.name }}</span>
                       </p>
-                      <p v-if="debt.email" class="text-[10px] text-slate-500">{{ debt.email }}</p>
+                      <p v-if="debt.email" class="text-[10px] text-[#7E8075] dark:text-[#85867C] truncate">{{ debt.email }}</p>
                     </div>
                   </div>
 
                   <span
                     :class="[
-                      'text-xs font-bold px-2 py-0.5 rounded-lg border',
+                      'text-xs font-bold px-3 py-1 rounded-xl border flex-shrink-0',
                       debt.type === 'owes_you'
-                        ? 'text-green-400 bg-green-500/10 border-green-500/20'
-                        : 'text-red-400 bg-red-500/10 border-red-500/20'
+                        ? 'text-[#86A98B] bg-[#86A98B]/15 border-[#86A98B]/30'
+                        : 'text-[#C77F78] bg-[#C77F78]/15 border-[#C77F78]/30'
                     ]"
                   >
                     {{ formatCurrency(debt.amount, currentTripCurrency) }}
@@ -293,15 +284,13 @@
             <!-- Settle / View Settlement Plan Button -->
             <button
               @click="openSettleUpModal"
-              class="w-full mt-6 py-2.5 px-4 rounded-xl bg-[#111C33] hover:bg-[#162442] border border-[#1E2E4E] hover:border-blue-500/40 text-slate-200 hover:text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm group"
+              class="w-full mt-6 py-2.5 px-4 rounded-xl bg-[#F0EEE9] dark:bg-[#22231F] hover:bg-[#E3E0D8] dark:hover:bg-[#292A25] border border-[#E3E0D8] dark:border-[#30312C] text-[#1C1D1A] dark:text-[#D5D3CA] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm group"
             >
               <span>View Settlement Plan</span>
-              <span class="material-symbols-outlined text-[15px] group-hover:translate-x-0.5 transition-transform text-blue-400">arrow_forward</span>
+              <span class="material-symbols-outlined text-[15px] group-hover:translate-x-0.5 transition-transform text-[#A7A99A]">arrow_forward</span>
             </button>
           </div>
         </div>
-      </main>
-    </div>
 
     <!-- Add Expense Modal -->
     <AddExpenseModal
@@ -320,26 +309,26 @@
       v-if="showSettleModal"
       class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
     >
-      <div class="bg-[#0D1527] border border-[#1E2E4E] rounded-2xl w-full max-w-md p-6 shadow-2xl">
-        <div class="flex items-center justify-between pb-4 border-b border-[#1A2644]">
-          <h3 class="text-base font-bold text-white">Settlement Plan</h3>
-          <button @click="showSettleModal = false" class="text-slate-400 hover:text-white">✕</button>
+      <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl w-full max-w-md p-6 shadow-2xl">
+        <div class="flex items-center justify-between pb-4 border-b border-[#E3E0D8] dark:border-[#30312C]">
+          <h3 class="text-base font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">Settlement Plan</h3>
+          <button @click="showSettleModal = false" class="text-[#7E8075] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA]">✕</button>
         </div>
 
         <div class="py-4 space-y-3">
           <div
             v-for="(debt, idx) in displayOwesList"
             :key="idx"
-            class="p-3 rounded-xl bg-[#090F1E] border border-[#14203A] flex items-center justify-between text-xs"
+            class="p-3 rounded-xl bg-[#F7F6F2] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-between text-xs"
           >
             <div>
-              <p class="font-semibold text-white">
+              <p class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">
                 <span v-if="debt.type === 'owes_you'">{{ debt.name }} → You</span>
                 <span v-else>You → {{ debt.name }}</span>
               </p>
-              <p class="text-[11px] text-slate-400 mt-0.5">Amount: {{ formatCurrency(debt.amount, currentTripCurrency) }}</p>
+              <p class="text-[11px] text-[#7E8075] dark:text-[#85867C] mt-0.5">Amount: {{ formatCurrency(debt.amount, currentTripCurrency) }}</p>
             </div>
-            <span class="text-xs font-semibold px-2 py-1 rounded bg-slate-800 text-slate-300">
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#EFECE6] dark:bg-[#292A25] text-[#1C1D1A] dark:text-[#D5D3CA] border border-[#E3E0D8] dark:border-[#414239]">
               {{ formatCurrency(debt.amount, currentTripCurrency) }}
             </span>
           </div>
@@ -347,13 +336,13 @@
 
         <button
           @click="showSettleModal = false"
-          class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-all mt-2"
+          class="w-full py-2.5 rounded-xl bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] text-xs font-semibold transition-all mt-2 border border-[#A7A99A]/40"
         >
           Close
         </button>
       </div>
     </div>
-  </div>
+  </AppLayout>
 </template>
 
 <script setup>
@@ -363,10 +352,10 @@ import api from '../api'
 import { useExpensesStore } from '../stores/expenses'
 import { useAuthStore } from '../stores/auth'
 import { useTripsStore } from '../stores/trips'
-import Navbar from '../components/Navbar.vue'
-import Sidebar from '../components/Sidebar.vue'
+import AppLayout from '../components/AppLayout.vue'
 import TripPresence from '../components/TripPresence.vue'
 import AddExpenseModal from '../components/AddExpenseModal.vue'
+import NewTransactionCard from '../components/NewTransactionCard.vue'
 import { useSocket } from '../composables/useSocket'
 import { formatCurrency } from '../utils/format'
 

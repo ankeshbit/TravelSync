@@ -238,6 +238,9 @@ router.put('/me/password', (req, res) => {
   });
 });
 
+// In-flight deletion tracker to prevent concurrent deletion requests
+const activeDeletions = new Set();
+
 /**
  * @swagger
  * /api/auth/me:
@@ -254,107 +257,133 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
     return res.status(403).json({ message: 'Valid OTP required for account deletion.' });
   }
 
-  const user = await prisma.user.findUnique({ where: { id: req.userId } });
-  if (!user) {
-    return res.status(404).json({ message: 'User not found.' });
-  }
-
-  // Pre-check: if the user has any expenses paid or splits, or owns trips that have expenses, reject with 409 before burning the OTP
-  const [expensesPaidCount, expenseSplitsCount, tripExpensesCount] = await Promise.all([
-    prisma.expense.count({ where: { paidById: req.userId } }),
-    prisma.expenseSplit.count({ where: { userId: req.userId } }),
-    prisma.expense.count({ where: { trip: { ownerId: req.userId } } })
-  ]);
-
-  if (expensesPaidCount > 0 || expenseSplitsCount > 0 || tripExpensesCount > 0) {
+  if (activeDeletions.has(req.userId)) {
     return res.status(409).json({
-      message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
-      code: 'ACCOUNT_HAS_EXPENSES'
+      message: 'Account deletion is already in progress.',
+      code: 'DELETION_IN_PROGRESS'
     });
   }
+  activeDeletions.add(req.userId);
 
-  const otpResult = await verifyOtp(user.email, otp, 'delete');
-  if (!otpResult.ok) {
-    return res.status(403).json({ message: otpResult.reason || 'Invalid or expired OTP.' });
-  }
-
-  // Stage user as pending deletion to prevent race condition or auto-recreation
-  markUserPendingDeletion(user.firebaseUid);
   try {
-    await prisma.user.update({
-      where: { id: req.userId },
-      data: { refreshToken: 'pending_deletion' }
-    });
-  } catch (stageErr) {
-    logger.warn({ err: stageErr }, 'Failed to set user status to pending_deletion');
-  }
-
-  // Delete Firebase user via firebase-admin if firebaseUid is present
-  if (user.firebaseUid) {
-    try {
-      const { getAdminApp } = require('../config/firebaseAdmin');
-      const { getAuth } = require('firebase-admin/auth');
-      const adminApp = getAdminApp();
-      await getAuth(adminApp).deleteUser(user.firebaseUid);
-    } catch (fbErr) {
-      const isNotFound = fbErr && (
-        fbErr.code === 'auth/user-not-found' ||
-        String(fbErr.message || '').includes('user-not-found')
-      );
-      if (!isNotFound) {
-        logger.error({ err: fbErr }, 'Failed to delete Firebase user during account deletion');
-        // Rollback pending deletion state so user can retry or use account
-        unmarkUserPendingDeletion(user.firebaseUid);
-        try {
-          await prisma.user.update({
-            where: { id: req.userId },
-            data: { refreshToken: null }
-          });
-        } catch (_rollbackErr) {
-          // ignore rollback error
-        }
-        return res.status(502).json({
-          message: 'Failed to delete authentication account. Please try again.',
-          code: 'FIREBASE_DELETE_FAILED'
-        });
-      }
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
     }
-  }
 
-  // Delete DB user inside a transaction mapping P2003 to 409
-  try {
-    await prisma.$transaction(async (tx) => {
-      await tx.user.delete({ where: { id: req.userId } });
-    });
-  } catch (dbErr) {
-    if (dbErr.code === 'P2003') {
+    // Pre-check: if the user has any expenses paid or splits, or owns trips that have expenses, reject with 409 before burning the OTP
+    const [expensesPaidCount, expenseSplitsCount, tripExpensesCount] = await Promise.all([
+      prisma.expense.count({ where: { paidById: req.userId } }),
+      prisma.expenseSplit.count({ where: { userId: req.userId } }),
+      prisma.expense.count({ where: { trip: { ownerId: req.userId } } })
+    ]);
+
+    if (expensesPaidCount > 0 || expenseSplitsCount > 0 || tripExpensesCount > 0) {
       return res.status(409).json({
         message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
         code: 'ACCOUNT_HAS_EXPENSES'
       });
     }
-    logger.error({ err: dbErr }, 'Failed to delete user profile from database');
-    return res.status(500).json({
-      message: 'Failed to delete user profile from database. Account deletion incomplete.',
-      code: 'DATABASE_DELETE_FAILED'
-    });
-  }
 
-  markUserDeleted(user.firebaseUid);
-
-  // Remove the user's uploaded photo file
-  if (user.picture && user.picture.startsWith('/uploads/')) {
-    const photoPath = path.join(__dirname, '..', user.picture);
-    try {
-      if (fs.existsSync(photoPath)) {
-        fs.unlinkSync(photoPath);
-      }
-    } catch (fileErr) {
-      logger.warn({ err: fileErr }, 'Failed to delete user uploaded photo during account deletion');
+    const otpResult = await verifyOtp(user.email, otp, 'delete');
+    if (!otpResult.ok) {
+      return res.status(403).json({ message: otpResult.reason || 'Invalid or expired OTP.' });
     }
-  }
 
-  res.json({ message: 'Account deleted successfully.' });
+    // Stage user as pending deletion durably in PostgreSQL and in memory
+    markUserPendingDeletion(user.firebaseUid);
+    try {
+      await prisma.user.update({
+        where: { id: req.userId },
+        data: {
+          deletedAt: user.deletedAt || new Date(),
+          refreshToken: 'pending_deletion'
+        }
+      });
+    } catch (stageErr) {
+      logger.warn({ err: stageErr.message }, 'Failed to set user status to pending_deletion');
+    }
+
+    // Delete Firebase user via firebase-admin if firebaseUid is present
+    if (user.firebaseUid) {
+      try {
+        const { getAdminApp } = require('../config/firebaseAdmin');
+        const { getAuth } = require('firebase-admin/auth');
+        const adminApp = getAdminApp();
+        await getAuth(adminApp).deleteUser(user.firebaseUid);
+      } catch (fbErr) {
+        const isNotFound = fbErr && (
+          fbErr.code === 'auth/user-not-found' ||
+          String(fbErr.message || '').includes('user-not-found')
+        );
+        if (!isNotFound) {
+          logger.error({ err: fbErr.message }, 'Failed to delete Firebase user during account deletion');
+          // Rollback pending deletion state so user can retry or use account safely
+          unmarkUserPendingDeletion(user.firebaseUid);
+          try {
+            await prisma.user.update({
+              where: { id: req.userId },
+              data: {
+                deletedAt: null,
+                refreshToken: null
+              }
+            });
+          } catch (_rollbackErr) {
+            logger.warn({ err: _rollbackErr.message }, 'Failed to rollback pending deletion state');
+          }
+          return res.status(502).json({
+            message: 'Failed to delete authentication account. Please try again.',
+            code: 'FIREBASE_DELETE_FAILED'
+          });
+        }
+        logger.info('Firebase user already deleted (auth/user-not-found), continuing database deletion');
+      }
+    }
+
+    // Delete DB user inside a transaction mapping P2003 to 409
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.tripMember.deleteMany({ where: { userId: req.userId } });
+        await tx.trip.deleteMany({ where: { ownerId: req.userId } });
+        await tx.user.delete({ where: { id: req.userId } });
+      });
+    } catch (dbErr) {
+      if (dbErr.code === 'P2025') {
+        // Record already deleted, proceed as success
+        markUserDeleted(user.firebaseUid);
+        return res.json({ message: 'Account deleted successfully.' });
+      }
+      if (dbErr.code === 'P2003') {
+        return res.status(409).json({
+          message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
+          code: 'ACCOUNT_HAS_EXPENSES'
+        });
+      }
+      logger.error({ err: dbErr.message }, 'Failed to delete user profile from database');
+      return res.status(500).json({
+        message: 'Failed to delete user profile from database. Account deletion incomplete.',
+        code: 'DATABASE_DELETE_FAILED'
+      });
+    }
+
+    markUserDeleted(user.firebaseUid);
+
+    // Remove the user's uploaded photo file
+    if (user.picture && user.picture.startsWith('/uploads/')) {
+      const photoPath = path.join(__dirname, '..', user.picture);
+      try {
+        if (fs.existsSync(photoPath)) {
+          fs.unlinkSync(photoPath);
+        }
+      } catch (fileErr) {
+        logger.warn({ err: fileErr.message }, 'Failed to delete user uploaded photo during account deletion');
+      }
+    }
+
+    res.json({ message: 'Account deleted successfully.' });
+  } finally {
+    activeDeletions.delete(req.userId);
+  }
 }));
 
 /**

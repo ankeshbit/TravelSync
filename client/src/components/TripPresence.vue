@@ -43,15 +43,15 @@ const getInitials = (name) => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
-  color: white;
+  background: #22231F;
+  color: #D5D3CA;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
-  font-weight: bold;
-  border: 2px solid white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1.5px solid #86A98B;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   cursor: default;
   transition: transform 0.2s;
 }
@@ -61,6 +61,8 @@ const getInitials = (name) => {
 }
 
 :global(.dark) .presence-avatar {
-  border-color: #1e293b;
+  border-color: #86A98B;
+  background: #22231F;
+  color: #D5D3CA;
 }
 </style>

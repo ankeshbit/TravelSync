@@ -59,6 +59,7 @@ function setupPrismaMock() {
       firebaseUid: create.firebaseUid || null,
       picture: create.picture || '',
       refreshToken: create.refreshToken || null,
+      deletedAt: create.deletedAt || null,
       createdAt: new Date(),
       ...create
     };
@@ -103,6 +104,7 @@ function setupPrismaMock() {
       firebaseUid: data.firebaseUid || null,
       picture: data.picture || '',
       refreshToken: data.refreshToken || null,
+      deletedAt: data.deletedAt || null,
       createdAt: new Date(),
       ...data
     };
@@ -134,12 +136,38 @@ function setupPrismaMock() {
     return user || null;
   });
 
+  prisma.user.deleteMany = jest.fn(async ({ where } = {}) => {
+    let count = 0;
+    if (!where || Object.keys(where).length === 0) {
+      count = users.size;
+      users.clear();
+      return { count };
+    }
+    for (const [id, user] of Array.from(users.entries())) {
+      let match = true;
+      if (where.id && user.id !== where.id) match = false;
+      if (where.email && user.email.toLowerCase() !== where.email.toLowerCase()) match = false;
+      if (match) {
+        users.delete(id);
+        count++;
+      }
+    }
+    return { count };
+  });
+
   prisma.user.findMany = jest.fn(async ({ where, select } = {}) => {
     let results = Array.from(users.values());
     if (where?.id?.in) {
       results = results.filter(u => where.id.in.includes(u.id));
     } else if (where?.id) {
       results = results.filter(u => u.id === where.id);
+    }
+    if (where?.deletedAt) {
+      if (where.deletedAt.not === null) {
+        results = results.filter(u => u.deletedAt != null);
+      } else if (where.deletedAt === null) {
+        results = results.filter(u => u.deletedAt === null || u.deletedAt === undefined);
+      }
     }
     if (select) {
       return results.map(u => {
@@ -597,6 +625,7 @@ function setupPrismaMock() {
     const found = list.find(o => {
       if (where.email && o.email.toLowerCase() !== where.email.toLowerCase()) return false;
       if (where.purpose && o.purpose !== where.purpose) return false;
+      if (where.expiresAt?.gt && !(new Date(o.expiresAt) > new Date(where.expiresAt.gt))) return false;
       return true;
     }) || null;
     return found ? { ...found } : null;

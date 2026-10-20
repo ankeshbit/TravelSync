@@ -5,6 +5,18 @@ import { useTripsStore } from '../stores/trips';
 import { useExpensesStore } from '../stores/expenses';
 import api from '../api';
 
+import { loginWithGoogle as fbLoginWithGoogle } from '../services/authService';
+
+vi.mock('../services/authService', () => ({
+  loginWithEmail: vi.fn(),
+  registerWithEmail: vi.fn(),
+  loginWithGoogle: vi.fn(),
+  loginWithGitHub: vi.fn(),
+  logout: vi.fn().mockResolvedValue(),
+  getIdToken: vi.fn(),
+  getFirebaseErrorMessage: vi.fn((err) => err.message)
+}));
+
 vi.mock('../api', () => ({
   default: {
     get: vi.fn(),
@@ -55,6 +67,40 @@ describe('Pinia Stores', () => {
       expect(auth.currentUser).toBeNull();
       expect(auth.firebaseUser).toBeNull();
       expect(localStorage.getItem('user')).toBeNull();
+    });
+
+    it('loginWithGoogle sets firebaseUser immediately and syncs mongo user', async () => {
+      const auth = useAuthStore();
+      const mockFbUser = { uid: 'google-uid-1', email: 'google@example.com', emailVerified: true };
+      fbLoginWithGoogle.mockResolvedValueOnce(mockFbUser);
+      api.get.mockResolvedValueOnce({ data: { id: 'u-google', name: 'Google User', email: 'google@example.com' } });
+
+      await auth.loginWithGoogle();
+      expect(auth.isAuthenticated).toBe(true);
+      expect(auth.firebaseUser).toEqual(mockFbUser);
+      expect(api.get).toHaveBeenCalledWith('/auth/me');
+      expect(auth.currentUser).toEqual({ id: 'u-google', name: 'Google User', email: 'google@example.com' });
+    });
+
+    it('deduplicates concurrent _syncMongoUser calls to avoid racing', async () => {
+      const auth = useAuthStore();
+      auth.firebaseUser = { uid: 'google-uid-1', email: 'google@example.com', emailVerified: true };
+
+      let resolveApi;
+      const apiPromise = new Promise((resolve) => { resolveApi = resolve; });
+      api.get.mockReturnValueOnce(apiPromise);
+
+      const p1 = auth._syncMongoUser();
+      const p2 = auth._syncMongoUser();
+
+      expect(api.get).toHaveBeenCalledTimes(1);
+
+      resolveApi({ data: { id: 'u1', name: 'User 1' } });
+      const [r1, r2] = await Promise.all([p1, p2]);
+
+      expect(r1).toEqual({ id: 'u1', name: 'User 1' });
+      expect(r2).toEqual({ id: 'u1', name: 'User 1' });
+      expect(auth.currentUser).toEqual({ id: 'u1', name: 'User 1' });
     });
   });
 

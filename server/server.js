@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const {
   generalApiLimiter,
   authLimiter,
+  getRedisStatus,
   closeRedis
 } = require('./middleware/rateLimiter');
 const cookieParser = require('cookie-parser');
@@ -169,7 +170,8 @@ app.get('/api/health', async (req, res) => {
     message: isHealthy ? 'TravelSync server is running' : 'Database disconnected or unavailable',
     timestamp: new Date(),
     database: 'PostgreSQL (Neon)',
-    dbStatus
+    dbStatus,
+    redis: getRedisStatus()
   });
 });
 
@@ -180,6 +182,7 @@ app.get('/api/health/ready', async (req, res) => {
       return res.status(503).json({
         status: 'not ready',
         database: 'not configured',
+        redis: getRedisStatus(),
         timestamp: new Date()
       });
     }
@@ -187,6 +190,7 @@ app.get('/api/health/ready', async (req, res) => {
     return res.status(200).json({
       status: 'ready',
       database: 'connected',
+      redis: getRedisStatus(),
       timestamp: new Date()
     });
   } catch (err) {
@@ -194,6 +198,7 @@ app.get('/api/health/ready', async (req, res) => {
     return res.status(503).json({
       status: 'not ready',
       database: 'disconnected',
+      redis: getRedisStatus(),
       error: 'Database connection failed',
       timestamp: new Date()
     });

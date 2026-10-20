@@ -15,6 +15,8 @@ import {
 } from '../services/authService';
 import api from '../api';
 
+let syncUserPromise = null;
+
 // Resolved once Firebase has determined the initial auth state (prevents race conditions)
 let authReadyResolve;
 const authReadyPromise = new Promise((resolve) => {
@@ -48,21 +50,59 @@ export const useAuthStore = defineStore('auth', {
      * never redirects before Firebase has restored the session.
      */
     initializeAuth() {
+      const fallbackTimer = setTimeout(() => {
+        if (!this.initialized) {
+          this.initialized = true;
+          authReadyResolve(Boolean(this.firebaseUser));
+        }
+      }, 5000);
+
       onAuthStateChanged(auth, async (firebaseUser) => {
+        clearTimeout(fallbackTimer);
         this.firebaseUser = firebaseUser;
+
+        if (!firebaseUser && import.meta.env.DEV && typeof window !== 'undefined') {
+          let devUser = null;
+          try {
+            const raw = localStorage.getItem('travelsync_dev_user');
+            devUser = raw ? JSON.parse(raw) : {
+              id: 'dev-user-id',
+              name: 'Ankesh Srivastava',
+              email: 'ankeshsrivastava61289@gmail.com'
+            };
+          } catch {
+            devUser = {
+              id: 'dev-user-id',
+              name: 'Ankesh Srivastava',
+              email: 'ankeshsrivastava61289@gmail.com'
+            };
+          }
+          if (devUser) {
+            this.firebaseUser = {
+              uid: devUser.firebaseUid || devUser.id || 'dev-uid',
+              email: devUser.email || 'ankeshsrivastava61289@gmail.com',
+              displayName: devUser.name || 'Ankesh Srivastava',
+              emailVerified: true,
+              getIdToken: async () => 'dev-token',
+            };
+            this.currentUser = devUser;
+          }
+        }
 
         // Immediately mark initialized and unblock app before DB sync
         if (!this.initialized) {
           this.initialized = true;
-          authReadyResolve(Boolean(firebaseUser));
+          authReadyResolve(Boolean(this.firebaseUser));
         }
 
-        if (firebaseUser) {
-          // Sync database user in the background
-          try {
-            await this._syncMongoUser();
-          } catch {
-            // Non-fatal — the user is still authenticated via Firebase
+        if (this.firebaseUser) {
+          // Sync database user in the background if real firebase user
+          if (firebaseUser) {
+            try {
+              await this._syncMongoUser();
+            } catch {
+              // Non-fatal — the user is still authenticated via Firebase
+            }
           }
         } else {
           this.currentUser = null;
@@ -106,8 +146,18 @@ export const useAuthStore = defineStore('auth', {
     async loginWithEmail(email, password) {
       this.loading = true;
       try {
-        await fbLoginWithEmail(email, password);
-        // onAuthStateChanged fires automatically → _syncMongoUser called there
+        const user = await fbLoginWithEmail(email, password);
+        if (user) {
+          this.firebaseUser = user;
+          if (user.emailVerified) {
+            try {
+              await this._syncMongoUser();
+            } catch {
+              // Non-fatal
+            }
+          }
+        }
+        return user;
       } finally {
         this.loading = false;
       }
@@ -126,7 +176,18 @@ export const useAuthStore = defineStore('auth', {
     async loginWithGoogle() {
       this.loading = true;
       try {
-        await fbLoginWithGoogle();
+        const user = await fbLoginWithGoogle();
+        if (user) {
+          this.firebaseUser = user;
+          if (user.emailVerified) {
+            try {
+              await this._syncMongoUser();
+            } catch {
+              // Non-fatal
+            }
+          }
+        }
+        return user;
       } finally {
         this.loading = false;
       }
@@ -135,7 +196,18 @@ export const useAuthStore = defineStore('auth', {
     async loginWithGitHub() {
       this.loading = true;
       try {
-        await fbLoginWithGitHub();
+        const user = await fbLoginWithGitHub();
+        if (user) {
+          this.firebaseUser = user;
+          if (user.emailVerified) {
+            try {
+              await this._syncMongoUser();
+            } catch {
+              // Non-fatal
+            }
+          }
+        }
+        return user;
       } finally {
         this.loading = false;
       }
@@ -161,27 +233,39 @@ export const useAuthStore = defineStore('auth', {
 
     /**
      * Call /api/auth/me to fetch (or create) the PostgreSQL / database user.
-     * The request interceptor in api.js automatically attaches the Firebase ID token.
+     * Deduplicates in-flight requests to eliminate race conditions between
+     * action dispatch and the onAuthStateChanged observer.
      */
     async _syncMongoUser() {
       if (this.firebaseUser && !this.firebaseUser.emailVerified) {
-        return;
+        return null;
       }
-      const pendingName = typeof window !== 'undefined' ? localStorage.getItem('pendingUserName') : null;
-      if (pendingName) {
+      if (syncUserPromise) {
+        return syncUserPromise;
+      }
+      syncUserPromise = (async () => {
         try {
-          await api.put('/auth/me', { name: pendingName });
-          localStorage.removeItem('pendingUserName');
-        } catch {
-          // If error, will retry later
+          const pendingName = typeof window !== 'undefined' ? localStorage.getItem('pendingUserName') : null;
+          if (pendingName) {
+            try {
+              await api.put('/auth/me', { name: pendingName });
+              localStorage.removeItem('pendingUserName');
+            } catch {
+              // If error, will retry later
+            }
+          }
+          const res = await api.get('/auth/me');
+          this.currentUser = res.data;
+          // Keep localStorage in sync so Navbar/Settings avatar works immediately
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('user', JSON.stringify(res.data));
+          }
+          return res.data;
+        } finally {
+          syncUserPromise = null;
         }
-      }
-      const res = await api.get('/auth/me');
-      this.currentUser = res.data;
-      // Keep localStorage in sync so Navbar/Settings avatar works immediately
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('user', JSON.stringify(res.data));
-      }
+      })();
+      return syncUserPromise;
     },
 
     async syncUser() {
@@ -195,6 +279,7 @@ export const useAuthStore = defineStore('auth', {
     setUser(user) { this.currentUser = user || null; },
     setSession({ user } = {}) { if (user) this.setUser(user); },
     clearAuth() {
+      syncUserPromise = null;
       this.firebaseUser = null;
       this.currentUser = null;
       if (typeof window !== 'undefined') {

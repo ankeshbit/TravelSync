@@ -5,6 +5,7 @@ const { prisma } = require('../db');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validate } = require('../middleware/validate');
 const { exploreQuerySchema } = require('../validators/explore');
+const cache = require('../services/cache');
 
 /**
  * @swagger
@@ -43,6 +44,16 @@ const { exploreQuerySchema } = require('../validators/explore');
  */
 router.get('/destinations', verifyToken, validate({ query: exploreQuerySchema }), asyncHandler(async (req, res) => {
   const { q, limit = 50, page = 1 } = req.validatedQuery || req.query;
+  const searchFilter = q && typeof q === 'string' ? q.trim().toLowerCase() : '';
+  const pageNum = Number(page) || 1;
+  const limitNum = Number(limit) || 50;
+
+  const cacheKey = cache.keys.explore(req.userId, `${searchFilter}:${pageNum}:${limitNum}`);
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    res.setHeader('X-Cache', 'HIT');
+    return res.json(cached);
+  }
 
   const userTrips = await prisma.trip.findMany({
     where: {
@@ -64,7 +75,6 @@ router.get('/destinations', verifyToken, validate({ query: exploreQuerySchema })
     }
   });
 
-  const searchFilter = q && typeof q === 'string' ? q.trim().toLowerCase() : '';
   const groupMap = new Map();
 
   for (const trip of userTrips) {
@@ -106,11 +116,11 @@ router.get('/destinations', verifyToken, validate({ query: exploreQuerySchema })
 
   allDestinations.sort((a, b) => b.tripCount - a.tripCount || a.name.localeCompare(b.name));
 
-  const pageNum = Number(page) || 1;
-  const limitNum = Number(limit) || 50;
   const startIndex = (pageNum - 1) * limitNum;
   const paginated = allDestinations.slice(startIndex, startIndex + limitNum);
 
+  await cache.set(cacheKey, paginated, cache.TTLS.EXPLORE);
+  res.setHeader('X-Cache', 'MISS');
   res.json(paginated);
 }));
 

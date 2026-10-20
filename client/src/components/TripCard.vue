@@ -1,10 +1,10 @@
 <template>
   <article 
-    class="bg-[#0F172A] border border-[#1E2E4E] hover:border-blue-500/50 rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col group"
+    class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] hover:border-[#D1CEC4] dark:hover:border-[#414239] rounded-2xl overflow-hidden shadow-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col group h-full"
     @click="$emit('click', trip.id || trip._id)"
   >
     <!-- Cover Image with Dynamic Status Badge -->
-    <div class="h-44 w-full relative bg-[#131F38] overflow-hidden">
+    <div class="h-48 w-full relative bg-[#F0EEE9] dark:bg-[#22231F] overflow-hidden flex-shrink-0">
       <img
         :src="trip.coverImageUrl || DEFAULT_TRIP_COVER_IMAGE"
         :alt="trip.destination || trip.name"
@@ -12,17 +12,17 @@
         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-95"
         @error="onImgError"
       />
-      <div class="absolute inset-0 bg-gradient-to-t from-[#0F172A]/70 via-transparent to-black/20"></div>
+      <div class="absolute inset-0 bg-gradient-to-t from-[#111210]/90 via-[#111210]/30 to-black/20"></div>
       
       <!-- Status Badge -->
-      <div class="absolute top-3 right-3">
+      <div class="absolute top-4 right-4">
         <span 
           :class="statusBadgeClass"
-          class="inline-flex items-center gap-1.5 border text-[11px] font-semibold px-2.5 py-0.5 rounded-full backdrop-blur-md transition-colors"
+          class="inline-flex items-center gap-1.5 border text-[11px] font-medium px-2.5 py-1 rounded-full backdrop-blur-md transition-colors"
         >
           <span 
             v-if="tripStatus === 'Ongoing'" 
-            class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
+            class="w-1.5 h-1.5 rounded-full bg-[#86A98B] animate-pulse"
           ></span>
           {{ tripStatus }}
         </span>
@@ -30,32 +30,32 @@
     </div>
 
     <!-- Card Content -->
-    <div class="p-5 flex flex-col flex-1 justify-between gap-4">
+    <div class="p-5 sm:p-6 flex flex-col flex-1 justify-between gap-4">
       <div>
-        <h3 class="text-lg font-bold text-white group-hover:text-blue-400 transition-colors mb-2.5 truncate" :title="trip.name">
+        <h3 class="text-lg font-bold text-[#1C1D1A] dark:text-[#D5D3CA] group-hover:text-[#4A4D40] dark:group-hover:text-white transition-colors mb-2.5 truncate" :title="trip.name">
           {{ trip.name }}
         </h3>
 
-        <div class="flex flex-col gap-1.5 text-xs text-slate-400">
+        <div class="flex flex-col gap-2 text-xs text-[#575851] dark:text-[#A5A69B]">
           <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-[16px] text-slate-500">calendar_today</span>
-            <span>{{ formatDate(trip.startDate) }} - {{ formatDate(trip.endDate) }}</span>
+            <span class="material-symbols-outlined text-[16px] text-[#7E8075] dark:text-[#85867C] flex-shrink-0">calendar_today</span>
+            <span class="truncate">{{ formatDate(trip.startDate) }} – {{ formatDate(trip.endDate) }}</span>
           </div>
           <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-[16px] text-slate-500">location_on</span>
-            <span class="truncate">{{ trip.destination }}</span>
+            <span class="material-symbols-outlined text-[16px] text-[#7E8075] dark:text-[#85867C] flex-shrink-0">location_on</span>
+            <span class="truncate" :title="trip.destination">{{ trip.destination }}</span>
           </div>
         </div>
       </div>
 
       <!-- Footer: Member Avatars Stack + Options Menu -->
-      <div class="flex items-center justify-between pt-3 border-t border-[#1E2E4E]/60 mt-auto">
+      <div class="flex items-center justify-between pt-4 border-t border-[#E3E0D8] dark:border-[#30312C] mt-auto">
         <!-- Avatar Stack (Up to 3 avatars + "+N" overflow) -->
         <div class="flex items-center -space-x-2">
           <div 
             v-for="(member, idx) in displayMembers" 
             :key="member.id || idx"
-            class="w-7 h-7 rounded-full border-2 border-[#0F172A] overflow-hidden bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white shadow-sm flex-shrink-0"
+            class="w-7 h-7 rounded-full border-2 border-white dark:border-[#1B1C19] overflow-hidden bg-[#EFECE6] dark:bg-[#292A25] flex items-center justify-center text-[10px] font-bold text-[#1C1D1A] dark:text-[#D5D3CA] shadow-sm flex-shrink-0"
             :title="member.name"
           >
             <img 
@@ -69,7 +69,7 @@
           </div>
           <div 
             v-if="extraCount > 0" 
-            class="w-7 h-7 rounded-full border-2 border-[#0F172A] bg-blue-600/30 text-blue-300 flex items-center justify-center text-[10px] font-semibold flex-shrink-0"
+            class="w-7 h-7 rounded-full border-2 border-white dark:border-[#1B1C19] bg-[#EFECE6] dark:bg-[#292A25] text-[#575851] dark:text-[#A5A69B] flex items-center justify-center text-[10px] font-semibold flex-shrink-0"
             :title="`+${extraCount} more`"
           >
             +{{ extraCount }}
@@ -79,7 +79,7 @@
         <!-- 3-Dots Menu -->
         <button 
           @click.stop="$emit('options', trip)"
-          class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800/60 transition-colors"
+          class="text-[#7E8075] dark:text-[#85867C] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] w-8 h-8 rounded-lg hover:bg-[#F0EEE9] dark:hover:bg-[#292A25] transition-colors flex items-center justify-center"
           title="Trip options"
         >
           <span class="material-symbols-outlined text-[18px]">more_vert</span>
@@ -157,14 +157,14 @@ const tripStatus = computed(() => {
 const statusBadgeClass = computed(() => {
   switch (tripStatus.value) {
     case 'Ongoing':
-      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      return 'bg-[#86A98B]/20 text-[#86A98B] border-[#86A98B]/40';
     case 'Completed':
-      return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
+      return 'bg-[#292A25]/90 text-[#A5A69B] border-[#414239]';
     case 'Cancelled':
-      return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+      return 'bg-[#C77F78]/20 text-[#C77F78] border-[#C77F78]/40';
     case 'Upcoming':
     default:
-      return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      return 'bg-[#A7A99A]/20 text-[#D5D3CA] border-[#A7A99A]/40';
   }
 });
 

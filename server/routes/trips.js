@@ -6,19 +6,23 @@ const { prisma, formatTrip, formatPlace, formatExpense, formatUser, formatActivi
 const { verifyToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validate } = require('../middleware/validate');
+const { createLimiterStore } = require('../middleware/rateLimiter');
 const { getIO, removeUserFromTripRoom, removeAllUsersFromTripRoom } = require('../socket');
 const logActivity = require('../utils/logActivity');
 const { calculateBalances } = require('../utils/calculateBalances');
 const logger = require('../utils/logger');
+const cache = require('../services/cache');
+const crypto = require('crypto');
 const { createTripSchema, updateTripSchema, addMemberSchema, aiSuggestionsSchema } = require('../validators/trip');
 const { createPlaceSchema, updatePlaceNoteSchema, reorderPlacesSchema } = require('../validators/place');
 const { createExpenseSchema } = require('../validators/expense');
 const { tripIdParamSchema, idParamSchema, tripAndPlaceParamSchema, tripAndExpenseParamSchema, tripAndMemberParamSchema } = require('../validators/common');
 
-// AI suggestion limiter: 5 requests per 10 minutes, keyed by authenticated user ID (falls back to IP)
+// AI suggestion limiter: 5 requests per 10 minutes, backed by Redis with memory fallback
 const aiLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   limit: 5,
+  store: createLimiterStore('ai_planner'),
   keyGenerator: (req) => req.userId || ipKeyGenerator(req),
   message: {
     message: 'Too many itinerary requests, please try again in 10 minutes.'
@@ -130,6 +134,13 @@ router.get('/', verifyToken, asyncHandler(async (req, res) => {
  *         description: Unauthorized
  */
 router.get('/summary', verifyToken, asyncHandler(async (req, res) => {
+  const cacheKey = cache.keys.dashboard(req.userId);
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    res.setHeader('X-Cache', 'HIT');
+    return res.json(cached);
+  }
+
   const where = {
     OR: [
       { ownerId: req.userId },
@@ -244,7 +255,7 @@ router.get('/summary', verifyToken, asyncHandler(async (req, res) => {
     currency = defaultCurrency || distinctCurrencies[0];
   }
 
-  res.json({
+  const payload = {
     totalTrips,
     upcomingTrips,
     totalMembers,
@@ -252,7 +263,11 @@ router.get('/summary', verifyToken, asyncHandler(async (req, res) => {
     currency,
     spentByCurrency,
     hasMultipleCurrencies
-  });
+  };
+
+  await cache.set(cacheKey, payload, cache.TTLS.DASHBOARD);
+  res.setHeader('X-Cache', 'MISS');
+  res.json(payload);
 }));
 
 /**
@@ -318,6 +333,10 @@ router.post('/', verifyToken, validate({ body: createTripSchema }), asyncHandler
   });
 
   res.status(201).json(formatTrip(savedTrip));
+
+  // Invalidate user dashboard and explore caches
+  cache.invalidateUserDashboard(req.userId).catch(() => {});
+  cache.invalidateExplore(req.userId).catch(() => {});
 
   // Non-blocking: fetch a cover image from Unsplash and patch the trip in the background
   fetchAndAttachCoverImage(savedTrip.id, destination);
@@ -530,6 +549,9 @@ router.post('/:tripId/members', verifyToken,
       picture: user.picture
     });
 
+    const memberIds = [updatedTrip.ownerId, ...(updatedTrip.members || []).map(m => m.user?.id || m.userId)];
+    cache.invalidateTrip(req.params.tripId, memberIds).catch(() => {});
+
     res.status(200).json(formatTrip(updatedTrip));
   }));
 
@@ -607,6 +629,8 @@ router.delete('/:tripId/members/me', verifyToken, validate({ params: tripIdParam
   await removeUserFromTripRoom(req.params.tripId, req.userId);
   await logActivity(req.params.tripId, req.userId, 'left the trip', userEmail);
 
+  cache.invalidateTrip(req.params.tripId, [trip.ownerId, req.userId]).catch(() => {});
+
   res.status(200).json({ message: 'Successfully left the trip' });
 }));
 
@@ -676,6 +700,9 @@ router.delete('/:tripId/members/:userId', verifyToken, validate({ params: tripAn
       }
     }
   });
+
+  const memberIds = [updatedTrip.ownerId, req.params.userId, ...(updatedTrip.members || []).map(m => m.user?.id || m.userId)];
+  cache.invalidateTrip(req.params.tripId, memberIds).catch(() => {});
 
   res.status(200).json(formatTrip(updatedTrip));
 }));
@@ -784,6 +811,9 @@ router.post('/:tripId/places', verifyToken, checkTripMembership,
     const formatted = formatPlace(createdPlace);
     getIO().to(`trip:${req.params.tripId}`).emit('place:added', formatted);
 
+    const memberIds = [req.trip.ownerId, ...req.trip.members.map(m => m.userId)];
+    cache.invalidateTrip(req.params.tripId, memberIds).catch(() => {});
+
     res.status(201).json(formatted);
   }));
 
@@ -827,6 +857,9 @@ router.delete('/:tripId/places/:placeId', verifyToken, checkTripMembership, vali
   await logActivity(req.params.tripId, req.userId, 'removed a place', place.name);
 
   getIO().to(`trip:${req.params.tripId}`).emit('place:deleted', { placeId: req.params.placeId });
+
+  const memberIds = [req.trip.ownerId, ...req.trip.members.map(m => m.userId)];
+  cache.invalidateTrip(req.params.tripId, memberIds).catch(() => {});
 
   res.json({ message: 'Place deleted' });
 }));
@@ -885,6 +918,9 @@ router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership,
 
     const formatted = formatPlace(updated);
     getIO().to(`trip:${req.params.tripId}`).emit('place:note_updated', formatted);
+
+    const memberIds = [req.trip.ownerId, ...req.trip.members.map(m => m.userId)];
+    cache.invalidateTrip(req.params.tripId, memberIds).catch(() => {});
 
     res.json(formatted);
   }));
@@ -949,6 +985,9 @@ router.patch('/:tripId/places/reorder', verifyToken, checkTripMembership, asyncH
 
   const formattedPlaces = allPlaces.map(formatPlace);
   getIO().to(`trip:${req.params.tripId}`).emit('place:reordered', formattedPlaces);
+
+  const memberIds = [req.trip.ownerId, ...req.trip.members.map(m => m.userId)];
+  cache.invalidateTrip(req.params.tripId, memberIds).catch(() => {});
 
   res.json(formattedPlaces);
 }));
@@ -1098,6 +1137,8 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership,
     const formatted = formatExpense(createdExpense);
     getIO().to(`trip:${req.params.tripId}`).emit('expense:added', formatted);
 
+    cache.invalidateTrip(req.params.tripId, allMemberIds).catch(() => {});
+
     res.status(201).json(formatted);
   }));
 
@@ -1145,6 +1186,10 @@ router.delete('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership, 
   await logActivity(req.params.tripId, req.userId, 'deleted an expense', expense.title);
 
   getIO().to(`trip:${req.params.tripId}`).emit('expense:deleted', { expenseId: req.params.expenseId });
+
+  const memberIds = [req.trip.ownerId, ...req.trip.members.map(m => m.userId)];
+  cache.invalidateTrip(req.params.tripId, memberIds).catch(() => {});
+  cache.invalidateUserDashboard(memberIds).catch(() => {});
 
   res.json({ message: 'Expense deleted' });
 }));
@@ -1261,6 +1306,20 @@ router.post('/:tripId/ai-suggestions', verifyToken, aiLimiter, checkTripMembersh
     const safeBudget = String(req.body.budget || 'moderate').slice(0, 50).replace(/[\\`$]/g, '');
     const safeInterests = String(Array.isArray(req.body.interests) ? req.body.interests.join(', ') : (req.body.interests || 'culture, food, sightseeing')).slice(0, 200).replace(/[\\`$]/g, '');
 
+    // Check Redis cache for identical input request
+    const inputHash = crypto
+      .createHash('sha256')
+      .update(`${safeDestination}|${tripDays}|${safeBudget}|${safeInterests}|${safeExistingPlaces}`)
+      .digest('hex')
+      .slice(0, 16);
+    const cacheKey = cache.keys.aiSuggestions(req.params.tripId, inputHash);
+
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      return res.json(cached);
+    }
+
     const prompt = `You are a travel expert. Plan a ${tripDays}-day trip to ${safeDestination}.
 
 Trip details:
@@ -1340,14 +1399,18 @@ Return ONLY a valid JSON object (no markdown, no explanation) in this exact form
       }
     }
 
-    res.json({
+    const responsePayload = {
       suggestions,
       tripContext: {
         destination: trip.destination,
         days: tripDays,
         members: trip.members.length
       }
-    });
+    };
+
+    await cache.set(cacheKey, responsePayload, cache.TTLS.AI_SUGGESTIONS);
+    res.setHeader('X-Cache', 'MISS');
+    res.json(responsePayload);
   }));
 
 /**
@@ -1420,6 +1483,13 @@ router.get('/:tripId/activity', verifyToken, asyncHandler(async (req, res) => {
  *         description: Trip not found
  */
 router.get('/:id', verifyToken, asyncHandler(async (req, res) => {
+  const cacheKey = cache.keys.trip(req.params.id, req.userId);
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    res.setHeader('X-Cache', 'HIT');
+    return res.json(cached);
+  }
+
   const trip = await prisma.trip.findUnique({
     where: { id: req.params.id },
     include: {
@@ -1449,7 +1519,10 @@ router.get('/:id', verifyToken, asyncHandler(async (req, res) => {
     return res.status(403).json({ message: 'Access denied' });
   }
 
-  res.json(formatTrip(trip));
+  const formatted = formatTrip(trip);
+  await cache.set(cacheKey, formatted, cache.TTLS.TRIP_DETAIL);
+  res.setHeader('X-Cache', 'MISS');
+  res.json(formatted);
 }));
 
 /**
@@ -1543,6 +1616,9 @@ router.put('/:id', verifyToken,
     const formatted = formatTrip(updatedTrip);
     getIO().to(`trip:${updatedTrip.id}`).emit('trip:updated', formatted);
 
+    const memberIds = [updatedTrip.ownerId, ...(updatedTrip.members || []).map(m => m.user?.id || m.userId)];
+    cache.invalidateTrip(req.params.id, memberIds).catch(() => {});
+
     res.json(formatted);
   }));
 
@@ -1569,14 +1645,20 @@ router.put('/:id', verifyToken,
  *         description: Trip not found
  */
 router.delete('/:id', verifyToken, validate({ params: idParamSchema }), asyncHandler(async (req, res) => {
-  const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
+  const trip = await prisma.trip.findUnique({
+    where: { id: req.params.id },
+    include: { members: { select: { userId: true } } }
+  });
   if (!trip) return res.status(404).json({ message: 'Trip not found' });
 
   if (trip.ownerId !== req.userId) {
     return res.status(403).json({ message: 'Access denied. Only the creator can delete.' });
   }
 
+  const memberIds = [trip.ownerId, ...(trip.members || []).map(m => m.userId)];
   await prisma.trip.delete({ where: { id: req.params.id } });
+  cache.invalidateTrip(req.params.id, memberIds).catch(() => {});
+
   getIO().to(`trip:${req.params.id}`).emit('trip:deleted', { tripId: req.params.id });
   await removeAllUsersFromTripRoom(req.params.id, { silent: true });
   res.json({ message: 'Trip deleted' });

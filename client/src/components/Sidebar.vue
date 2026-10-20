@@ -7,22 +7,23 @@
       class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-all duration-300"
     ></div>
 
-    <!-- Sleek Dark Sidebar -->
+    <!-- Sleek Sidebar with Dark & Light Mode Support -->
     <aside 
-      class="bg-[#080D1A] text-slate-300 font-['Plus_Jakarta_Sans'] fixed h-full left-0 top-0 border-r border-[#172338] flex flex-col justify-between p-4 z-40 transition-all duration-300 w-64 shadow-2xl"
+      class="bg-[#EFECE6] dark:bg-[#141512] text-[#575851] dark:text-[#A5A69B] font-['Plus_Jakarta_Sans'] fixed h-full left-0 top-0 border-r border-[#E3E0D8] dark:border-[#30312C] flex flex-col justify-between p-4 pb-5 z-40 transition-all duration-300 w-64 shadow-md dark:shadow-none overflow-y-auto custom-scrollbar"
       :class="[
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       ]"
     >
       <!-- Top Section: Brand & Nav Links -->
       <div class="flex flex-col gap-6">
-        <!-- Logo Header -->
-        <router-link to="/dashboard" class="flex items-center gap-3 px-2 py-1 group">
-          <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 group-hover:scale-105 transition-transform">
-            <span class="material-symbols-outlined text-[20px]">explore</span>
-          </div>
-          <span class="text-lg font-bold text-white tracking-tight">TravelSync</span>
-        </router-link>
+        <!-- Logo Header with Theme Toggle -->
+        <div class="flex items-center justify-between px-2 py-1">
+          <router-link to="/dashboard" class="flex items-center gap-3 group">
+            <img :src="logoUrl" alt="TravelSync" class="w-8 h-8 object-contain rounded-lg shadow-sm group-hover:scale-105 transition-transform" />
+            <span class="text-lg font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight">TravelSync</span>
+          </router-link>
+          <ThemeToggle />
+        </div>
 
         <!-- Navigation Links -->
         <nav class="flex flex-col gap-1.5">
@@ -31,7 +32,7 @@
             <router-link 
               to="/dashboard"
               @click="closeSidebar"
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-slate-400 hover:text-white hover:bg-[#121D33] text-sm font-medium transition-all"
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-[#575851] dark:text-[#A5A69B] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] text-sm font-medium transition-all border border-transparent"
             >
               <span class="material-symbols-outlined text-[20px]">arrow_back</span>
               <span>My Trips</span>
@@ -40,8 +41,8 @@
             <router-link 
               :to="`/trips/${currentTripId}`"
               @click="closeSidebar"
-              :class="isTripOverviewActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-[#121D33]'"
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm font-medium transition-all"
+              :class="isTripOverviewActive ? activeNavClass : inactiveNavClass"
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all"
             >
               <span class="material-symbols-outlined text-[20px]">space_dashboard</span>
               <span>Trip Overview</span>
@@ -50,8 +51,8 @@
             <router-link 
               :to="`/trips/${currentTripId}/map`"
               @click="closeSidebar"
-              :class="isItineraryActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-[#121D33]'"
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm font-medium transition-all"
+              :class="isItineraryActive ? activeNavClass : inactiveNavClass"
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all"
             >
               <span class="material-symbols-outlined text-[20px]">event_note</span>
               <span>Itinerary</span>
@@ -60,8 +61,8 @@
             <router-link 
               :to="`/trips/${currentTripId}/map`"
               @click="closeSidebar"
-              :class="isMapActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-[#121D33]'"
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm font-medium transition-all"
+              :class="isMapActive ? activeNavClass : inactiveNavClass"
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all"
             >
               <span class="material-symbols-outlined text-[20px]">map</span>
               <span>Map</span>
@@ -70,8 +71,8 @@
             <router-link 
               :to="`/trips/${currentTripId}/expenses`"
               @click="closeSidebar"
-              :class="isActive(`/trips/${currentTripId}/expenses`) ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-[#121D33]'"
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm font-medium transition-all"
+              :class="isActive(`/trips/${currentTripId}/expenses`) ? activeNavClass : inactiveNavClass"
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all"
             >
               <span class="material-symbols-outlined text-[20px]">payments</span>
               <span>Expenses</span>
@@ -80,7 +81,7 @@
             <router-link 
               :to="`/trips/${currentTripId}`"
               @click="closeSidebar"
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-slate-400 hover:text-white hover:bg-[#121D33] text-sm font-medium transition-all"
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-[#575851] dark:text-[#A5A69B] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] text-sm font-medium transition-all border border-transparent"
             >
               <span class="material-symbols-outlined text-[20px]">group</span>
               <span>Members</span>
@@ -89,8 +90,8 @@
             <router-link 
               to="/settings"
               @click="closeSidebar"
-              :class="isActive('/settings') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-[#121D33]'"
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm font-medium transition-all"
+              :class="isActive('/settings') ? activeNavClass : inactiveNavClass"
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all"
             >
               <span class="material-symbols-outlined text-[20px]">settings</span>
               <span>Settings</span>
@@ -102,8 +103,8 @@
             <router-link 
               to="/dashboard" 
               @click="closeSidebar"
-              :class="isActive('/dashboard') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-[#121D33]'" 
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm font-medium transition-all"
+              :class="isActive('/dashboard') ? activeNavClass : inactiveNavClass" 
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all"
             >
               <span class="material-symbols-outlined text-[20px]">grid_view</span>
               <span>My Trips</span>
@@ -112,8 +113,8 @@
             <router-link 
               to="/explore" 
               @click="closeSidebar"
-              :class="isActive('/explore') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-[#121D33]'" 
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm font-medium transition-all"
+              :class="isActive('/explore') ? activeNavClass : inactiveNavClass" 
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all"
             >
               <span class="material-symbols-outlined text-[20px]">explore</span>
               <span>Explore</span>
@@ -122,8 +123,8 @@
             <router-link 
               to="/settings" 
               @click="closeSidebar"
-              :class="isActive('/settings') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-[#121D33]'" 
-              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm font-medium transition-all"
+              :class="isActive('/settings') ? activeNavClass : inactiveNavClass" 
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all"
             >
               <span class="material-symbols-outlined text-[20px]">settings</span>
               <span>Settings</span>
@@ -133,28 +134,28 @@
       </div>
 
       <!-- Bottom Section: Promo Card & User Profile -->
-      <div class="flex flex-col gap-4">
+      <div class="flex flex-col gap-4 mt-auto pt-4">
         <!-- Promo / Inspiration Card -->
-        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#121E36] to-[#0A1324] border border-[#1E2E4E] p-4 group">
+        <div class="relative overflow-hidden rounded-2xl bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] p-4.5 group shadow-sm">
           <div class="relative z-10">
-            <h4 class="text-white text-xs font-bold leading-tight mb-1">Plan together<br/>Travel better</h4>
-            <p class="text-[11px] text-slate-400 leading-snug">Create memories with your favorite people</p>
+            <h4 class="text-[#1C1D1A] dark:text-[#D5D3CA] text-xs font-bold leading-tight mb-1.5">Plan together<br/>Travel better</h4>
+            <p class="text-[11px] text-[#7E8075] dark:text-[#85867C] leading-relaxed">Create memories with your favorite people</p>
           </div>
           <!-- Scenic mountain thumbnail overlay -->
-          <div class="mt-3 h-16 rounded-xl overflow-hidden relative">
+          <div class="mt-3.5 h-16 rounded-xl overflow-hidden relative">
             <img 
               src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=400" 
               alt="Mountain scenery"
-              class="w-full h-full object-cover brightness-90 group-hover:scale-105 transition-transform duration-500"
+              class="w-full h-full object-cover brightness-95 group-hover:scale-105 transition-transform duration-500"
             />
-            <div class="absolute inset-0 bg-gradient-to-t from-[#0A1324]/80 to-transparent"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-[#111210]/70 to-transparent"></div>
           </div>
         </div>
 
         <!-- User Profile Pill -->
-        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-[#121D33] transition-colors border border-transparent hover:border-[#1E2E4E]">
+        <div class="flex items-center justify-between p-3 rounded-2xl bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-all shadow-sm">
           <router-link to="/settings" class="flex items-center gap-3 min-w-0 flex-1">
-            <div class="w-9 h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs flex-shrink-0 shadow-md">
+            <div class="w-9 h-9 rounded-full bg-[#4A4D40] dark:bg-[#292A25] text-[#F7F6F2] dark:text-[#D5D3CA] border border-transparent dark:border-[#414239] font-bold flex items-center justify-center text-xs flex-shrink-0 shadow-sm overflow-hidden">
               <img 
                 v-if="userPicture" 
                 :src="userPicture" 
@@ -164,14 +165,14 @@
               <span v-else>{{ userInitials }}</span>
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-xs font-semibold text-white truncate">{{ userName }}</p>
-              <p class="text-[10px] text-slate-400 truncate">{{ userEmail }}</p>
+              <p class="text-xs font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] truncate">{{ userName }}</p>
+              <p class="text-[10px] text-[#7E8075] dark:text-[#85867C] truncate">{{ userEmail }}</p>
             </div>
           </router-link>
           
           <button 
             @click="handleLogout" 
-            class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800/60 transition-colors ml-1"
+            class="text-[#7E8075] dark:text-[#85867C] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] p-1.5 rounded-lg hover:bg-[#E3E0D8] dark:hover:bg-[#292A25] transition-colors ml-1.5 flex-shrink-0"
             title="Log out"
           >
             <span class="material-symbols-outlined text-[18px]">logout</span>
@@ -188,11 +189,16 @@ import { useRoute, useRouter } from 'vue-router';
 import { useSidebar } from '../composables/useSidebar';
 import { useAuthStore } from '../stores/auth';
 import { getBaseUrl } from '../utils/url';
+import logoUrl from '../assets/logo.png';
+import ThemeToggle from './ThemeToggle.vue';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const { isSidebarOpen, closeSidebar } = useSidebar();
+
+const activeNavClass = 'bg-[#FFFFFF] dark:bg-[#292A25] text-[#1C1D1A] dark:text-[#D5D3CA] border border-[#D1CEC4] dark:border-[#414239] shadow-sm font-semibold';
+const inactiveNavClass = 'text-[#575851] dark:text-[#A5A69B] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] border border-transparent font-medium';
 
 const currentTripId = computed(() => {
   return route.params.tripId || route.params.id || null;

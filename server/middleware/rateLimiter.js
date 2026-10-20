@@ -1,54 +1,209 @@
-const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator, MemoryStore } = require('express-rate-limit');
 const { RedisStore } = require('rate-limit-redis');
-const Redis = require('ioredis');
-const config = require('../config/env');
 const logger = require('../utils/logger');
+const {
+  getRedisClient,
+  isRedisReady,
+  getRedisStatus,
+  closeRedis,
+  sanitizeRedisError
+} = require('../config/redis');
 
-let redisClient = null;
+/**
+ * Resilient Rate Limiter Store
+ *
+ * Implements the express-rate-limit Store interface.
+ * Delegates to RedisStore when Redis is connected and healthy ('ready').
+ * Automatically and seamlessly falls back to process-local MemoryStore when
+ * Redis is unavailable, disconnected, timed out, or returning errors.
+ *
+ * NOTE ON FALLBACK BEHAVIOR:
+ * In-memory fallback counters are process-local and do NOT provide a global,
+ * synchronized limit across multiple server instances during a Redis outage.
+ * When Redis recovers, the store automatically resumes Redis-backed global limiting.
+ * MemoryStore counters are preserved across transitions to prevent silent reset abuse.
+ */
+class ResilientRateLimitStore {
+  constructor(options = {}) {
+    this.prefix = options.prefix || 'rl';
+    this.memoryStore = new MemoryStore();
+    this.options = null;
+    this.redisStore = null;
+    this.activeStoreType = 'memory';
+    this.redisInitPromise = null;
+    this.redisStoreInitialized = false;
 
-function getRedisClient() {
-  if (!config.REDIS_URL) {
-    return null;
+    // Custom client override (useful for dependency injection and testing)
+    this.customClient = options.client || null;
+
+    this._setupRedisStore();
   }
-  if (!redisClient) {
-    try {
-      redisClient = new Redis(config.REDIS_URL, {
-        lazyConnect: false,
-        enableOfflineQueue: false,
-        maxRetriesPerRequest: 2,
-        retryStrategy(times) {
-          if (times > 5) {
-            logger.warn('[RateLimit] Exceeded Redis retry attempts, falling back to memory store');
-            return null;
-          }
-          return Math.min(times * 100, 2000);
-        }
-      });
 
-      redisClient.on('error', (err) => {
-        logger.warn({ err: err.message }, '[RateLimit] Redis error in rate limiter');
-      });
+  _getClient() {
+    return this.customClient || getRedisClient();
+  }
 
-      redisClient.on('connect', () => {
-        logger.info('[RateLimit] Connected to Redis for distributed rate limiting');
+  _setupRedisStore() {
+    const client = this._getClient();
+    if (client) {
+      this.redisStore = new RedisStore({
+        sendCommand: (...args) => client.call(...args),
+        prefix: `ts_rl:${this.prefix}:`
       });
-    } catch (err) {
-      logger.warn({ err }, '[RateLimit] Failed to initialize Redis client');
-      redisClient = null;
     }
   }
-  return redisClient;
+
+  isRedisReady() {
+    const client = this._getClient();
+    return !!(client && client.status === 'ready');
+  }
+
+  getActiveStoreType() {
+    return this.activeStoreType;
+  }
+
+  async init(options) {
+    this.options = options;
+    if (this.memoryStore && typeof this.memoryStore.init === 'function') {
+      await this.memoryStore.init(options);
+    }
+    if (this.isRedisReady()) {
+      await this._ensureRedisStoreInitialized();
+    }
+  }
+
+  async _ensureRedisStoreInitialized() {
+    if (!this.redisStore || !this.options) {
+      return false;
+    }
+    if (this.redisStoreInitialized) {
+      return true;
+    }
+    if (this.redisInitPromise) {
+      return this.redisInitPromise;
+    }
+
+    this.redisInitPromise = (async () => {
+      try {
+        await this.redisStore.init(this.options);
+        this.redisStoreInitialized = true;
+        return true;
+      } catch (err) {
+        this.redisStoreInitialized = false;
+        logger.warn(
+          { prefix: this.prefix, err: sanitizeRedisError(err.message) },
+          '[RateLimit] Failed to initialize RedisStore scripts'
+        );
+        return false;
+      } finally {
+        this.redisInitPromise = null;
+      }
+    })();
+
+    return this.redisInitPromise;
+  }
+
+  async get(key) {
+    if (this.isRedisReady()) {
+      const ready = await this._ensureRedisStoreInitialized();
+      if (ready) {
+        try {
+          const res = await this.redisStore.get(key);
+          this._markActiveStore('redis');
+          return res;
+        } catch (err) {
+          this._handleRedisFailure(err);
+        }
+      }
+    }
+    this._markActiveStore('memory');
+    return this.memoryStore.get(key);
+  }
+
+  async increment(key) {
+    if (this.isRedisReady()) {
+      const ready = await this._ensureRedisStoreInitialized();
+      if (ready) {
+        try {
+          const res = await this.redisStore.increment(key);
+          this._markActiveStore('redis');
+          return res;
+        } catch (err) {
+          this._handleRedisFailure(err);
+        }
+      }
+    }
+    this._markActiveStore('memory');
+    return this.memoryStore.increment(key);
+  }
+
+  async decrement(key) {
+    if (this.isRedisReady()) {
+      const ready = await this._ensureRedisStoreInitialized();
+      if (ready) {
+        try {
+          await this.redisStore.decrement(key);
+          this._markActiveStore('redis');
+          return;
+        } catch (err) {
+          this._handleRedisFailure(err);
+        }
+      }
+    }
+    this._markActiveStore('memory');
+    if (typeof this.memoryStore.decrement === 'function') {
+      await this.memoryStore.decrement(key);
+    }
+  }
+
+  async resetKey(key) {
+    const promises = [];
+    if (this.memoryStore && typeof this.memoryStore.resetKey === 'function') {
+      promises.push(this.memoryStore.resetKey(key));
+    }
+    if (this.isRedisReady() && this.redisStore) {
+      promises.push(
+        this.redisStore.resetKey(key).catch((err) => {
+          this._handleRedisFailure(err);
+        })
+      );
+    }
+    await Promise.all(promises);
+  }
+
+  async resetAll() {
+    if (this.memoryStore && typeof this.memoryStore.resetAll === 'function') {
+      await this.memoryStore.resetAll();
+    }
+    this.redisStoreInitialized = false;
+  }
+
+  _markActiveStore(type) {
+    if (this.activeStoreType !== type) {
+      this.activeStoreType = type;
+      if (type === 'redis') {
+        logger.info({ prefix: this.prefix }, '[RateLimit] Resuming Redis rate-limit store');
+      } else {
+        logger.warn(
+          { prefix: this.prefix },
+          '[RateLimit] Active store switched to in-memory fallback'
+        );
+      }
+    }
+  }
+
+  _handleRedisFailure(err) {
+    this.redisStoreInitialized = false;
+    this._markActiveStore('memory');
+    logger.warn(
+      { prefix: this.prefix, err: sanitizeRedisError(err?.message), code: err?.code },
+      '[RateLimit] Redis command failure; falling back to in-memory store'
+    );
+  }
 }
 
-function createLimiterStore(prefix) {
-  const client = getRedisClient();
-  if (client) {
-    return new RedisStore({
-      sendCommand: (...args) => client.call(...args),
-      prefix: `ts_rl:${prefix}:`
-    });
-  }
-  return undefined; // MemoryStore fallback
+function createLimiterStore(prefix, options = {}) {
+  return new ResilientRateLimitStore({ prefix, ...options });
 }
 
 /**
@@ -169,16 +324,7 @@ const verifyOtpEmailLimiter = rateLimit({
   legacyHeaders: false
 });
 
-async function closeRedis() {
-  if (redisClient) {
-    try {
-      await redisClient.quit();
-    } catch {
-      redisClient.disconnect();
-    }
-    redisClient = null;
-  }
-}
+
 
 module.exports = {
   generalApiLimiter,
@@ -188,5 +334,11 @@ module.exports = {
   verifyOtpIpLimiter,
   verifyOtpEmailLimiter,
   resolveOtpTargetEmail,
-  closeRedis
+  closeRedis,
+  ResilientRateLimitStore,
+  getRedisClient,
+  isRedisReady,
+  getRedisStatus,
+  createLimiterStore,
+  sanitizeRedisError
 };

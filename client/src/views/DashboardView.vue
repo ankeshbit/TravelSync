@@ -1,157 +1,193 @@
 <template>
-  <div class="min-h-screen bg-[#080D1A] text-slate-100 font-['Plus_Jakarta_Sans'] flex">
-    <Navbar />
-    <Sidebar />
+  <AppLayout>
+    <!-- Top Bar: Title & Actions -->
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight">My Trips</h1>
+        <p class="text-xs sm:text-sm text-[#575851] dark:text-[#A5A69B] mt-1">Manage and plan your upcoming adventures together.</p>
+      </div>
 
-    <!-- Main Content Area -->
-    <main class="flex-1 md:pl-64 pt-16 md:pt-8 pb-16 px-6 md:px-10 transition-all duration-300 max-w-7xl mx-auto w-full">
-      <!-- Top Bar: Title & Actions -->
-      <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 class="text-3xl font-extrabold text-white tracking-tight">My Trips</h1>
-          <p class="text-sm text-slate-400 mt-1">Manage and plan your upcoming adventures together.</p>
-        </div>
-
-        <div class="flex items-center gap-3">
-          <!-- Search Trips Input -->
-          <div class="relative w-full sm:w-64">
-            <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
-            <input 
-              v-model="searchQuery" 
-              type="text" 
-              placeholder="Search trips..."
-              class="w-full bg-[#111C33] border border-[#1E2E4E] text-sm text-white placeholder-slate-400 pl-10 pr-4 py-2.5 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
-            />
-          </div>
-
-          <!-- Create Trip Button -->
-          <button 
-            @click="showCreateModal = true" 
-            class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95 transition-all flex-shrink-0"
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        <!-- Search Trips Input -->
+        <div class="relative flex-1 sm:w-64 sm:flex-initial">
+          <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] text-[18px]">search</span>
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            placeholder="Search trips..."
+            class="w-full bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] text-sm text-[#1C1D1A] dark:text-[#D5D3CA] placeholder-[#7E8075] dark:placeholder-[#85867C] pl-10 pr-8 py-2.5 rounded-xl focus:outline-none focus:border-[#A7A99A] focus:ring-1 focus:ring-[#A7A99A]/30 shadow-sm transition-all"
+          />
+          <button
+            v-if="searchQuery"
+            @click="searchQuery = ''"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7E8075] dark:text-[#85867C] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] p-0.5"
+            title="Clear search"
           >
-            <span class="material-symbols-outlined text-[18px]">add</span>
-            <span>Create Trip</span>
+            <span class="material-symbols-outlined text-[16px]">close</span>
           </button>
         </div>
-      </header>
 
-      <!-- Overview Statistics Summary Row -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <!-- Total Trips -->
-        <div class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-4 sm:p-5 flex items-center gap-4 hover:border-blue-500/40 transition-colors shadow-lg">
-          <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 flex-shrink-0">
-            <span class="material-symbols-outlined text-[24px]">explore</span>
-          </div>
-          <div>
-            <p class="text-xs font-medium text-slate-400">Total Trips</p>
-            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
-              <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-slate-800 animate-pulse rounded"></span>
-              <span v-else>{{ summary.totalTrips }}</span>
-            </h3>
-          </div>
-        </div>
-
-        <!-- Upcoming Trips -->
-        <div class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-4 sm:p-5 flex items-center gap-4 hover:border-emerald-500/40 transition-colors shadow-lg">
-          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
-            <span class="material-symbols-outlined text-[24px]">calendar_month</span>
-          </div>
-          <div>
-            <p class="text-xs font-medium text-slate-400">Upcoming Trips</p>
-            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
-              <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-slate-800 animate-pulse rounded"></span>
-              <span v-else>{{ summary.upcomingTrips }}</span>
-            </h3>
-          </div>
-        </div>
-
-        <!-- Total Members -->
-        <div class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-4 sm:p-5 flex items-center gap-4 hover:border-indigo-500/40 transition-colors shadow-lg">
-          <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 flex-shrink-0">
-            <span class="material-symbols-outlined text-[24px]">groups</span>
-          </div>
-          <div>
-            <p class="text-xs font-medium text-slate-400">Total Members</p>
-            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
-              <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-slate-800 animate-pulse rounded"></span>
-              <span v-else>{{ summary.totalMembers }}</span>
-            </h3>
-          </div>
-        </div>
-
-        <!-- Total Spent -->
-        <div class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-4 sm:p-5 flex items-center gap-4 hover:border-amber-500/40 transition-colors shadow-lg">
-          <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0">
-            <span class="material-symbols-outlined text-[24px]">payments</span>
-          </div>
-          <div>
-            <p class="text-xs font-medium text-slate-400">Total Spent</p>
-            <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5" :title="formattedTotalSpent">
-              <span v-if="summaryLoading" class="inline-block w-16 h-6 bg-slate-800 animate-pulse rounded"></span>
-              <span v-else>{{ formattedTotalSpent }}</span>
-            </h3>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filter Tabs Row -->
-      <div class="flex items-center gap-2 mb-8">
+        <!-- Create Trip Button -->
         <button 
-          v-for="tab in ['All Trips', 'Upcoming', 'Past']" 
-          :key="tab"
-          @click="activeFilter = tab"
-          :class="activeFilter === tab ? 'bg-[#122347] text-blue-400 font-semibold border border-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-[#111C33] font-medium border border-transparent'"
-          class="px-4 py-1.5 rounded-xl text-xs transition-all duration-200"
+          @click="showCreateModal = true" 
+          class="bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-sm border border-[#A7A99A]/40 active:scale-95 transition-all flex-shrink-0"
         >
-          {{ tab }}
+          <span class="material-symbols-outlined text-[18px]">add</span>
+          <span>Create Trip</span>
         </button>
       </div>
+    </header>
 
-      <!-- Loading State -->
-      <div v-if="loading && trips.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
-        <div v-for="n in 3" :key="n" class="bg-[#0F172A] border border-[#1E2E4E] rounded-2xl h-80 overflow-hidden flex flex-col">
-          <div class="h-44 w-full bg-[#131F38]"></div>
-          <div class="p-5 space-y-3">
-            <div class="h-5 w-3/4 bg-[#1E2E4E] rounded"></div>
-            <div class="h-4 w-1/2 bg-[#1E2E4E] rounded"></div>
+    <!-- Overview Statistics Summary Row -->
+    <div class="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-5 mb-8">
+      <!-- Total Trips -->
+      <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-5 sm:p-6 flex items-center gap-4 hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-colors shadow-sm min-h-[104px] h-full min-w-0">
+        <div class="w-12 h-12 rounded-xl bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] flex-shrink-0">
+          <span class="material-symbols-outlined text-[24px]">explore</span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-semibold text-[#7E8075] dark:text-[#85867C] truncate">Total Trips</p>
+          <h3 class="text-xl sm:text-2xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight mt-1 truncate">
+            <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-[#E3E0D8] dark:bg-[#292A25] animate-pulse rounded"></span>
+            <span v-else>{{ summary.totalTrips }}</span>
+          </h3>
+        </div>
+      </div>
+
+      <!-- Upcoming Trips -->
+      <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-5 sm:p-6 flex items-center gap-4 hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-colors shadow-sm min-h-[104px] h-full min-w-0">
+        <div class="w-12 h-12 rounded-xl bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] flex-shrink-0">
+          <span class="material-symbols-outlined text-[24px]">calendar_month</span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-semibold text-[#7E8075] dark:text-[#85867C] truncate">Upcoming Trips</p>
+          <h3 class="text-xl sm:text-2xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight mt-1 truncate">
+            <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-[#E3E0D8] dark:bg-[#292A25] animate-pulse rounded"></span>
+            <span v-else>{{ summary.upcomingTrips }}</span>
+          </h3>
+        </div>
+      </div>
+
+      <!-- Total Members -->
+      <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-5 sm:p-6 flex items-center gap-4 hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-colors shadow-sm min-h-[104px] h-full min-w-0">
+        <div class="w-12 h-12 rounded-xl bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] flex-shrink-0">
+          <span class="material-symbols-outlined text-[24px]">groups</span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-semibold text-[#7E8075] dark:text-[#85867C] truncate">Total Members</p>
+          <h3 class="text-xl sm:text-2xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight mt-1 truncate">
+            <span v-if="summaryLoading" class="inline-block w-8 h-6 bg-[#E3E0D8] dark:bg-[#292A25] animate-pulse rounded"></span>
+            <span v-else>{{ summary.totalMembers }}</span>
+          </h3>
+        </div>
+      </div>
+
+      <!-- Total Spent -->
+      <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-5 sm:p-6 flex items-center gap-4 hover:border-[#D1CEC4] dark:hover:border-[#414239] transition-colors shadow-sm min-h-[104px] h-full min-w-0">
+        <div class="w-12 h-12 rounded-xl bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] flex-shrink-0">
+          <span class="material-symbols-outlined text-[24px]">payments</span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-semibold text-[#7E8075] dark:text-[#85867C] truncate">Total Spent</p>
+          <h3 class="text-xl sm:text-2xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA] tracking-tight mt-1 truncate" :title="formattedTotalSpent">
+            <span v-if="summaryLoading" class="inline-block w-16 h-6 bg-[#E3E0D8] dark:bg-[#292A25] animate-pulse rounded"></span>
+            <span v-else>{{ formattedTotalSpent }}</span>
+          </h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter Tabs Row -->
+    <div class="flex items-center gap-2 mb-8 overflow-x-auto pb-1 scrollbar-none">
+      <button 
+        v-for="tab in ['All Trips', 'Upcoming', 'Past']" 
+        :key="tab"
+        @click="activeFilter = tab"
+        :class="activeFilter === tab 
+          ? 'bg-[#1C1D1A] dark:bg-[#A7A99A] text-white dark:text-[#171813] font-semibold border border-transparent shadow-sm' 
+          : 'bg-[#FFFFFF] dark:bg-[#1B1C19] text-[#575851] dark:text-[#A5A69B] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] font-medium border border-[#E3E0D8] dark:border-[#30312C]'"
+        class="px-4.5 py-2.5 rounded-xl text-xs sm:text-sm transition-all duration-200 flex-shrink-0"
+      >
+        {{ tab }}
+      </button>
+    </div>
+
+    <!-- Loading State: Identical geometry to TripCard.vue -->
+    <div v-if="loading && trips.length === 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+      <div v-for="n in 3" :key="n" class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl overflow-hidden flex flex-col shadow-sm h-full min-h-[380px]">
+        <div class="h-48 w-full bg-[#F0EEE9] dark:bg-[#22231F] relative flex-shrink-0">
+          <div class="absolute top-4 right-4 w-20 h-6 rounded-full bg-[#E3E0D8] dark:bg-[#292A25]"></div>
+        </div>
+        <div class="p-5 sm:p-6 flex flex-col flex-1 justify-between gap-4">
+          <div class="space-y-3">
+            <div class="h-5 w-3/4 bg-[#E3E0D8] dark:bg-[#292A25] rounded"></div>
+            <div class="space-y-2 pt-1">
+              <div class="h-3.5 w-1/2 bg-[#E3E0D8] dark:bg-[#292A25] rounded"></div>
+              <div class="h-3.5 w-2/3 bg-[#E3E0D8] dark:bg-[#292A25] rounded"></div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between pt-4 border-t border-[#E3E0D8] dark:border-[#30312C] mt-auto">
+            <div class="flex items-center -space-x-2">
+              <div class="w-7 h-7 rounded-full bg-[#E3E0D8] dark:bg-[#292A25]"></div>
+              <div class="w-7 h-7 rounded-full bg-[#E3E0D8] dark:bg-[#292A25]"></div>
+            </div>
+            <div class="w-8 h-8 rounded-lg bg-[#E3E0D8] dark:bg-[#292A25]"></div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- Error State -->
-      <div v-else-if="error" class="bg-red-950/40 border border-red-900 text-red-300 p-4 rounded-xl mb-6 text-sm">
-        {{ error }}
+    <!-- Error State -->
+    <div v-else-if="error" class="bg-[#C77F78]/10 border border-[#C77F78]/30 text-[#C77F78] p-5 rounded-2xl mb-6 text-sm">
+      {{ error }}
+    </div>
+
+    <!-- Empty State -->
+    <div 
+      v-else-if="displayTrips.length === 0" 
+      class="w-full bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-3xl p-8 sm:p-16 text-center shadow-sm flex flex-col items-center justify-center my-4"
+    >
+      <div class="w-16 h-16 rounded-2xl bg-[#F0EEE9] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-center text-[#575851] dark:text-[#D5D3CA] mb-4 flex-shrink-0">
+        <span class="material-symbols-outlined text-3xl">{{ searchQuery ? 'search_off' : 'luggage' }}</span>
       </div>
-
-      <!-- Empty State -->
-      <div v-else-if="displayTrips.length === 0" class="text-center py-16 bg-[#0F172A] border border-[#1E2E4E] rounded-2xl p-8 flex flex-col items-center justify-center">
-        <div class="w-16 h-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4">
-          <span class="material-symbols-outlined text-3xl">luggage</span>
-        </div>
-        <h3 class="text-lg font-bold text-white mb-1.5">No trips found</h3>
-        <p class="text-xs text-slate-400 max-w-sm mb-6">
-          {{ searchQuery ? `No trips matching "${searchQuery}"` : "You haven't planned any trips yet. Create your first adventure!" }}
-        </p>
+      <h3 class="text-lg sm:text-xl font-bold text-[#1C1D1A] dark:text-[#D5D3CA] mb-2 tracking-tight">
+        {{ searchQuery ? 'No matching trips found' : (activeFilter !== 'All Trips' ? `No ${activeFilter.toLowerCase()} trips found` : 'No trips yet') }}
+      </h3>
+      <p class="text-sm text-[#575851] dark:text-[#A5A69B] max-w-lg mx-auto leading-relaxed mb-6">
+        {{ searchQuery 
+            ? `No trips matching "${searchQuery}". Check your keywords or try searching for another destination or trip name.` 
+            : (activeFilter !== 'All Trips' 
+                ? `You don't have any ${activeFilter.toLowerCase()} trips scheduled right now.` 
+                : "You haven't planned any trips yet. Create your first adventure and start inviting your travel companions!") 
+        }}
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-3">
         <button 
-          v-if="!searchQuery"
+          v-if="searchQuery"
+          @click="searchQuery = ''" 
+          class="px-4 py-2.5 rounded-xl border border-[#E3E0D8] dark:border-[#30312C] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] text-xs font-semibold text-[#575851] dark:text-[#A5A69B] transition-all"
+        >
+          Clear Search
+        </button>
+        <button 
           @click="showCreateModal = true" 
-          class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+          class="bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] text-xs sm:text-sm font-semibold px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm border border-[#A7A99A]/40 transition-all active:scale-95"
         >
           <span class="material-symbols-outlined text-[16px]">add</span>
           <span>Create Trip</span>
         </button>
       </div>
+    </div>
 
-      <!-- Trip Cards Grid -->
-      <section v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <TripCard 
-          v-for="trip in displayTrips" 
-          :key="trip.id || trip._id" 
-          :trip="trip" 
-          @click="goToTrip(trip.id || trip._id)" 
-        />
-      </section>
-    </main>
+    <!-- Trip Cards Grid -->
+    <section v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <TripCard 
+        v-for="trip in displayTrips" 
+        :key="trip.id || trip._id" 
+        :trip="trip" 
+        @click="goToTrip(trip.id || trip._id)" 
+      />
+    </section>
 
     <!-- Create Trip Modal -->
     <CreateTripModal 
@@ -159,15 +195,14 @@
       :initialDestination="initialDestination"
       @trip-created="onTripCreated" 
     />
-  </div>
+  </AppLayout>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import Navbar from '../components/Navbar.vue';
-import Sidebar from '../components/Sidebar.vue';
+import AppLayout from '../components/AppLayout.vue';
 import TripCard from '../components/TripCard.vue';
 import CreateTripModal from '../components/CreateTripModal.vue';
 import { useTripsStore } from '../stores/trips';

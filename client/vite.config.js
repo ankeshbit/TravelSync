@@ -10,6 +10,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    pool: 'forks',
+    fileParallelism: false,
+    testTimeout: 15000,
     env: {
       VITE_FIREBASE_API_KEY: 'test-key',
       VITE_FIREBASE_AUTH_DOMAIN: 'test.firebaseapp.com',

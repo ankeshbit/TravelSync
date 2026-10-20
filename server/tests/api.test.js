@@ -993,6 +993,232 @@ describe('TravelSync API Integration Tests', () => {
       });
     });
 
+    it('DELETE /api/auth/me rejects with 403 on expired OTP', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      // Expire the OTP by setting expiresAt in past
+      await prisma.otp.updateMany({
+        where: { email: 'john@example.com' },
+        data: { expiresAt: new Date(Date.now() - 60000) }
+      });
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/No verification code found|expired/);
+    });
+
+    it('DELETE /api/auth/me rejects concurrent deletion requests with 409 DELETION_IN_PROGRESS', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      // Make deleteUser take 60ms to simulate async Firebase operation
+      mockDeleteUser.mockImplementationOnce(async () => {
+        await new Promise(r => setTimeout(r, 60));
+      });
+
+      const [res1, res2] = await Promise.all([
+        request(app)
+          .delete('/api/auth/me')
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({ otp }),
+        request(app)
+          .delete('/api/auth/me')
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({ otp })
+      ]);
+
+      const statuses = [res1.status, res2.status].sort();
+      expect(statuses[0]).toBe(200);
+      expect([403, 409]).toContain(statuses[1]);
+      if (statuses[1] === 409) {
+        const conflictRes = res1.status === 409 ? res1 : res2;
+        expect(conflictRes.body.code).toBe('DELETION_IN_PROGRESS');
+      }
+
+      // Restore testUser for remaining tests
+      const { deletedAccountsCache, pendingDeletionUids } = require('../utils/verifyAuthToken');
+      deletedAccountsCache.delete(testUser.firebaseUid);
+      pendingDeletionUids.delete(testUser.firebaseUid);
+      await prisma.user.upsert({
+        where: { id: testUser.id },
+        update: { refreshToken: null, deletedAt: null },
+        create: testUser
+      });
+    });
+
+    it('DELETE /api/auth/me allows retrying a partially completed deletion when Firebase is already deleted', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      // Mark user with durable deletedAt in DB to simulate partial failure
+      await prisma.user.upsert({
+        where: { id: testUser.id },
+        update: { deletedAt: new Date(), refreshToken: 'pending_deletion' },
+        create: { ...testUser, deletedAt: new Date(), refreshToken: 'pending_deletion' }
+      });
+
+      // Firebase returns auth/user-not-found
+      const notFoundErr = new Error('User not found');
+      notFoundErr.code = 'auth/user-not-found';
+      mockDeleteUser.mockRejectedValueOnce(notFoundErr);
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain('Account deleted successfully');
+
+      // DB profile is deleted
+      const dbUser = await prisma.user.findUnique({ where: { id: testUser.id } });
+      expect(dbUser).toBeNull();
+
+      // Restore testUser for remaining tests
+      const { deletedAccountsCache, pendingDeletionUids } = require('../utils/verifyAuthToken');
+      deletedAccountsCache.delete(testUser.firebaseUid);
+      pendingDeletionUids.delete(testUser.firebaseUid);
+      await prisma.user.upsert({
+        where: { id: testUser.id },
+        update: { refreshToken: null, deletedAt: null },
+        create: testUser
+      });
+    });
+
+    it('ordinary API endpoints reject a user marked with deletedAt even after memory cache loss (simulating server restart)', async () => {
+      // Set deletedAt directly in PostgreSQL
+      await prisma.user.update({
+        where: { id: testUser.id },
+        data: { deletedAt: new Date() }
+      });
+
+      // Wipe all in-memory sets to simulate process restart
+      const { deletedAccountsCache, pendingDeletionUids } = require('../utils/verifyAuthToken');
+      deletedAccountsCache.clear();
+      pendingDeletionUids.clear();
+
+      // Ordinary endpoint GET /api/auth/me must reject with 401 ACCOUNT_DELETED
+      const res = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(res.status).toBe(401);
+      expect(res.body.code).toBe('ACCOUNT_DELETED');
+
+      // Reset deletedAt for remaining tests
+      await prisma.user.update({
+        where: { id: testUser.id },
+        data: { deletedAt: null }
+      });
+    });
+
+    it('prevents recreating or auto-provisioning an account while deletion is pending in PostgreSQL', async () => {
+      const { verifyAuthToken } = require('../utils/verifyAuthToken');
+
+      // Set deletedAt on testUser
+      await prisma.user.update({
+        where: { id: testUser.id },
+        data: { deletedAt: new Date() }
+      });
+
+      // Clear memory caches to verify PostgreSQL durability
+      const { deletedAccountsCache, pendingDeletionUids } = require('../utils/verifyAuthToken');
+      deletedAccountsCache.clear();
+      pendingDeletionUids.clear();
+
+      // Attempting to verify token for deleted user throws ACCOUNT_DELETED and does not recreate user
+      await expect(verifyAuthToken(userToken)).rejects.toThrow('Account has been deleted or is pending deletion.');
+
+      // Restore user
+      await prisma.user.update({
+        where: { id: testUser.id },
+        data: { deletedAt: null }
+      });
+    });
+
+    it('reconcilePendingDeletions cleans up pending accounts and preserves accounts with financial records', async () => {
+      const { reconcilePendingDeletions } = require('../services/accountDeletionReconciliation');
+
+      // Create a pending user without expenses
+      const cleanUser = await prisma.user.create({
+        data: {
+          id: 'user-clean-reconcile',
+          name: 'Clean Reconcile',
+          email: 'clean-reconcile@example.com',
+          firebaseUid: 'fb-clean-reconcile',
+          deletedAt: new Date(Date.now() - 10000)
+        }
+      });
+
+      // Create a pending user with an expense record
+      const expenseUser = await prisma.user.create({
+        data: {
+          id: 'user-expense-reconcile',
+          name: 'Expense Reconcile',
+          email: 'expense-reconcile@example.com',
+          firebaseUid: 'fb-expense-reconcile',
+          deletedAt: new Date(Date.now() - 10000)
+        }
+      });
+
+      // Add trip and expense paid by expenseUser
+      const trip = await prisma.trip.create({
+        data: {
+          id: 'trip-reconcile',
+          name: 'Reconcile Trip',
+          destination: 'Paris',
+          startDate: new Date(),
+          endDate: new Date(),
+          ownerId: expenseUser.id
+        }
+      });
+      await prisma.expense.create({
+        data: {
+          id: 'expense-reconcile',
+          tripId: trip.id,
+          title: 'Hotel',
+          amount: 200,
+          paidById: expenseUser.id
+        }
+      });
+
+      mockDeleteUser.mockResolvedValue();
+
+      const result = await reconcilePendingDeletions({
+        prisma,
+        firebaseAuth: { deleteUser: mockDeleteUser },
+        olderThanMs: 0
+      });
+
+      expect(result.processed).toBeGreaterThanOrEqual(2);
+      expect(result.deleted).toBeGreaterThanOrEqual(1);
+      expect(result.anonymized).toBeGreaterThanOrEqual(1);
+
+      // cleanUser should be completely deleted from DB
+      const foundClean = await prisma.user.findUnique({ where: { id: cleanUser.id } });
+      expect(foundClean).toBeNull();
+
+      // expenseUser should remain as anonymized tombstone
+      const foundExpenseUser = await prisma.user.findUnique({ where: { id: expenseUser.id } });
+      expect(foundExpenseUser).not.toBeNull();
+      expect(foundExpenseUser.name).toBe('Deleted User');
+      expect(foundExpenseUser.email).toContain('@deleted.travelsync.local');
+      expect(foundExpenseUser.deletedAt).not.toBeNull();
+
+      // Clean up test records
+      await prisma.expense.deleteMany({ where: { tripId: trip.id } });
+      await prisma.trip.deleteMany({ where: { id: trip.id } });
+      await prisma.user.deleteMany({ where: { id: expenseUser.id } });
+    });
+
     it('POST /api/auth/upload-photo should reject SVG upload with 400', async () => {
       const svgBuffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>');
       const res = await request(app)
@@ -1122,6 +1348,35 @@ describe('TravelSync API Integration Tests', () => {
         .set('Authorization', 'Bearer leaving-token');
       expect(res.status).toBe(200);
       expect(res.body.message).toMatch(/successfully left/i);
+    });
+  });
+
+  describe('Server Middleware & Security Verifications', () => {
+    it('returns 400 INVALID_JSON on malformed JSON payload', async () => {
+      const res = await request(app)
+        .post('/api/auth/send-otp')
+        .set('Content-Type', 'application/json')
+        .send('{ "email": "bad json');
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('INVALID_JSON');
+      expect(res.headers['x-request-id']).toBeDefined();
+    });
+
+    it('returns 403 CORS_ERROR when Origin is unauthorized', async () => {
+      const res = await request(app)
+        .get('/api/stats')
+        .set('Origin', 'http://unauthorized-attacker-site.com');
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('CORS_ERROR');
+    });
+
+    it('propagates client-supplied X-Request-Id header in responses', async () => {
+      const customId = 'trace-client-12345';
+      const res = await request(app)
+        .get('/api/stats')
+        .set('X-Request-Id', customId);
+      expect(res.status).toBe(200);
+      expect(res.headers['x-request-id']).toBe(customId);
     });
   });
 
