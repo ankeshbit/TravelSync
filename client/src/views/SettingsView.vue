@@ -432,8 +432,15 @@ const handleDeleteAccount = async (otp) => {
     await signOut(auth);
   } catch {}
   authStore.clearAuth();
-  if (typeof window !== 'undefined') {
-    localStorage.clear();
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key === 'user' || key === 'token' || key === 'refreshToken' || key.startsWith('travelsync_'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
   }
   await router.push('/login');
   toastStore.showToast('Account deleted successfully.', 'success');

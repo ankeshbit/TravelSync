@@ -185,7 +185,17 @@ async function handleVerify() {
     }
     emit('verified', otpValue.value);
   } catch (err) {
-    errorMsg.value = err.response?.data?.message || err.message || 'Invalid code. Please try again.';
+    if (err.response?.data?.code === 'OWNS_SHARED_TRIPS') {
+      const serverMsg = err.response.data.message || 'Cannot delete account while owning shared trips.';
+      const trips = err.response.data.trips;
+      if (Array.isArray(trips) && trips.length > 0) {
+        errorMsg.value = `${serverMsg}: ${trips.join(', ')}`;
+      } else {
+        errorMsg.value = serverMsg;
+      }
+    } else {
+      errorMsg.value = err.response?.data?.message || err.message || 'Invalid code. Please try again.';
+    }
     hasError.value = true;
     digits.value = Array(6).fill('');
     setTimeout(() => inputs.value[0]?.focus(), 50);

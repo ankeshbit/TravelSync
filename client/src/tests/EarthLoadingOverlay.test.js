@@ -2,12 +2,126 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { setActivePinia, createPinia } from 'pinia';
-import EarthLoadingOverlay from '../components/EarthLoadingOverlay.vue';
+import EarthLoadingOverlay, { _resetWebGLSupportCache } from '../components/EarthLoadingOverlay.vue';
 import { useAppLoader } from '../composables/useAppLoader';
 import { useAuthStore } from '../stores/auth';
 import { useTripsStore } from '../stores/trips';
 
+const mockRendererDispose = vi.fn();
+const mockRendererSetSize = vi.fn();
+const mockSceneInstances = [];
+const mockRendererInstances = [];
+const mockLoaderCallbacks = [];
+
+vi.mock('three', () => ({
+  Scene: vi.fn(function () {
+    const s = { add: vi.fn() };
+    mockSceneInstances.push(s);
+    return s;
+  }),
+  PerspectiveCamera: vi.fn(function () {
+    return { position: { z: 0 }, updateProjectionMatrix: vi.fn() };
+  }),
+  WebGLRenderer: vi.fn(function () {
+    const r = {
+      setSize: mockRendererSetSize,
+      setPixelRatio: vi.fn(),
+      render: vi.fn(),
+      dispose: mockRendererDispose,
+    };
+    mockRendererInstances.push(r);
+    return r;
+  }),
+  Group: vi.fn(function () {
+    return { add: vi.fn(), rotation: { z: 0, x: 0 } };
+  }),
+  SphereGeometry: vi.fn(function () {
+    return { dispose: vi.fn() };
+  }),
+  MeshStandardMaterial: vi.fn(function () {
+    return { dispose: vi.fn(), map: null, needsUpdate: false };
+  }),
+  Mesh: vi.fn(function () {
+    return {
+      geometry: { dispose: vi.fn() },
+      material: { dispose: vi.fn(), map: null, needsUpdate: false },
+      rotation: { y: 0 },
+    };
+  }),
+  ShaderMaterial: vi.fn(function () {
+    return { dispose: vi.fn() };
+  }),
+  AmbientLight: vi.fn(),
+  DirectionalLight: vi.fn(function () {
+    return { position: { set: vi.fn() } };
+  }),
+  TextureLoader: vi.fn(function () {
+    return {
+      load: vi.fn((url, onLoad) => {
+        mockLoaderCallbacks.push(onLoad);
+      }),
+    };
+  }),
+  CanvasTexture: vi.fn(function () {
+    return { dispose: vi.fn(), colorSpace: '' };
+  }),
+  Texture: vi.fn(function () {
+    return { dispose: vi.fn() };
+  }),
+  SRGBColorSpace: 'srgb',
+  AdditiveBlending: 1,
+  BackSide: 2,
+}));
+
 describe('EarthLoadingOverlay component', () => {
+  let origGetContext;
+  let origResizeObserver;
+  let mockObserve;
+  let mockDisconnect;
+  let mockRemoveEventListener;
+
+  beforeEach(() => {
+    _resetWebGLSupportCache();
+    origGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type) {
+      if (type && type.includes('webgl')) {
+        return {
+          getParameter: vi.fn().mockReturnValue(1),
+          getExtension: vi.fn(() => ({ loseContext: vi.fn() })),
+        };
+      }
+      return { fillRect: vi.fn(), fill: vi.fn(), beginPath: vi.fn(), ellipse: vi.fn(), createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })), createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })), clearRect: vi.fn() };
+    };
+    origResizeObserver = window.ResizeObserver;
+
+    mockObserve = vi.fn();
+    mockDisconnect = vi.fn();
+    window.ResizeObserver = vi.fn(function () {
+      return {
+        observe: mockObserve,
+        disconnect: mockDisconnect,
+        unobserve: vi.fn(),
+      };
+    });
+
+    mockRemoveEventListener = vi.fn();
+    window.matchMedia = vi.fn().mockImplementation((query) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: mockRemoveEventListener,
+      addListener: vi.fn(),
+      removeListener: mockRemoveEventListener,
+    }));
+  });
+
+  afterEach(() => {
+    _resetWebGLSupportCache();
+    HTMLCanvasElement.prototype.getContext = origGetContext;
+    window.ResizeObserver = origResizeObserver;
+    vi.clearAllMocks();
+  });
+
   it('renders correctly when visible is true with default message, logo and branding', () => {
     const wrapper = mount(EarthLoadingOverlay, {
       props: {
@@ -20,7 +134,6 @@ describe('EarthLoadingOverlay component', () => {
     expect(wrapper.find('[role="status"]').exists()).toBe(true);
     expect(wrapper.find('[role="status"]').attributes('aria-live')).toBe('polite');
 
-    // Logo image and progress bar
     const logoImg = wrapper.find('img[alt="TravelSync"]');
     expect(logoImg.exists()).toBe(true);
     expect(logoImg.attributes('src')).toBeTruthy();
@@ -39,14 +152,14 @@ describe('EarthLoadingOverlay component', () => {
     expect(wrapper.find('.sr-only').text()).toBe('Preparing your next adventure…');
   });
 
-  it('renders graceful CSS fallback when WebGL is unavailable (e.g. in test jsdom)', () => {
+  it('renders graceful CSS fallback when WebGL is unavailable', () => {
+    HTMLCanvasElement.prototype.getContext = () => null;
     const wrapper = mount(EarthLoadingOverlay, {
       props: {
         visible: true,
       },
     });
 
-    // In jsdom without hardware acceleration, CSS fallback globe is rendered
     expect(wrapper.find('.earth-fallback-globe').exists()).toBe(true);
   });
 
@@ -60,31 +173,79 @@ describe('EarthLoadingOverlay component', () => {
     expect(wrapper.find('[role="status"]').exists()).toBe(false);
   });
 
-  it('handles visibility toggle cleanly without error', async () => {
+  it('show, hide, show again re-creates the scene and cleanup removes observer and listener', async () => {
+    const loseContextMock = vi.fn();
+    HTMLCanvasElement.prototype.getContext = function (type) {
+      if (type.includes('webgl')) {
+        return {
+          getParameter: vi.fn().mockReturnValue(1),
+          getExtension: vi.fn(() => ({ loseContext: loseContextMock })),
+        };
+      }
+      return { fillRect: vi.fn(), fill: vi.fn(), beginPath: vi.fn(), ellipse: vi.fn(), createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })), createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })), clearRect: vi.fn() };
+    };
+
+    const initialSceneCount = mockSceneInstances.length;
     const wrapper = mount(EarthLoadingOverlay, {
       props: {
         visible: true,
       },
+      attachTo: document.body,
     });
 
-    expect(wrapper.find('[role="status"]').exists()).toBe(true);
+    await nextTick();
+    // Allow dynamic import and initThree to execute
+    await new Promise((r) => setTimeout(r, 20));
 
+    expect(mockSceneInstances.length).toBeGreaterThan(initialSceneCount);
+    const sceneCountAfterFirstShow = mockSceneInstances.length;
+
+    // Hide overlay
     await wrapper.setProps({ visible: false });
-    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+    await nextTick();
 
+    expect(mockDisconnect).toHaveBeenCalled();
+    expect(mockRendererDispose).toHaveBeenCalled();
+
+    // Show overlay again: re-creates the Three.js scene
     await wrapper.setProps({ visible: true });
-    expect(wrapper.find('[role="status"]').exists()).toBe(true);
+    await nextTick();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(mockSceneInstances.length).toBeGreaterThan(sceneCountAfterFirstShow);
+
+    // Unmount cleans up observer and matchMedia listener
+    wrapper.unmount();
+    expect(mockRemoveEventListener).toHaveBeenCalled();
   });
 
-  it('unmounts cleanly without throwing errors', () => {
+  it('unmount mid-load does not throw and texture callback guards against use after disposal', async () => {
+    HTMLCanvasElement.prototype.getContext = function (type) {
+      if (type.includes('webgl')) {
+        return {
+          getParameter: vi.fn().mockReturnValue(1),
+          getExtension: vi.fn(() => ({ loseContext: vi.fn() })),
+        };
+      }
+      return { fillRect: vi.fn(), fill: vi.fn(), beginPath: vi.fn(), ellipse: vi.fn(), createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })), createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })), clearRect: vi.fn() };
+    };
+
     const wrapper = mount(EarthLoadingOverlay, {
-      props: {
-        visible: true,
-      },
+      props: { visible: true },
+      attachTo: document.body,
     });
 
+    await nextTick();
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Unmount before texture loader finishes
+    expect(() => wrapper.unmount()).not.toThrow();
+
+    // Invoke texture loader callback after unmount: should not throw
     expect(() => {
-      wrapper.unmount();
+      for (const cb of mockLoaderCallbacks) {
+        cb({ dispose: vi.fn() });
+      }
     }).not.toThrow();
   });
 });
@@ -99,50 +260,52 @@ describe('useAppLoader composable', () => {
     vi.useRealTimers();
   });
 
-  it('initializes in loading state and resolves after auth is initialized', async () => {
+  it('shows overlay only when cold load takes longer than 300ms, and fast load does not show overlay', async () => {
     const authStore = useAuthStore();
     authStore.initialized = false;
 
     const loader = useAppLoader();
 
-    expect(loader.isVisible).toBe(true);
-    expect(loader.loadingMessage).toBe('Getting your journey ready…');
+    // Fast load: not shown immediately
+    expect(loader.isVisible).toBe(false);
 
-    // Mark auth initialized
+    // After 200ms (fast response), still not visible
+    vi.advanceTimersByTime(200);
+    expect(loader.isVisible).toBe(false);
+
+    // Advance past 300ms: overlay becomes visible for slow load
+    vi.advanceTimersByTime(150);
+    expect(loader.isInitialLoading).toBe(true);
+    expect(loader.isVisible).toBe(true);
+
+    // Mark auth initialized: finishes initial load
     authStore.initialized = true;
     await nextTick();
 
-    // Advance time past MIN_INITIAL_DURATION (750ms)
-    vi.advanceTimersByTime(800);
-    await nextTick();
-
     expect(loader.isInitialLoading).toBe(false);
+    expect(loader.isVisible).toBe(false);
   });
 
-  it('handles trip data loading with anti-flicker delay and proper messaging', async () => {
+  it('handles trip data loading with 300ms debounce delay and proper messaging', async () => {
     const authStore = useAuthStore();
     const tripsStore = useTripsStore();
 
     authStore.initialized = true;
     const loader = useAppLoader();
 
-    // Fast-forward initial loading completion
-    vi.advanceTimersByTime(800);
-    await nextTick();
-
-    // Initial load should be done
+    // Initial load should be done immediately
     expect(loader.isVisible).toBe(false);
 
     // Simulate trips fetch starting
     tripsStore.loading = true;
     await nextTick();
 
-    // Should NOT show immediately (flicker protection during the first 160ms)
-    vi.advanceTimersByTime(50);
+    // Should NOT show immediately during the first 250ms
+    vi.advanceTimersByTime(250);
     expect(loader.isDataLoading).toBe(false);
 
-    // Advance past debounce threshold (160ms)
-    vi.advanceTimersByTime(150);
+    // Advance past debounce threshold (300ms)
+    vi.advanceTimersByTime(60);
     expect(loader.isDataLoading).toBe(true);
     expect(loader.isVisible).toBe(true);
     expect(loader.loadingMessage).toBe('Preparing your next adventure…');
@@ -151,8 +314,8 @@ describe('useAppLoader composable', () => {
     tripsStore.loading = false;
     await nextTick();
 
-    // Minimum visible duration (400ms) prevents abrupt disappearance
-    vi.advanceTimersByTime(450);
+    // Minimum visible duration prevents abrupt disappearance
+    vi.advanceTimersByTime(350);
     expect(loader.isDataLoading).toBe(false);
     expect(loader.isVisible).toBe(false);
   });
@@ -162,8 +325,6 @@ describe('useAppLoader composable', () => {
     authStore.initialized = true;
 
     const loader = useAppLoader();
-    vi.advanceTimersByTime(800);
-    await nextTick();
 
     loader.startLoading('Syncing destinations…');
     expect(loader.isVisible).toBe(true);

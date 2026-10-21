@@ -74,6 +74,7 @@ import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
+import { getFirebaseErrorMessage } from '../services/authService';
 import logoUrl from '../assets/logo.png';
 
 const router = useRouter();
@@ -85,16 +86,33 @@ const sending = ref(false);
 const resendCooldown = ref(0);
 let cooldownTimer = null;
 
+const COOLDOWN_KEY = 'verify_email_cooldown_end';
+
+const getStoredRemainingCooldown = () => {
+  if (typeof window === 'undefined' || !window.sessionStorage) return 0;
+  const storedEnd = sessionStorage.getItem(COOLDOWN_KEY);
+  if (!storedEnd) return 0;
+  const remaining = Math.ceil((Number(storedEnd) - Date.now()) / 1000);
+  if (remaining > 0) return remaining;
+  sessionStorage.removeItem(COOLDOWN_KEY);
+  return 0;
+};
+
 const userEmail = computed(() => {
   return authStore.firebaseUser?.email || auth.currentUser?.email || '';
 });
 
 const startCooldown = (seconds = 60) => {
+  const endTime = Date.now() + seconds * 1000;
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    sessionStorage.setItem(COOLDOWN_KEY, String(endTime));
+  }
   resendCooldown.value = seconds;
   clearInterval(cooldownTimer);
   cooldownTimer = setInterval(() => {
-    resendCooldown.value--;
-    if (resendCooldown.value <= 0) {
+    const remaining = getStoredRemainingCooldown();
+    resendCooldown.value = remaining;
+    if (remaining <= 0) {
       clearInterval(cooldownTimer);
     }
   }, 1000);
@@ -112,6 +130,9 @@ const checkVerification = async () => {
     if (auth.currentUser.emailVerified) {
       await auth.currentUser.getIdToken(true);
       authStore.firebaseUser = auth.currentUser;
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        sessionStorage.removeItem(COOLDOWN_KEY);
+      }
       await authStore.syncUser();
       toastStore.showToast('Email verified successfully! Welcome to TravelSync.', 'success');
       router.push('/dashboard');
@@ -119,7 +140,7 @@ const checkVerification = async () => {
       toastStore.showToast('Your email is not verified yet. Please check your inbox and click the verification link.', 'warning');
     }
   } catch (err) {
-    toastStore.showToast(err.message || 'Failed to check verification status.', 'error');
+    toastStore.showToast(getFirebaseErrorMessage(err), 'error');
   } finally {
     checking.value = false;
   }
@@ -134,13 +155,19 @@ const handleResend = async () => {
     startCooldown(60);
     toastStore.showToast('Verification email resent! Please check your inbox.', 'success');
   } catch (err) {
-    toastStore.showToast(err.message || 'Failed to resend verification email.', 'error');
+    if (err?.code === 'auth/too-many-requests') {
+      startCooldown(60);
+    }
+    toastStore.showToast(getFirebaseErrorMessage(err), 'error');
   } finally {
     sending.value = false;
   }
 };
 
 const handleLogout = async () => {
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    sessionStorage.removeItem(COOLDOWN_KEY);
+  }
   try {
     await authStore.logout();
   } catch {}
@@ -151,8 +178,26 @@ onMounted(() => {
   // If user is already verified or unauthenticated, redirect appropriately
   if (!authStore.firebaseUser) {
     router.push('/login');
+    return;
   } else if (authStore.firebaseUser.emailVerified) {
     router.push('/dashboard');
+    return;
+  }
+
+  // Resume active cooldown or start initial signup cooldown
+  const remaining = getStoredRemainingCooldown();
+  if (remaining > 0) {
+    resendCooldown.value = remaining;
+    clearInterval(cooldownTimer);
+    cooldownTimer = setInterval(() => {
+      const rem = getStoredRemainingCooldown();
+      resendCooldown.value = rem;
+      if (rem <= 0) {
+        clearInterval(cooldownTimer);
+      }
+    }, 1000);
+  } else {
+    startCooldown(60);
   }
 });
 

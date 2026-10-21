@@ -8,12 +8,15 @@
 </template>
 
 <script setup>
-import { onErrorCaptured } from 'vue';
+import { onErrorCaptured, defineAsyncComponent } from 'vue';
 import { useToastStore } from './stores/toast';
 import { useDarkMode } from './composables/useDarkMode';
 import { useAppLoader } from './composables/useAppLoader';
 import ToastNotification from './components/ToastNotification.vue';
-import EarthLoadingOverlay from './components/EarthLoadingOverlay.vue';
+
+const EarthLoadingOverlay = defineAsyncComponent(() =>
+  import('./components/EarthLoadingOverlay.vue')
+);
 
 const toastStore = useToastStore();
 const { isDarkMode } = useDarkMode();

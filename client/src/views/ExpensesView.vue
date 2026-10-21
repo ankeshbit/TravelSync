@@ -414,7 +414,10 @@ const currentTripCurrency = computed(() => {
 
 const currentCurrencyData = computed(() => {
   const curr = currentTripCurrency.value
-  return expensesStore.byCurrency?.[curr] || null
+  return expensesStore.byCurrency?.[curr] ||
+    expensesStore.byCurrency?.[curr.toUpperCase()] ||
+    expensesStore.byCurrency?.[curr.toLowerCase()] ||
+    null
 })
 
 const displayExpenses = computed(() => {
@@ -424,7 +427,10 @@ const displayExpenses = computed(() => {
 const displayOwesList = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
   const currData = currentCurrencyData.value
-  const settlements = currData?.settlements || expensesStore.settlements || []
+  const hasByCurrency = Boolean(expensesStore.byCurrency && Object.keys(expensesStore.byCurrency).length > 0)
+  const settlements = hasByCurrency
+    ? (currData?.settlements ?? [])
+    : (currData?.settlements || expensesStore.settlements || [])
   return settlements.map((s, idx) => {
     const isYouOwe = s.from === currentUserId
     const isOwesYou = s.to === currentUserId
@@ -449,8 +455,12 @@ const computedTotalExpenses = computed(() => {
   if (currData && currData.totalExpenses !== undefined) {
     return currData.totalExpenses
   }
+  const hasByCurrency = Boolean(expensesStore.byCurrency && Object.keys(expensesStore.byCurrency).length > 0)
+  if (hasByCurrency) {
+    return 0
+  }
   const curr = currentTripCurrency.value
-  return expensesStore.expenses
+  return (expensesStore.expenses || [])
     .filter(e => (e.currency || trip.value?.currency || 'USD').toUpperCase() === curr.toUpperCase())
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
 })
@@ -458,6 +468,9 @@ const computedTotalExpenses = computed(() => {
 const computedYourShare = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
   const curr = currentTripCurrency.value
+  const currData = currentCurrencyData.value
+  const hasByCurrency = Boolean(expensesStore.byCurrency && Object.keys(expensesStore.byCurrency).length > 0)
+  if (hasByCurrency && !currData) return 0
   if (!currentUserId || !expensesStore.expenses?.length) return 0
   return expensesStore.expenses.reduce((sum, item) => {
     const itemCurrency = (item.currency || trip.value?.currency || 'USD').toUpperCase()
@@ -482,7 +495,10 @@ const computedYourShare = computed(() => {
 const computedYouOwe = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
   const currData = currentCurrencyData.value
-  const settlements = currData?.settlements || expensesStore.settlements || []
+  const hasByCurrency = Boolean(expensesStore.byCurrency && Object.keys(expensesStore.byCurrency).length > 0)
+  const settlements = hasByCurrency
+    ? (currData?.settlements ?? [])
+    : (currData?.settlements || expensesStore.settlements || [])
   if (!currentUserId || !settlements.length) return 0
   return settlements
     .filter(s => s.from === currentUserId)
@@ -492,7 +508,10 @@ const computedYouOwe = computed(() => {
 const computedYouAreOwed = computed(() => {
   const currentUserId = authStore.currentUser?.id || authStore.currentUser?._id
   const currData = currentCurrencyData.value
-  const settlements = currData?.settlements || expensesStore.settlements || []
+  const hasByCurrency = Boolean(expensesStore.byCurrency && Object.keys(expensesStore.byCurrency).length > 0)
+  const settlements = hasByCurrency
+    ? (currData?.settlements ?? [])
+    : (currData?.settlements || expensesStore.settlements || [])
   if (!currentUserId || !settlements.length) return 0
   return settlements
     .filter(s => s.to === currentUserId)

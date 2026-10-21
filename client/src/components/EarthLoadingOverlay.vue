@@ -1,5 +1,5 @@
 <template>
-  <Transition name="earth-fade">
+  <Transition name="earth-fade" @after-leave="cleanupThree">
     <div
       v-if="visible"
       class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#111210]/95 backdrop-blur-md select-none overflow-hidden p-6"
@@ -67,9 +67,15 @@
   </Transition>
 </template>
 
+<script>
+let cachedWebGLSupport = null;
+export function _resetWebGLSupportCache() {
+  cachedWebGLSupport = null;
+}
+</script>
+
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
-import * as THREE from 'three';
 import logoUrl from '../assets/logo.png';
 
 const props = defineProps({
@@ -85,14 +91,29 @@ const props = defineProps({
 
 /**
  * Detect WebGL availability safely without throwing unhandled exceptions.
+ * Releases the test context via WEBGL_lose_context to avoid context leaks.
  */
 function isWebGLSupported() {
+  if (cachedWebGLSupport !== null) return cachedWebGLSupport;
   try {
-    if (typeof window === 'undefined' || !window.WebGLRenderingContext) return false;
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      cachedWebGLSupport = false;
+      return false;
+    }
     const canvas = document.createElement('canvas');
+    if (!canvas || typeof canvas.getContext !== 'function') {
+      cachedWebGLSupport = false;
+      return false;
+    }
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    return Boolean(gl && typeof gl.getParameter === 'function');
+    const supported = Boolean(gl && typeof gl.getParameter === 'function');
+    if (gl && typeof gl.getExtension === 'function') {
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    }
+    cachedWebGLSupport = supported;
+    return supported;
   } catch {
+    cachedWebGLSupport = false;
     return false;
   }
 }
@@ -101,6 +122,10 @@ const containerRef = ref(null);
 const canvasRef = ref(null);
 const hasWebGL = ref(isWebGLSupported());
 const reducedMotion = ref(false);
+
+// Lazily imported Three.js module
+let THREE = null;
+let disposed = false;
 
 // Three.js instances
 let renderer = null;
@@ -120,12 +145,12 @@ let motionHandler = null;
 /**
  * Generate a procedural 2D canvas texture for Earth if the image asset is loading or unavailable.
  */
-function generateFallbackTexture() {
+function generateFallbackTexture(threeInstance) {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 512;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.Texture();
+  if (!ctx) return new threeInstance.Texture();
 
   // Oceans (deep navy graphite)
   ctx.fillStyle = '#0e1a22';
@@ -181,20 +206,20 @@ function generateFallbackTexture() {
   ctx.ellipse(512, 498, 450, 20, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  const texture = new threeInstance.CanvasTexture(canvas);
+  texture.colorSpace = threeInstance.SRGBColorSpace;
   return texture;
 }
 
 /**
  * Generate a procedural clouds texture for subtle atmospheric realism.
  */
-function generateCloudsTexture() {
+function generateCloudsTexture(threeInstance) {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 512;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.Texture();
+  if (!ctx) return new threeInstance.Texture();
 
   ctx.clearRect(0, 0, 1024, 512);
 
@@ -217,18 +242,29 @@ function generateCloudsTexture() {
     ctx.fill();
   }
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  const texture = new threeInstance.CanvasTexture(canvas);
+  texture.colorSpace = threeInstance.SRGBColorSpace;
   return texture;
 }
 
 /**
- * Initialize Three.js Scene, Camera, Lighting, Mesh & Materials.
+ * Initialize Three.js Scene, Camera, Lighting, Mesh & Materials lazily.
  */
-function initThree() {
+async function initThree() {
+  if (disposed) return;
   if (!canvasRef.value || !containerRef.value) return;
 
   try {
+    if (!THREE) {
+      THREE = await import('three');
+    }
+    if (disposed || !canvasRef.value || !containerRef.value) return;
+
+    // Clean up any stale renderer
+    if (renderer) {
+      cleanupThree();
+    }
+
     const width = containerRef.value.clientWidth || 320;
     const height = containerRef.value.clientHeight || 320;
 
@@ -259,7 +295,7 @@ function initThree() {
     const earthGeometry = new THREE.SphereGeometry(1, 64, 64);
 
     // Initial Material with procedural texture immediately to prevent any blank frame
-    const initialMap = generateFallbackTexture();
+    const initialMap = generateFallbackTexture(THREE);
     earthTexture = initialMap;
 
     const earthMaterial = new THREE.MeshStandardMaterial({
@@ -273,7 +309,7 @@ function initThree() {
 
     // Semi-transparent procedural clouds layer
     const cloudsGeometry = new THREE.SphereGeometry(1.014, 64, 64);
-    cloudsTexture = generateCloudsTexture();
+    cloudsTexture = generateCloudsTexture(THREE);
     const cloudsMaterial = new THREE.MeshStandardMaterial({
       map: cloudsTexture,
       transparent: true,
@@ -324,14 +360,17 @@ function initThree() {
     loader.load(
       '/textures/earth.jpg',
       (texture) => {
-        if (!earthMaterial) return;
+        if (disposed || !earthMesh || !earthMesh.material) {
+          texture.dispose();
+          return;
+        }
         texture.colorSpace = THREE.SRGBColorSpace;
         if (earthTexture && earthTexture !== texture) {
           earthTexture.dispose();
         }
         earthTexture = texture;
-        earthMaterial.map = texture;
-        earthMaterial.needsUpdate = true;
+        earthMesh.material.map = texture;
+        earthMesh.material.needsUpdate = true;
       },
       undefined,
       () => {
@@ -341,6 +380,9 @@ function initThree() {
 
     // Setup ResizeObserver for responsive sizing
     if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const { width: w, height: h } = entry.contentRect;
@@ -456,7 +498,7 @@ watch(
     if (newVal) {
       await nextTick();
       if (hasWebGL.value) {
-        initThree();
+        await initThree();
       }
     } else {
       cleanupThree();
@@ -465,6 +507,7 @@ watch(
 );
 
 onMounted(() => {
+  disposed = false;
   // Check prefers-reduced-motion
   if (typeof window !== 'undefined' && window.matchMedia) {
     mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -490,6 +533,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
   if (mediaQuery && motionHandler) {
     if (mediaQuery.removeEventListener) {
       mediaQuery.removeEventListener('change', motionHandler);
@@ -547,8 +591,10 @@ onBeforeUnmount(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .earth-fallback-orbit,
-  .earth-progress-shimmer {
-    animation: none;
+  .earth-fallback-globe,
+  .earth-progress-shimmer,
+  .animate-pulse {
+    animation: none !important;
   }
 }
 </style>
