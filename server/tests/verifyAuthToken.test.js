@@ -160,5 +160,35 @@ describe('verifyAuthToken & auth middleware reliability', () => {
       expect(req.user).toEqual(mockUser);
       expect(req.userId).toBe('u1');
     });
+
+    describe('no dev-token backdoor exists across any environment', () => {
+      const envs = ['development', 'test', 'staging', undefined];
+      envs.forEach((env) => {
+        it(`rejects Authorization: Bearer dev-token with 401 when NODE_ENV is ${env}`, async () => {
+          const origEnv = process.env.NODE_ENV;
+          if (env === undefined) {
+            delete process.env.NODE_ENV;
+          } else {
+            process.env.NODE_ENV = env;
+          }
+          try {
+            req.headers['authorization'] = 'Bearer dev-token';
+            await verifyToken(req, res, next);
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(next).not.toHaveBeenCalled();
+
+            await expect(verifyAuthToken('dev-token')).rejects.toMatchObject({
+              statusCode: 401
+            });
+          } finally {
+            if (origEnv === undefined) {
+              delete process.env.NODE_ENV;
+            } else {
+              process.env.NODE_ENV = origEnv;
+            }
+          }
+        });
+      });
+    });
   });
 });
