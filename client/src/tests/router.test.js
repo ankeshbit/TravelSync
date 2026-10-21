@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 
+vi.mock('../views/LandingView.vue', () => ({ default: { template: '<div>Landing</div>' } }));
 vi.mock('../views/LoginView.vue', () => ({ default: { template: '<div>Login</div>' } }));
 vi.mock('../views/RegisterView.vue', () => ({ default: { template: '<div>Register</div>' } }));
 vi.mock('../views/ForgotPasswordView.vue', () => ({ default: { template: '<div>ForgotPassword</div>' } }));
@@ -74,6 +75,14 @@ describe('Router navigation guards', () => {
 
     await router.push('/forgot-password');
     expect(router.currentRoute.value.path).toBe('/forgot-password');
+  });
+
+  it('allows unauthenticated users to access the landing page at /', async () => {
+    const authStore = useAuthStore();
+    authStore.firebaseUser = null;
+
+    await router.push('/');
+    expect(router.currentRoute.value.path).toBe('/');
   });
 
   it('rejects unsafe redirects like //evil.com or /\\evil.com and falls back to /dashboard', async () => {
