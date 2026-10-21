@@ -38,6 +38,22 @@ const keys = {
   aiSuggestions: (tripId, hash) => `${PREFIX}:ai:plan:${tripId}:${hash}`
 };
 
+function getIndexKey(key) {
+  const tripMatch = key.match(/^ts:trip:([^:]+):/);
+  if (tripMatch) {
+    return `${PREFIX}:idx:trip:${tripMatch[1]}`;
+  }
+  const aiMatch = key.match(/^ts:ai:plan:([^:]+):/);
+  if (aiMatch) {
+    return `${PREFIX}:idx:trip:${aiMatch[1]}`;
+  }
+  const exploreMatch = key.match(/^ts:explore:([^:]+):/);
+  if (exploreMatch) {
+    return `${PREFIX}:idx:explore:${exploreMatch[1]}`;
+  }
+  return null;
+}
+
 /**
  * Retrieve cached object by key.
  * Returns parsed object on hit, null on miss or error.
@@ -70,6 +86,7 @@ async function get(key) {
 
 /**
  * Set an object in cache with an explicit TTL.
+ * Tracks trip, AI, and explore keys in Redis sets for targeted invalidation without SCAN.
  * Never throws to caller.
  *
  * @param {string} key
@@ -85,6 +102,35 @@ async function set(key, data, ttlSeconds = 300) {
 
     const serialized = JSON.stringify(data);
     await client.set(key, serialized, 'EX', ttlSeconds);
+
+    const idxKey = getIndexKey(key);
+    if (idxKey) {
+      const idxTtl = ttlSeconds + 60; // Same TTL plus small buffer
+      if (typeof client.pipeline === 'function') {
+        const p = client.pipeline();
+        if (typeof p.sadd === 'function') p.sadd(idxKey, key);
+        if (typeof p.expire === 'function') p.expire(idxKey, idxTtl);
+        if (idxKey.startsWith(`${PREFIX}:idx:explore:`) && typeof p.sadd === 'function') {
+          p.sadd(`${PREFIX}:idx:explore:users`, idxKey);
+          if (typeof p.expire === 'function') p.expire(`${PREFIX}:idx:explore:users`, idxTtl);
+        }
+        await p.exec();
+      } else {
+        if (typeof client.sadd === 'function') {
+          await client.sadd(idxKey, key);
+          if (typeof client.expire === 'function') {
+            await client.expire(idxKey, idxTtl);
+          }
+          if (idxKey.startsWith(`${PREFIX}:idx:explore:`)) {
+            await client.sadd(`${PREFIX}:idx:explore:users`, idxKey);
+            if (typeof client.expire === 'function') {
+              await client.expire(`${PREFIX}:idx:explore:users`, idxTtl);
+            }
+          }
+        }
+      }
+    }
+
     return true;
   } catch (err) {
     logger.warn({ key, err: sanitizeRedisError(err.message) }, '[Cache] Set failed');
@@ -128,7 +174,6 @@ async function delPattern(pattern) {
     let totalDeleted = 0;
 
     do {
-      // Use SCAN in batches of 100
       const [nextCursor, matchedKeys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
       cursor = nextCursor;
 
@@ -159,6 +204,7 @@ async function invalidateUserDashboard(userIds) {
 
 /**
  * Invalidate trip detail and member dashboard caches following a trip or expense mutation.
+ * Uses index sets (ts:idx:trip:{tripId}) without scanning keyspace.
  *
  * @param {string} tripId
  * @param {string[]} memberUserIds - Owner and all members of the trip
@@ -166,42 +212,123 @@ async function invalidateUserDashboard(userIds) {
 async function invalidateTrip(tripId, memberUserIds = []) {
   if (!tripId) return;
 
-  const promises = [];
-  // Invalidate any cached trip view for this tripId
-  promises.push(delPattern(`${PREFIX}:trip:${tripId}:*`));
-  // Invalidate AI suggestions cached for this tripId
-  promises.push(delPattern(`${PREFIX}:ai:plan:${tripId}:*`));
+  try {
+    if (!isReady()) return;
+    const client = getClient();
+    if (!client) return;
 
-  // Invalidate dashboard summaries for all affected users
-  if (Array.isArray(memberUserIds) && memberUserIds.length > 0) {
-    const uniqueUserIds = Array.from(new Set(memberUserIds.filter(Boolean)));
-    uniqueUserIds.forEach((uid) => {
-      promises.push(del(keys.dashboard(uid)));
-      promises.push(delPattern(`${PREFIX}:explore:${uid}:*`));
-    });
+    const idxKey = `${PREFIX}:idx:trip:${tripId}`;
+    let tripKeys = [];
+    if (typeof client.smembers === 'function') {
+      tripKeys = await client.smembers(idxKey) || [];
+    }
+
+    const keysToDelete = new Set(Array.isArray(tripKeys) ? tripKeys : []);
+    keysToDelete.add(idxKey);
+
+    // Dashboard keys for members
+    if (Array.isArray(memberUserIds) && memberUserIds.length > 0) {
+      const uniqueUserIds = Array.from(new Set(memberUserIds.filter(Boolean)));
+      for (const uid of uniqueUserIds) {
+        keysToDelete.add(keys.dashboard(uid));
+      }
+    }
+
+    const keyArray = Array.from(keysToDelete).filter(Boolean);
+    if (keyArray.length > 0) {
+      if (typeof client.pipeline === 'function') {
+        const p = client.pipeline();
+        keyArray.forEach(k => {
+          if (typeof p.del === 'function') p.del(k);
+        });
+        await p.exec();
+      } else {
+        await client.del(...keyArray);
+      }
+    }
+
+    // Invalidate explore for members
+    if (Array.isArray(memberUserIds) && memberUserIds.length > 0) {
+      const uniqueUserIds = Array.from(new Set(memberUserIds.filter(Boolean)));
+      for (const uid of uniqueUserIds) {
+        await invalidateExplore(uid);
+      }
+    }
+  } catch (err) {
+    logger.warn({ tripId, err: sanitizeRedisError(err.message) }, '[Cache] InvalidateTrip failed');
   }
-
-  await Promise.all(promises);
 }
 
 /**
  * Invalidate explore caches for a specific user, or all explore caches if no user is provided.
+ * Uses index sets without scanning keyspace.
  *
  * @param {string} [userId]
  */
 async function invalidateExplore(userId) {
-  if (userId) {
-    await delPattern(`${PREFIX}:explore:${userId}:*`);
-  } else {
-    await delPattern(`${PREFIX}:explore:*`);
+  try {
+    if (!isReady()) return;
+    const client = getClient();
+    if (!client) return;
+
+    if (userId) {
+      const idxKey = `${PREFIX}:idx:explore:${userId}`;
+      let exploreKeys = [];
+      if (typeof client.smembers === 'function') {
+        exploreKeys = await client.smembers(idxKey) || [];
+      }
+      const keysToDelete = new Set(Array.isArray(exploreKeys) ? exploreKeys : []);
+      keysToDelete.add(idxKey);
+
+      const keyArray = Array.from(keysToDelete).filter(Boolean);
+      if (keyArray.length > 0) {
+        if (typeof client.pipeline === 'function') {
+          const p = client.pipeline();
+          keyArray.forEach(k => {
+            if (typeof p.del === 'function') p.del(k);
+          });
+          await p.exec();
+        } else {
+          await client.del(...keyArray);
+        }
+      }
+    } else {
+      let userIndexSets = [];
+      if (typeof client.smembers === 'function') {
+        userIndexSets = await client.smembers(`${PREFIX}:idx:explore:users`) || [];
+      }
+      const keysToDelete = new Set();
+      if (Array.isArray(userIndexSets)) {
+        for (const userSet of userIndexSets) {
+          keysToDelete.add(userSet);
+          if (typeof client.smembers === 'function') {
+            const memberKeys = await client.smembers(userSet) || [];
+            if (Array.isArray(memberKeys)) {
+              memberKeys.forEach(k => keysToDelete.add(k));
+            }
+          }
+        }
+      }
+      keysToDelete.add(`${PREFIX}:idx:explore:users`);
+
+      const keyArray = Array.from(keysToDelete).filter(Boolean);
+      if (keyArray.length > 0) {
+        if (typeof client.pipeline === 'function') {
+          const p = client.pipeline();
+          keyArray.forEach(k => {
+            if (typeof p.del === 'function') p.del(k);
+          });
+          await p.exec();
+        } else {
+          await client.del(...keyArray);
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn({ userId, err: sanitizeRedisError(err.message) }, '[Cache] InvalidateExplore failed');
   }
 }
 
-/**
- * Custom client setter for unit testing and dependency injection.
- *
- * @param {any} client
- */
 function _setCacheClientForTesting(client) {
   customClient = client;
 }

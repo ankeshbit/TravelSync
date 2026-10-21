@@ -151,6 +151,26 @@ if (!config.isTest) {
   setInterval(() => cleanupExpiredOtps().catch(() => {}), 15 * 60 * 1000).unref();
 }
 
+// ─── Scheduled Account Deletion Reconciliation ───────────────────────────────
+const { reconcilePendingDeletions } = require('./services/accountDeletionReconciliation');
+let isReconciliationRunning = false;
+async function runSafeReconciliation() {
+  if (isReconciliationRunning) return;
+  isReconciliationRunning = true;
+  try {
+    await reconcilePendingDeletions();
+  } catch (err) {
+    logger.error({ err }, '[Reconciliation] Scheduled run failed');
+  } finally {
+    isReconciliationRunning = false;
+  }
+}
+
+if (!config.isTest) {
+  setTimeout(() => runSafeReconciliation().catch(() => {}), 30 * 1000).unref();
+  setInterval(() => runSafeReconciliation().catch(() => {}), 10 * 60 * 1000).unref();
+}
+
 // ─── Health Checks ───────────────────────────────────────────────────────────
 // Liveness probe (always cheap)
 app.get('/api/health', async (req, res) => {

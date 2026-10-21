@@ -137,6 +137,7 @@ describe('Cache Service Core (get, set, del, delPattern)', () => {
 
   beforeEach(() => {
     mockStore = new Map();
+    const setStore = new Map();
     mockClient = {
       status: 'ready',
       get: jest.fn(async (key) => mockStore.get(key) ?? null),
@@ -148,8 +149,45 @@ describe('Cache Service Core (get, set, del, delPattern)', () => {
         let count = 0;
         keys.forEach(k => {
           if (mockStore.delete(k)) count++;
+          if (setStore.delete(k)) count++;
         });
         return count;
+      }),
+      sadd: jest.fn(async (setKey, ...vals) => {
+        if (!setStore.has(setKey)) setStore.set(setKey, new Set());
+        const s = setStore.get(setKey);
+        vals.forEach(v => s.add(v));
+        return vals.length;
+      }),
+      smembers: jest.fn(async (setKey) => {
+        if (!setStore.has(setKey)) return [];
+        return Array.from(setStore.get(setKey));
+      }),
+      expire: jest.fn(async () => 1),
+      pipeline: jest.fn(() => {
+        const operations = [];
+        const pipe = {
+          sadd: jest.fn((k, ...vals) => {
+            operations.push(() => mockClient.sadd(k, ...vals));
+            return pipe;
+          }),
+          expire: jest.fn((k, ttl) => {
+            operations.push(() => mockClient.expire(k, ttl));
+            return pipe;
+          }),
+          del: jest.fn((...keys) => {
+            operations.push(() => mockClient.del(...keys));
+            return pipe;
+          }),
+          exec: jest.fn(async () => {
+            const results = [];
+            for (const op of operations) {
+              results.push([null, await op()]);
+            }
+            return results;
+          })
+        };
+        return pipe;
       }),
       scan: jest.fn(async (cursor, matchKey, pattern, _countKey, _countVal) => {
         const prefix = pattern.replace('*', '');
@@ -239,28 +277,45 @@ describe('Cache Service Core (get, set, del, delPattern)', () => {
       expect(mockStore.has('ts:dashboard:user-3')).toBe(true);
     });
 
-    it('invalidateTrip clears trip details for all members and AI suggestion keys', async () => {
-      mockStore.set('ts:trip:trip-99:user-1', JSON.stringify({ id: 'trip-99' }));
-      mockStore.set('ts:trip:trip-99:user-2', JSON.stringify({ id: 'trip-99' }));
-      mockStore.set('ts:ai:plan:trip-99:hash123', JSON.stringify({ plan: 'Goa day 1' }));
-      mockStore.set('ts:trip:trip-88:user-1', JSON.stringify({ id: 'trip-88' }));
+    it('invalidateTrip clears trip details for all members and AI suggestion keys using sets without SCAN', async () => {
+      await cache.set('ts:trip:trip-99:user-1', { id: 'trip-99' }, 600);
+      await cache.set('ts:trip:trip-99:user-2', { id: 'trip-99' }, 600);
+      await cache.set('ts:ai:plan:trip-99:hash123', { plan: 'Goa day 1' }, 3600);
+      await cache.set('ts:trip:trip-88:user-1', { id: 'trip-88' }, 600);
 
+      mockClient.scan.mockClear();
       await cache.invalidateTrip('trip-99', ['user-1', 'user-2']);
+
       expect(mockStore.has('ts:trip:trip-99:user-1')).toBe(false);
       expect(mockStore.has('ts:trip:trip-99:user-2')).toBe(false);
       expect(mockStore.has('ts:ai:plan:trip-99:hash123')).toBe(false);
       expect(mockStore.has('ts:trip:trip-88:user-1')).toBe(true);
+      expect(mockClient.scan).not.toHaveBeenCalled();
     });
 
-    it('invalidateExplore clears explore cached keys', async () => {
-      mockStore.set('ts:explore:destinations:all', JSON.stringify([]));
-      mockStore.set('ts:explore:destinations:user1', JSON.stringify([]));
+    it('invalidateExplore clears explore cached keys using sets without SCAN', async () => {
+      await cache.set('ts:explore:user1:all', [], 900);
+      await cache.set('ts:explore:user2:all', [], 900);
       mockStore.set('ts:dashboard:user1', JSON.stringify({}));
 
-      await cache.invalidateExplore();
-      expect(mockStore.has('ts:explore:destinations:all')).toBe(false);
-      expect(mockStore.has('ts:explore:destinations:user1')).toBe(false);
+      mockClient.scan.mockClear();
+      await cache.invalidateExplore('user1');
+      expect(mockStore.has('ts:explore:user1:all')).toBe(false);
+      expect(mockStore.has('ts:explore:user2:all')).toBe(true);
       expect(mockStore.has('ts:dashboard:user1')).toBe(true);
+      expect(mockClient.scan).not.toHaveBeenCalled();
+
+      await cache.invalidateExplore();
+      expect(mockStore.has('ts:explore:user2:all')).toBe(false);
+      expect(mockClient.scan).not.toHaveBeenCalled();
+    });
+
+    it('handles Redis failure in invalidation without throwing', async () => {
+      mockClient.smembers.mockRejectedValueOnce(new Error('Redis cluster down'));
+      await expect(cache.invalidateTrip('trip-99', ['user-1'])).resolves.not.toThrow();
+
+      mockClient.smembers.mockRejectedValueOnce(new Error('Redis cluster down'));
+      await expect(cache.invalidateExplore('user-1')).resolves.not.toThrow();
     });
   });
 });
@@ -273,6 +328,7 @@ describe('HTTP Endpoint Caching and Invalidation Integration', () => {
 
   beforeEach(async () => {
     mockStore = new Map();
+    const setStore = new Map();
     mockClient = {
       status: 'ready',
       get: jest.fn(async (key) => mockStore.get(key) ?? null),
@@ -281,8 +337,47 @@ describe('HTTP Endpoint Caching and Invalidation Integration', () => {
         return 'OK';
       }),
       del: jest.fn(async (...keys) => {
-        keys.forEach(k => mockStore.delete(k));
+        keys.forEach(k => {
+          mockStore.delete(k);
+          setStore.delete(k);
+        });
         return keys.length;
+      }),
+      sadd: jest.fn(async (setKey, ...vals) => {
+        if (!setStore.has(setKey)) setStore.set(setKey, new Set());
+        const s = setStore.get(setKey);
+        vals.forEach(v => s.add(v));
+        return vals.length;
+      }),
+      smembers: jest.fn(async (setKey) => {
+        if (!setStore.has(setKey)) return [];
+        return Array.from(setStore.get(setKey));
+      }),
+      expire: jest.fn(async () => 1),
+      pipeline: jest.fn(() => {
+        const operations = [];
+        const pipe = {
+          sadd: jest.fn((k, ...vals) => {
+            operations.push(() => mockClient.sadd(k, ...vals));
+            return pipe;
+          }),
+          expire: jest.fn((k, ttl) => {
+            operations.push(() => mockClient.expire(k, ttl));
+            return pipe;
+          }),
+          del: jest.fn((...keys) => {
+            operations.push(() => mockClient.del(...keys));
+            return pipe;
+          }),
+          exec: jest.fn(async () => {
+            const results = [];
+            for (const op of operations) {
+              results.push([null, await op()]);
+            }
+            return results;
+          })
+        };
+        return pipe;
       }),
       scan: jest.fn(async (cursor, matchKey, pattern) => {
         const prefix = pattern.replace('*', '');
