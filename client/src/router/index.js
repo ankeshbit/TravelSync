@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { safeRedirect } from '../utils/url'
 
+const LandingView = () => import('../views/LandingView.vue')
 const LoginView = () => import('../views/LoginView.vue')
 const RegisterView = () => import('../views/RegisterView.vue')
 const ForgotPasswordView = () => import('../views/ForgotPasswordView.vue')
@@ -15,7 +16,7 @@ const NotFoundView = () => import('../views/NotFoundView.vue')
 const VerifyEmailView = () => import('../views/VerifyEmailView.vue')
 
 const routes = [
-  { path: '/', redirect: '/login' },
+  { path: '/', component: LandingView, meta: { requiresAuth: false } },
   { path: '/login', component: LoginView },
   { path: '/register', component: RegisterView },
   { path: '/forgot-password', component: ForgotPasswordView },

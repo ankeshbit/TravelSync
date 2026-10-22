@@ -78,15 +78,16 @@
             <!-- Actions: Edit Trip & AI Plan -->
             <div class="flex flex-wrap items-center gap-3 flex-shrink-0 self-start md:self-end">
               <TripPresence :activeMembers="activeMembers" />
-              <!-- From Uiverse.io by ilkhoeri --> 
+              <!-- AI Plan Button (Muted Sage Green) --> 
               <button
                 @click="showAiPlanner = true"
                 title="AI Plan"
+                aria-label="Generate AI Itinerary Plan"
                 type="button"
-                class="group relative outline-0 bg-sky-200 [--sz-btn:68px] [--space:calc(var(--sz-btn)/5.5)] [--gen-sz:calc(var(--space)*2)] [--sz-text:calc(var(--sz-btn)-var(--gen-sz))] h-[var(--sz-btn)] w-[var(--sz-btn)] border border-solid border-transparent rounded-xl flex items-center justify-center aspect-square cursor-pointer transition-transform duration-200 active:scale-[0.95] bg-[linear-gradient(45deg,#efad21,#ffd60f)] [box-shadow:#3c40434d_0_1px_2px_0,#3c404326_0_2px_6px_2px,#0000004d_0_30px_60px_-30px,#34343459_0_-2px_6px_0_inset]"
+                class="group relative [--sz-btn:68px] [--space:calc(var(--sz-btn)/5.5)] [--gen-sz:calc(var(--space)*2)] [--sz-text:calc(var(--sz-btn)-var(--gen-sz))] h-[var(--sz-btn)] w-[var(--sz-btn)] rounded-xl flex items-center justify-center aspect-square cursor-pointer transition-all duration-200 active:scale-[0.95] bg-[#91B49A] hover:bg-[#A2C2AA] active:bg-[#819F89] text-[#151915] border border-[rgba(145,180,154,0.35)] shadow-[0_2px_8px_rgba(0,0,0,0.25)] focus-visible:outline-2 focus-visible:outline-[#91B49A] focus-visible:outline-offset-2"
               >
                 <svg
-                  class="animate-pulse absolute z-10 overflow-visible transition-all duration-300 text-[#ffea50] group-hover:text-white top-[calc(var(--sz-text)/7)] left-[calc(var(--sz-text)/7)] h-[var(--gen-sz)] w-[var(--gen-sz)] group-hover:h-[var(--sz-text)] group-hover:w-[var(--sz-text)] group-hover:left-[calc(var(--sz-text)/4)] group-hover:top-[calc(calc(var(--gen-sz))/2)]"
+                  class="animate-pulse absolute z-10 overflow-visible transition-all duration-300 text-[#151915] group-hover:text-[#151915] top-[calc(var(--sz-text)/7)] left-[calc(var(--sz-text)/7)] h-[var(--gen-sz)] w-[var(--gen-sz)] group-hover:h-[var(--sz-text)] group-hover:w-[var(--sz-text)] group-hover:left-[calc(var(--sz-text)/4)] group-hover:top-[calc(calc(var(--gen-sz))/2)]"
                   stroke="none"
                   viewBox="0 0 24 24"
                   fill="currentColor"
@@ -98,7 +99,7 @@
                   ></path>
                 </svg>
                 <span
-                  class="[font-size:var(--sz-text)] font-extrabold leading-none text-white transition-all duration-200 group-hover:opacity-0"
+                  class="[font-size:var(--sz-text)] font-extrabold leading-none text-[#151915] transition-all duration-200 group-hover:opacity-0"
                   >AI</span
                 >
               </button>

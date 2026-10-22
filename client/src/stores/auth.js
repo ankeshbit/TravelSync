@@ -13,7 +13,7 @@ import {
   getIdToken,
   getFirebaseErrorMessage,
 } from '../services/authService';
-import api from '../api';
+import api, { resetEmailVerifyToast } from '../api';
 
 let syncUserPromise = null;
 
@@ -33,6 +33,8 @@ export const useAuthStore = defineStore('auth', {
     initialized: false,
     // General loading flag used by login / register actions
     loading: false,
+    // Error state if syncing profile with backend database fails
+    syncError: null,
   }),
 
   getters: {
@@ -60,34 +62,6 @@ export const useAuthStore = defineStore('auth', {
       onAuthStateChanged(auth, async (firebaseUser) => {
         clearTimeout(fallbackTimer);
         this.firebaseUser = firebaseUser;
-
-        if (!firebaseUser && import.meta.env.DEV && typeof window !== 'undefined') {
-          let devUser = null;
-          try {
-            const raw = localStorage.getItem('travelsync_dev_user');
-            devUser = raw ? JSON.parse(raw) : {
-              id: 'dev-user-id',
-              name: 'Ankesh Srivastava',
-              email: 'ankeshsrivastava61289@gmail.com'
-            };
-          } catch {
-            devUser = {
-              id: 'dev-user-id',
-              name: 'Ankesh Srivastava',
-              email: 'ankeshsrivastava61289@gmail.com'
-            };
-          }
-          if (devUser) {
-            this.firebaseUser = {
-              uid: devUser.firebaseUid || devUser.id || 'dev-uid',
-              email: devUser.email || 'ankeshsrivastava61289@gmail.com',
-              displayName: devUser.name || 'Ankesh Srivastava',
-              emailVerified: true,
-              getIdToken: async () => 'dev-token',
-            };
-            this.currentUser = devUser;
-          }
-        }
 
         // Immediately mark initialized and unblock app before DB sync
         if (!this.initialized) {
@@ -221,10 +195,15 @@ export const useAuthStore = defineStore('auth', {
         await fbLogout();
         this.firebaseUser = null;
         this.currentUser = null;
+        resetEmailVerifyToast();
         if (typeof window !== 'undefined') {
           localStorage.removeItem('refreshToken');
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          if (window.sessionStorage) {
+            sessionStorage.removeItem('pendingUserName');
+            sessionStorage.removeItem('verify_email_cooldown_end');
+          }
         }
       }
     },
@@ -240,18 +219,30 @@ export const useAuthStore = defineStore('auth', {
       if (this.firebaseUser && !this.firebaseUser.emailVerified) {
         return null;
       }
+      resetEmailVerifyToast();
       if (syncUserPromise) {
         return syncUserPromise;
       }
       syncUserPromise = (async () => {
         try {
-          const pendingName = typeof window !== 'undefined' ? localStorage.getItem('pendingUserName') : null;
-          if (pendingName) {
-            try {
-              await api.put('/auth/me', { name: pendingName });
-              localStorage.removeItem('pendingUserName');
-            } catch {
-              // If error, will retry later
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            const rawPending = sessionStorage.getItem('pendingUserName');
+            if (rawPending) {
+              let parsed = null;
+              try {
+                parsed = JSON.parse(rawPending);
+              } catch {
+                parsed = null;
+              }
+              // Only apply if user's uid matches
+              if (parsed && parsed.uid && parsed.uid === this.firebaseUser?.uid && parsed.name) {
+                try {
+                  await api.put('/auth/me', { name: parsed.name });
+                  sessionStorage.removeItem('pendingUserName');
+                } catch {
+                  // If error, will retry later
+                }
+              }
             }
           }
           const res = await api.get('/auth/me');
@@ -282,10 +273,15 @@ export const useAuthStore = defineStore('auth', {
       syncUserPromise = null;
       this.firebaseUser = null;
       this.currentUser = null;
+      resetEmailVerifyToast();
       if (typeof window !== 'undefined') {
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        if (window.sessionStorage) {
+          sessionStorage.removeItem('pendingUserName');
+          sessionStorage.removeItem('verify_email_cooldown_end');
+        }
       }
     },
   },

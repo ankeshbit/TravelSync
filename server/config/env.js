@@ -177,6 +177,7 @@ function validateEnv(env = process.env) {
     FIREBASE_CLIENT_EMAIL,
     FIREBASE_PRIVATE_KEY,
     REDIS_URL,
+    ML_SERVICE_URL: (env.ML_SERVICE_URL || 'http://127.0.0.1:8000').trim(),
     errors
   };
 }

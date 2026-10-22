@@ -107,4 +107,44 @@ describe('api.js interceptors', () => {
     expect(locationHref).toBe('/verify-email');
     api.defaults.adapter = originalAdapter;
   });
+
+  it('handles ACCOUNT_DELETED explicitly: shows toast, clears auth, signs out, and redirects to /login without redirect query', async () => {
+    const mockToastStore = { showToast: vi.fn() };
+    const mockAuthStore = { clearAuth: vi.fn() };
+    const { setupApiInterceptors } = await import('../api');
+    setupApiInterceptors({ toastStore: mockToastStore, authStore: mockAuthStore });
+
+    const originalAdapter = api.defaults.adapter;
+    api.defaults.adapter = vi.fn().mockImplementation(async (config) => {
+      const err = new Error('Account deleted');
+      err.response = { status: 401, data: { code: 'ACCOUNT_DELETED', message: 'Account deleted' } };
+      err.config = config;
+      throw err;
+    });
+
+    await expect(api.get('/test')).rejects.toThrow();
+    expect(mockToastStore.showToast).toHaveBeenCalledWith('Your account has been deleted', 'error');
+    expect(mockAuthStore.clearAuth).toHaveBeenCalled();
+    expect(mockSignOut).toHaveBeenCalled();
+    expect(locationHref).toBe('/login');
+    api.defaults.adapter = originalAdapter;
+  });
+
+  it('bypasses global error toast on OWNS_SHARED_TRIPS 409 error', async () => {
+    const mockToastStore = { showToast: vi.fn() };
+    const { setupApiInterceptors } = await import('../api');
+    setupApiInterceptors({ toastStore: mockToastStore, authStore: {} });
+
+    const originalAdapter = api.defaults.adapter;
+    api.defaults.adapter = vi.fn().mockImplementation(async (config) => {
+      const err = new Error('Owns shared trips');
+      err.response = { status: 409, data: { code: 'OWNS_SHARED_TRIPS', message: 'You own shared trips', trips: ['Trip A'] } };
+      err.config = config;
+      throw err;
+    });
+
+    await expect(api.delete('/auth/me')).rejects.toThrow();
+    expect(mockToastStore.showToast).not.toHaveBeenCalled();
+    api.defaults.adapter = originalAdapter;
+  });
 });

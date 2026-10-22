@@ -258,27 +258,20 @@ const addPlaceToItinerary = async (place, dayNumber, index) => {
       ? Math.max(...placesOnDay.map(p => Number(p.orderIndex ?? 0))) + 1
       : 0;
 
-    const added = await placesStore.addPlace(props.tripId, {
-      name: place.name,
-      address: place.address || place.name,
+    const payload = {
+      name: place.name || 'Unnamed Place',
+      address: place.address || place.name || '',
       lat: Number(place.lat),
       lng: Number(place.lng),
       dayNumber: Number(dayNumber),
       orderIndex: nextOrderIndex,
       category: place.type || 'attraction',
       note: place.description || ''
-    });
+    };
+
+    const added = await placesStore.addPlace(props.tripId, payload);
     addedPlaces.value = new Set([...addedPlaces.value, key]);
-    addedPlacesList.value.push(added || {
-      name: place.name,
-      address: place.address || place.name,
-      lat: Number(place.lat),
-      lng: Number(place.lng),
-      dayNumber: Number(dayNumber),
-      orderIndex: nextOrderIndex,
-      category: place.type || 'attraction',
-      note: place.description || ''
-    });
+    addedPlacesList.value.push(added || payload);
     toastStore.showToast(`"${place.name}" added to itinerary.`, 'success');
   } catch (err) {
     toastStore.showToast(`Failed to add "${place.name}".`, 'error');

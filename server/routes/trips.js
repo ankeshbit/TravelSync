@@ -1343,13 +1343,17 @@ Return ONLY a valid JSON object (no markdown, no explanation) in this exact form
           "type": "attraction|restaurant|hotel|activity",
           "description": "One sentence why this fits the trip",
           "bestTime": "morning|afternoon|evening",
-          "estimatedDuration": "1-2 hours"
+          "estimatedDuration": "1-2 hours",
+          "lat": 48.8584,
+          "lng": 2.2945,
+          "address": "Area or address"
         }
       ]
     }
   ],
   "tips": ["Practical tip 1", "Practical tip 2", "Practical tip 3"]
-}`;
+}
+Ensure each place includes realistic numerical latitude ("lat") and longitude ("lng") coordinates for the destination, as well as an address.`;
 
     if (!config.GROQ_API_KEY) {
       logger.error('AI service is not configured (missing GROQ_API_KEY)');

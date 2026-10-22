@@ -40,6 +40,15 @@ jest.mock('../config/firebaseAdmin', () => ({
         email_verified: true
       };
     }
+    if (token.endsWith('-token') && token !== 'primary-token') {
+      const prefix = token.replace('-token', '');
+      return {
+        uid: `test-firebase-uid-${prefix}`,
+        email: `${prefix}@example.com`,
+        name: `${prefix.charAt(0).toUpperCase() + prefix.slice(1)} User`,
+        email_verified: true
+      };
+    }
     return {
       uid: 'test-firebase-uid-primary',
       email: 'john@example.com',
@@ -780,217 +789,279 @@ describe('TravelSync API Integration Tests', () => {
       expect(res.status).toBe(403);
     });
 
-    it('DELETE /api/auth/me should return 409 when the user has paid expenses', async () => {
+    it('DELETE /api/auth/me returns 409 OWNS_SHARED_TRIPS when user owns a trip with other members', async () => {
       await prisma.otp.deleteMany();
-      await prisma.expense.create({
-        data: {
-          tripId: 'some-trip',
-          title: 'Lunch',
-          amount: 25,
-          paidById: testUser.id
-        }
-      });
-
       const { createOtp } = require('../utils/otpStore');
       const otp = await createOtp('john@example.com', 'delete');
 
+      // testTripId is owned by testUser and testOtherUser is a member
       const res = await request(app)
         .delete('/api/auth/me')
         .set('Authorization', `Bearer ${userToken}`)
         .send({ otp });
 
       expect(res.status).toBe(409);
-      expect(res.body.code).toBe('ACCOUNT_HAS_EXPENSES');
-
-      await prisma.expense.deleteMany();
+      expect(res.body.code).toBe('OWNS_SHARED_TRIPS');
+      expect(res.body.trips).toEqual(expect.arrayContaining([expect.stringMatching(/Hawaii/)]));
     });
 
-    it('DELETE /api/auth/me should return 409 when the user has expense splits', async () => {
-      await prisma.otp.deleteMany();
-      await prisma.expense.create({
+    it('DELETE /api/auth/me anonymizes user with expenses, preserves ledger balances, and allows email reuse', async () => {
+      const expUser = await prisma.user.create({
         data: {
-          tripId: 'some-trip',
+          id: 'user-expense-test',
+          name: 'Expense Deleting User',
+          email: 'expuser@example.com',
+          firebaseUid: 'test-firebase-uid-expuser'
+        }
+      });
+      const partnerUser = await prisma.user.create({
+        data: {
+          id: 'user-partner-test',
+          name: 'Partner User',
+          email: 'partner@example.com',
+          firebaseUid: 'test-firebase-uid-partner'
+        }
+      });
+
+      // Partner owns the trip, expUser is a member
+      const trip = await prisma.trip.create({
+        data: {
+          id: 'trip-ledger-test',
+          name: 'Ledger Preserved Trip',
+          destination: 'Rome',
+          startDate: new Date(),
+          endDate: new Date(),
+          ownerId: partnerUser.id
+        }
+      });
+      await prisma.tripMember.create({
+        data: { tripId: trip.id, userId: expUser.id }
+      });
+      await prisma.tripMember.create({
+        data: { tripId: trip.id, userId: partnerUser.id }
+      });
+
+      const exp = await prisma.expense.create({
+        data: {
+          tripId: trip.id,
           title: 'Dinner',
-          amount: 50,
-          paidById: testOtherUser.id,
+          amount: 200,
+          currency: 'EUR',
+          paidById: expUser.id,
           splits: {
-            create: [{ userId: testUser.id, amount: 25 }]
+            create: [
+              { userId: expUser.id, amount: 100 },
+              { userId: partnerUser.id, amount: 100 }
+            ]
           }
         }
       });
 
-      const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
-
-      const res = await request(app)
-        .delete('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ otp });
-
-      expect(res.status).toBe(409);
-      expect(res.body.code).toBe('ACCOUNT_HAS_EXPENSES');
-
-      await prisma.expense.deleteMany();
-    });
-
-    it('DELETE /api/auth/me should return 409 when the user owns a trip with expenses', async () => {
-      await prisma.otp.deleteMany();
-      // testTripId is owned by testUser
-      await prisma.expense.create({
-        data: {
-          tripId: testTripId,
-          title: 'Trip activity',
-          amount: 100,
-          paidById: testOtherUser.id
-        }
-      });
-
-      const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
-
-      const res = await request(app)
-        .delete('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ otp });
-
-      expect(res.status).toBe(409);
-      expect(res.body.code).toBe('ACCOUNT_HAS_EXPENSES');
-
-      await prisma.expense.deleteMany();
-    });
-
-    it('DELETE /api/auth/me maps foreign-key constraint violation (P2003) to 409', async () => {
       await prisma.otp.deleteMany();
       const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
+      const otp = await createOtp('expuser@example.com', 'delete');
 
-      const originalDelete = prisma.user.delete;
-      const fkError = new Error('Foreign key constraint failed');
-      fkError.code = 'P2003';
-      prisma.user.delete = jest.fn().mockRejectedValueOnce(fkError);
-
-      const res = await request(app)
-        .delete('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ otp });
-
-      expect(res.status).toBe(409);
-      expect(res.body.code).toBe('ACCOUNT_HAS_EXPENSES');
-      prisma.user.delete = originalDelete;
-
-      const { pendingDeletionUids } = require('../utils/verifyAuthToken');
-      pendingDeletionUids.delete(testUser.firebaseUid);
-      await prisma.user.update({
-        where: { id: testUser.id },
-        data: { refreshToken: null }
-      });
-    });
-
-    it('DELETE /api/auth/me handles Firebase deletion failure (returns 502, does not delete DB user)', async () => {
-      await prisma.otp.deleteMany();
-      const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
-
-      mockDeleteUser.mockRejectedValueOnce(new Error('Firebase connection error'));
+      const cache = require('../services/cache');
+      const invalidateTripSpy = jest.spyOn(cache, 'invalidateTrip');
+      const invalidateDashboardSpy = jest.spyOn(cache, 'invalidateUserDashboard');
 
       const res = await request(app)
         .delete('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ otp });
-
-      expect(res.status).toBe(502);
-      expect(res.body.code).toBe('FIREBASE_DELETE_FAILED');
-
-      // Database profile must still exist and pending deletion state rolled back
-      const dbUser = await prisma.user.findUnique({ where: { id: testUser.id } });
-      expect(dbUser).not.toBeNull();
-      expect(dbUser.refreshToken).toBeNull();
-
-      // Subsequent token verification succeeds without auto-recreation
-      const meRes = await request(app)
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`);
-      expect(meRes.status).toBe(200);
-      expect(meRes.body.email).toBe('john@example.com');
-    });
-
-    it('DELETE /api/auth/me handles database deletion failure after Firebase deletion (returns 500, locks account)', async () => {
-      await prisma.otp.deleteMany();
-      const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
-
-      mockDeleteUser.mockResolvedValueOnce();
-      const originalDelete = prisma.user.delete;
-      prisma.user.delete = jest.fn().mockRejectedValueOnce(new Error('PostgreSQL deadlock / connection failure'));
-
-      const res = await request(app)
-        .delete('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ otp });
-
-      expect(res.status).toBe(500);
-      expect(res.body.code).toBe('DATABASE_DELETE_FAILED');
-      prisma.user.delete = originalDelete;
-
-      // Token verification must reject pending deletion account (401) and not auto-recreate it
-      const meRes = await request(app)
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`);
-      expect(meRes.status).toBe(401);
-
-      // Restore user for next tests
-      const { pendingDeletionUids } = require('../utils/verifyAuthToken');
-      pendingDeletionUids.delete(testUser.firebaseUid);
-      await prisma.user.update({
-        where: { id: testUser.id },
-        data: { refreshToken: null }
-      });
-    });
-
-    it('DELETE /api/auth/me performs successful deletion order (Firebase before DB) and denies subsequent login', async () => {
-      await prisma.otp.deleteMany();
-      const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
-
-      const executionOrder = [];
-      const originalDelete = prisma.user.delete;
-      prisma.user.delete = jest.fn(async (args) => {
-        executionOrder.push('db_delete');
-        return originalDelete(args);
-      });
-      mockDeleteUser.mockImplementationOnce(async () => {
-        executionOrder.push('firebase_delete');
-      });
-
-      const res = await request(app)
-        .delete('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`)
+        .set('Authorization', 'Bearer expuser-token')
         .send({ otp });
 
       expect(res.status).toBe(200);
       expect(res.body.message).toContain('Account deleted successfully');
-      expect(executionOrder).toEqual(['firebase_delete', 'db_delete']);
-      prisma.user.delete = originalDelete;
 
-      // DB profile is deleted
-      const dbUser = await prisma.user.findUnique({ where: { id: testUser.id } });
-      expect(dbUser).toBeNull();
+      // Check DB row was anonymized
+      const anonUser = await prisma.user.findUnique({ where: { id: expUser.id } });
+      expect(anonUser.name).toBe('Deleted User');
+      expect(anonUser.email).toBe(`deleted-${expUser.id}@deleted.travelsync.local`);
+      expect(anonUser.firebaseUid).toBeNull();
+      expect(anonUser.refreshToken).toBe('deleted');
+      expect(anonUser.deletedAt).not.toBeNull();
 
-      // Subsequent token verification is denied (401) and does NOT recreate user
+      // Check ledger balance / splits for other members are preserved
+      const preservedExpense = await prisma.expense.findUnique({ where: { id: exp.id } });
+      expect(preservedExpense).not.toBeNull();
+      expect(preservedExpense.paidById).toBe(expUser.id);
+
+      // Check cache invalidation was called
+      expect(invalidateTripSpy).toHaveBeenCalled();
+      expect(invalidateDashboardSpy).toHaveBeenCalled();
+      invalidateTripSpy.mockRestore();
+      invalidateDashboardSpy.mockRestore();
+
+      // Subsequent token verification for old user is denied (401)
       const meRes = await request(app)
         .get('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`);
+        .set('Authorization', 'Bearer expuser-token');
       expect(meRes.status).toBe(401);
 
-      // Clean up deleted cache and restore testUser for remaining tests
-      const { deletedAccountsCache, pendingDeletionUids } = require('../utils/verifyAuthToken');
-      deletedAccountsCache.delete(testUser.firebaseUid);
-      pendingDeletionUids.delete(testUser.firebaseUid);
-      await prisma.user.upsert({
-        where: { id: testUser.id },
-        update: { refreshToken: null },
-        create: testUser
+      // Email can be reused for a new signup
+      const newSignupUser = await prisma.user.create({
+        data: {
+          name: 'Exp New',
+          email: 'expuser@example.com',
+          firebaseUid: 'new-fb-uid-exp'
+        }
       });
+      expect(newSignupUser.email).toBe('expuser@example.com');
+      await prisma.user.delete({ where: { id: newSignupUser.id } });
+
+      // Clean up test trip records
+      await prisma.expenseSplit.deleteMany({ where: { expenseId: exp.id } });
+      await prisma.expense.delete({ where: { id: exp.id } });
+      await prisma.tripMember.deleteMany({ where: { tripId: trip.id } });
+      await prisma.trip.delete({ where: { id: trip.id } });
+      await prisma.user.delete({ where: { id: partnerUser.id } });
+      await prisma.user.delete({ where: { id: expUser.id } });
+    });
+
+    it('DELETE /api/auth/me hard-deletes user with no financial history', async () => {
+      const cleanUser = await prisma.user.create({
+        data: {
+          name: 'Clean User',
+          email: 'clean@example.com',
+          firebaseUid: 'clean-uid-1'
+        }
+      });
+
+      const cleanToken = 'clean-user-token';
+      const { verifyFirebaseToken } = require('../config/firebaseAdmin');
+      verifyFirebaseToken.mockImplementationOnce(async (tok) => {
+        if (tok === cleanToken) {
+          return {
+            uid: 'clean-uid-1',
+            email: 'clean@example.com',
+            name: 'Clean User',
+            email_verified: true
+          };
+        }
+        return { uid: 'other', email: 'other@example.com' };
+      });
+
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('clean@example.com', 'delete');
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${cleanToken}`)
+        .send({ otp });
+
+      expect(res.status).toBe(200);
+
+      const dbClean = await prisma.user.findUnique({ where: { id: cleanUser.id } });
+      expect(dbClean).toBeNull();
+    });
+
+    it('DELETE /api/auth/me DB failure leaves the account usable and Firebase untouched', async () => {
+      const dbFailUser = await prisma.user.create({
+        data: {
+          name: 'DB Fail User',
+          email: 'dbfail@example.com',
+          firebaseUid: 'test-firebase-uid-dbfail'
+        }
+      });
+
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('dbfail@example.com', 'delete');
+
+      const rec = require('../services/accountDeletionReconciliation');
+      const origFn = rec.deleteOrAnonymizeUser;
+      rec.deleteOrAnonymizeUser = jest.fn().mockRejectedValueOnce(new Error('Simulated DB failure'));
+      mockDeleteUser.mockClear();
+
+      try {
+        const res = await request(app)
+          .delete('/api/auth/me')
+          .set('Authorization', 'Bearer dbfail-token')
+          .send({ otp });
+
+        expect(res.status).toBe(500);
+        expect(res.body.code).toBe('DATABASE_DELETE_FAILED');
+        expect(mockDeleteUser).not.toHaveBeenCalled();
+
+        // Account must still be usable (deletedAt rolled back)
+        const meRes = await request(app)
+          .get('/api/auth/me')
+          .set('Authorization', 'Bearer dbfail-token');
+        expect(meRes.status).toBe(200);
+        expect(meRes.body.email).toBe('dbfail@example.com');
+      } finally {
+        rec.deleteOrAnonymizeUser = origFn;
+        await prisma.user.deleteMany({ where: { id: dbFailUser.id } }).catch(() => {});
+      }
+    });
+
+    it('DELETE /api/auth/me Firebase failure after DB success returns 200', async () => {
+      const fbFailUser = await prisma.user.create({
+        data: {
+          name: 'FB Fail User',
+          email: 'fbfail@example.com',
+          firebaseUid: 'test-firebase-uid-fbfail'
+        }
+      });
+
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('fbfail@example.com', 'delete');
+
+      mockDeleteUser.mockRejectedValueOnce(new Error('Firebase service unreachable'));
+
+      const res = await request(app)
+        .delete('/api/auth/me')
+        .set('Authorization', 'Bearer fbfail-token')
+        .send({ otp });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain('Account deleted successfully');
+
+      const dbUser = await prisma.user.findUnique({ where: { id: fbFailUser.id } });
+      expect(dbUser).toBeNull();
+    });
+
+    it('reconcilePendingDeletions completes a stuck pending user', async () => {
+      const stuckUser = await prisma.user.create({
+        data: {
+          name: 'Stuck User',
+          email: 'stuck@example.com',
+          firebaseUid: 'stuck-fb-uid',
+          deletedAt: new Date(Date.now() - 60000),
+          refreshToken: 'pending_deletion'
+        }
+      });
+
+      const { reconcilePendingDeletions } = require('../services/accountDeletionReconciliation');
+      const outcome = await reconcilePendingDeletions({ prisma, olderThanMs: 0 });
+      expect(outcome.processed).toBeGreaterThanOrEqual(1);
+
+      const dbUser = await prisma.user.findUnique({ where: { id: stuckUser.id } });
+      expect(dbUser).toBeNull();
+    });
+
+    it('POST /api/auth/verify-otp unauthenticated with purpose delete returns 401 and does not consume code', async () => {
+      await prisma.otp.deleteMany();
+      const { createOtp } = require('../utils/otpStore');
+      const otp = await createOtp('john@example.com', 'delete');
+
+      // Unauthenticated verify-otp
+      const resUnauth = await request(app)
+        .post('/api/auth/verify-otp')
+        .send({ email: 'john@example.com', otp, purpose: 'delete' });
+
+      expect(resUnauth.status).toBe(401);
+      expect(resUnauth.body.message).toContain('Authentication required');
+
+      // Code was NOT consumed — verify with valid token succeeds
+      const resAuth = await request(app)
+        .post('/api/auth/verify-otp')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ email: 'john@example.com', otp, purpose: 'delete' });
+
+      expect(resAuth.status).toBe(200);
+      expect(resAuth.body.verified).toBe(true);
     });
 
     it('DELETE /api/auth/me rejects with 403 on expired OTP', async () => {
@@ -1014,9 +1085,17 @@ describe('TravelSync API Integration Tests', () => {
     });
 
     it('DELETE /api/auth/me rejects concurrent deletion requests with 409 DELETION_IN_PROGRESS', async () => {
+      const concurUser = await prisma.user.create({
+        data: {
+          name: 'Concur User',
+          email: 'concur@example.com',
+          firebaseUid: 'test-firebase-uid-concur'
+        }
+      });
+
       await prisma.otp.deleteMany();
       const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
+      const otp = await createOtp('concur@example.com', 'delete');
 
       // Make deleteUser take 60ms to simulate async Firebase operation
       mockDeleteUser.mockImplementationOnce(async () => {
@@ -1026,11 +1105,11 @@ describe('TravelSync API Integration Tests', () => {
       const [res1, res2] = await Promise.all([
         request(app)
           .delete('/api/auth/me')
-          .set('Authorization', `Bearer ${userToken}`)
+          .set('Authorization', 'Bearer concur-token')
           .send({ otp }),
         request(app)
           .delete('/api/auth/me')
-          .set('Authorization', `Bearer ${userToken}`)
+          .set('Authorization', 'Bearer concur-token')
           .send({ otp })
       ]);
 
@@ -1042,28 +1121,23 @@ describe('TravelSync API Integration Tests', () => {
         expect(conflictRes.body.code).toBe('DELETION_IN_PROGRESS');
       }
 
-      // Restore testUser for remaining tests
-      const { deletedAccountsCache, pendingDeletionUids } = require('../utils/verifyAuthToken');
-      deletedAccountsCache.delete(testUser.firebaseUid);
-      pendingDeletionUids.delete(testUser.firebaseUid);
-      await prisma.user.upsert({
-        where: { id: testUser.id },
-        update: { refreshToken: null, deletedAt: null },
-        create: testUser
-      });
+      await prisma.user.deleteMany({ where: { id: concurUser.id } });
     });
 
     it('DELETE /api/auth/me allows retrying a partially completed deletion when Firebase is already deleted', async () => {
+      const retryUser = await prisma.user.create({
+        data: {
+          name: 'Retry User',
+          email: 'retry@example.com',
+          firebaseUid: 'test-firebase-uid-retry',
+          deletedAt: new Date(),
+          refreshToken: 'pending_deletion'
+        }
+      });
+
       await prisma.otp.deleteMany();
       const { createOtp } = require('../utils/otpStore');
-      const otp = await createOtp('john@example.com', 'delete');
-
-      // Mark user with durable deletedAt in DB to simulate partial failure
-      await prisma.user.upsert({
-        where: { id: testUser.id },
-        update: { deletedAt: new Date(), refreshToken: 'pending_deletion' },
-        create: { ...testUser, deletedAt: new Date(), refreshToken: 'pending_deletion' }
-      });
+      const otp = await createOtp('retry@example.com', 'delete');
 
       // Firebase returns auth/user-not-found
       const notFoundErr = new Error('User not found');
@@ -1072,25 +1146,15 @@ describe('TravelSync API Integration Tests', () => {
 
       const res = await request(app)
         .delete('/api/auth/me')
-        .set('Authorization', `Bearer ${userToken}`)
+        .set('Authorization', 'Bearer retry-token')
         .send({ otp });
 
       expect(res.status).toBe(200);
       expect(res.body.message).toContain('Account deleted successfully');
 
       // DB profile is deleted
-      const dbUser = await prisma.user.findUnique({ where: { id: testUser.id } });
+      const dbUser = await prisma.user.findUnique({ where: { id: retryUser.id } });
       expect(dbUser).toBeNull();
-
-      // Restore testUser for remaining tests
-      const { deletedAccountsCache, pendingDeletionUids } = require('../utils/verifyAuthToken');
-      deletedAccountsCache.delete(testUser.firebaseUid);
-      pendingDeletionUids.delete(testUser.firebaseUid);
-      await prisma.user.upsert({
-        where: { id: testUser.id },
-        update: { refreshToken: null, deletedAt: null },
-        create: testUser
-      });
     });
 
     it('ordinary API endpoints reject a user marked with deletedAt even after memory cache loss (simulating server restart)', async () => {

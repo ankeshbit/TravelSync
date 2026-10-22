@@ -98,3 +98,19 @@ Desktop.ini
 .eslintcache
 .stylelintcache
 *.tsbuildinfo
+/Earth_wAtmos_spin_02_1080p60.mp4
+
+# ================================
+# PYTHON
+# ================================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.venv/
+venv/
+ENV/
+

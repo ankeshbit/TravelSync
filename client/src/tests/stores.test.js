@@ -23,7 +23,8 @@ vi.mock('../api', () => ({
     post: vi.fn().mockResolvedValue({ data: {} }),
     put: vi.fn().mockResolvedValue({ data: {} }),
     delete: vi.fn().mockResolvedValue({ data: {} })
-  }
+  },
+  resetEmailVerifyToast: vi.fn()
 }));
 
 describe('Pinia Stores', () => {
@@ -31,6 +32,7 @@ describe('Pinia Stores', () => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   describe('useAuthStore', () => {
@@ -101,6 +103,31 @@ describe('Pinia Stores', () => {
       expect(r1).toEqual({ id: 'u1', name: 'User 1' });
       expect(r2).toEqual({ id: 'u1', name: 'User 1' });
       expect(auth.currentUser).toEqual({ id: 'u1', name: 'User 1' });
+    });
+
+    it('applies pendingUserName from sessionStorage when uid matches', async () => {
+      const auth = useAuthStore();
+      auth.firebaseUser = { uid: 'uid-alice', email: 'alice@example.com', emailVerified: true };
+      sessionStorage.setItem('pendingUserName', JSON.stringify({ uid: 'uid-alice', name: 'Alice Wonder' }));
+      api.put.mockResolvedValueOnce({ data: { success: true } });
+      api.get.mockResolvedValueOnce({ data: { id: 'u-alice', name: 'Alice Wonder' } });
+
+      await auth._syncMongoUser();
+
+      expect(api.put).toHaveBeenCalledWith('/auth/me', { name: 'Alice Wonder' });
+      expect(sessionStorage.getItem('pendingUserName')).toBeNull();
+    });
+
+    it('does not apply pendingUserName if uid does not match', async () => {
+      const auth = useAuthStore();
+      auth.firebaseUser = { uid: 'uid-different', email: 'diff@example.com', emailVerified: true };
+      sessionStorage.setItem('pendingUserName', JSON.stringify({ uid: 'uid-alice', name: 'Alice Wonder' }));
+      api.get.mockResolvedValueOnce({ data: { id: 'u-diff', name: 'Existing Name' } });
+
+      await auth._syncMongoUser();
+
+      expect(api.put).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem('pendingUserName')).not.toBeNull();
     });
   });
 

@@ -7,16 +7,15 @@ export const useAppLoader = defineStore('appLoader', () => {
   const authStore = useAuthStore();
   const tripsStore = useTripsStore();
 
-  const isInitialLoading = ref(true);
+  const isInitialLoading = ref(false);
   const isDataLoading = ref(false);
   const customLoadingCount = ref(0);
   const customMessage = ref('');
   const loadingMessage = ref('Getting your journey ready…');
 
-  const initialLoadStartedAt = Date.now();
-  const MIN_INITIAL_DURATION = 750; // ms minimum visible duration for initial brand experience
-  const DATA_DEBOUNCE_DELAY = 160;  // ms debounce before showing overlay for subsequent requests
-  const MIN_DATA_DURATION = 400;    // ms minimum visible duration once overlay is shown
+  const COLD_LOAD_DELAY = 300;    // ms delay before showing overlay on cold load
+  const DATA_DEBOUNCE_DELAY = 300;  // ms debounce before showing overlay for subsequent requests
+  const MIN_DATA_DURATION = 300;    // ms minimum visible duration once overlay is shown
 
   let dataDebounceTimer = null;
   let dataShownAt = 0;
@@ -24,20 +23,22 @@ export const useAppLoader = defineStore('appLoader', () => {
   let initialTimer = null;
 
   function finishInitialLoad() {
-    if (!isInitialLoading.value) return;
-    const elapsed = Date.now() - initialLoadStartedAt;
-    const remaining = Math.max(0, MIN_INITIAL_DURATION - elapsed);
-    if (initialTimer) clearTimeout(initialTimer);
-    initialTimer = setTimeout(() => {
-      isInitialLoading.value = false;
+    if (initialTimer) {
+      clearTimeout(initialTimer);
       initialTimer = null;
-    }, remaining);
+    }
+    isInitialLoading.value = false;
   }
 
   // ── 1. Initial Authentication Restoration ──────────────────────────────────
-  if (authStore.initialized) {
-    finishInitialLoad();
-  } else {
+  if (!authStore.initialized) {
+    initialTimer = setTimeout(() => {
+      initialTimer = null;
+      if (!authStore.initialized) {
+        isInitialLoading.value = true;
+      }
+    }, COLD_LOAD_DELAY);
+
     const stopAuthWatch = watch(
       () => authStore.initialized,
       (initialized) => {
@@ -50,9 +51,7 @@ export const useAppLoader = defineStore('appLoader', () => {
 
     // Safety fallback: never leave user stuck if Firebase session fails completely
     setTimeout(() => {
-      if (isInitialLoading.value) {
-        isInitialLoading.value = false;
-      }
+      finishInitialLoad();
     }, 6000);
   }
 

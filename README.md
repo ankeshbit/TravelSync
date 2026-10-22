@@ -233,11 +233,11 @@ VITE_FIREBASE_APP_ID=1:123456789012:web:abcdef123456
 |--------|-------|------|-------------|
 | GET | `/api/auth/me` | Firebase ID Token | Retrieve or initialize user profile in database for authenticated Firebase user |
 | PUT | `/api/auth/me` | Firebase ID Token | Update user display name in database |
-| DELETE | `/api/auth/me` | Firebase ID Token | Cascade-delete user profile, owned trips, and associations (requires OTP verification) |
+| DELETE | `/api/auth/me` | Firebase ID Token | Delete or anonymize user profile (users with financial records are anonymized to protect ledger balances; requires OTP verification and transfer/deletion of any shared trips) |
 | POST | `/api/auth/logout` | Optional | Clear server-side session cookies/state (primary sign-out via Firebase SDK) |
 | POST | `/api/auth/upload-photo` | Firebase ID Token | Upload profile picture to server storage and update user record |
 | POST | `/api/auth/send-otp` | Firebase ID Token | Dispatch email OTP code for sensitive actions (account deletion) |
-| POST | `/api/auth/verify-otp` | No | Validate OTP token before proceeding with account deletion |
+| POST | `/api/auth/verify-otp` | Required for purpose=delete | Validate OTP code before proceeding (requires Bearer token when purpose is delete) |
 
 ### Trip Management Endpoints
 | Method | Route | Auth | Description |

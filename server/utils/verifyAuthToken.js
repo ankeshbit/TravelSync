@@ -98,12 +98,6 @@ async function verifyAuthToken(token, options = {}) {
   const cleanToken = token.trim();
   let verifiedUserId = null;
 
-  // 0. Development fallback token for automated visual testing and inspection
-  if (config.NODE_ENV !== 'production' && cleanToken === 'dev-token') {
-    const devUser = await prisma.user.findFirst({ where: { email: 'ankeshsrivastava61289@gmail.com' } });
-    if (devUser) return devUser;
-  }
-
   // 1. Neon Auth session check (only if config.NEON_AUTH_ENABLED is true)
   if (config.NEON_AUTH_ENABLED) {
     const cached = neonSessionCache.get(cleanToken);
@@ -181,8 +175,22 @@ async function verifyAuthToken(token, options = {}) {
     const firebasePicture = decodedFirebaseToken.picture || '';
     const isEmailVerified = decodedFirebaseToken.email_verified === true;
 
-    // Deny immediately if UID is marked deleted, or pending deletion (unless allowPendingDeletion)
-    if (deletedAccountsCache.has(firebaseUid) || (!allowPendingDeletion && pendingDeletionUids.has(firebaseUid))) {
+    // Deny immediately if UID is marked deleted
+    if (deletedAccountsCache.has(firebaseUid)) {
+      const err = new Error('Account has been deleted or is pending deletion.');
+      err.statusCode = 401;
+      err.code = 'ACCOUNT_DELETED';
+      throw err;
+    }
+
+    // If deletion is already actively in progress and another deletion request arrives, reject with 409
+    if (pendingDeletionUids.has(firebaseUid)) {
+      if (allowPendingDeletion) {
+        const err = new Error('Account deletion is already in progress.');
+        err.statusCode = 409;
+        err.code = 'DELETION_IN_PROGRESS';
+        throw err;
+      }
       const err = new Error('Account has been deleted or is pending deletion.');
       err.statusCode = 401;
       err.code = 'ACCOUNT_DELETED';
@@ -238,6 +246,12 @@ async function verifyAuthToken(token, options = {}) {
 
       // Do not auto-provision if marked deleted or pending deletion
       if (deletedAccountsCache.has(firebaseUid) || pendingDeletionUids.has(firebaseUid)) {
+        if (allowPendingDeletion && pendingDeletionUids.has(firebaseUid)) {
+          const err = new Error('Account deletion is already in progress.');
+          err.statusCode = 409;
+          err.code = 'DELETION_IN_PROGRESS';
+          throw err;
+        }
         const err = new Error('Account has been deleted or is pending deletion.');
         err.statusCode = 401;
         err.code = 'ACCOUNT_DELETED';

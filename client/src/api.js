@@ -45,12 +45,38 @@ api.interceptors.request.use(async (config) => {
 });
 
 let hasShownEmailVerifyToast = false;
+export const resetEmailVerifyToast = () => {
+  hasShownEmailVerifyToast = false;
+};
 
 // ── Response interceptor ──────────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const status = error.response?.status;
+
+    // Explicit handling for ACCOUNT_DELETED: toast, clearAuth, signOut, redirect to /login without redirect param
+    if (error.response?.data?.code === 'ACCOUNT_DELETED') {
+      if (toastStoreRef) {
+        toastStoreRef.showToast('Your account has been deleted', 'error');
+      }
+      authStoreRef?.clearAuth();
+      try {
+        await signOut(auth);
+      } catch {
+        // Ignore sign-out error
+      }
+      resetEmailVerifyToast();
+      if (typeof window !== 'undefined') {
+        window.location.href = LOGIN_ROUTE;
+      }
+      return Promise.reject(error);
+    }
+
+    // OWNS_SHARED_TRIPS 409 is displayed inline in OtpModal; bypass global error toast
+    if (error.response?.data?.code === 'OWNS_SHARED_TRIPS') {
+      return Promise.reject(error);
+    }
 
     // Special handling for EMAIL_NOT_VERIFIED (403): do not sign out, redirect to /verify-email
     if (status === 403 && error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {

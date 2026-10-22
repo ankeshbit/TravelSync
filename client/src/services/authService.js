@@ -23,11 +23,21 @@ export async function registerWithEmail(name, email, password) {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   // Persist the display name in Firebase immediately
   await updateProfile(credential.user, { displayName: name });
-  // Send verification email to activate account
-  await sendEmailVerification(credential.user);
-  // Store chosen name to submit to backend after email verification
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('pendingUserName', name);
+  // Send verification email to activate account; catch failure so registration completes
+  try {
+    await sendEmailVerification(credential.user);
+  } catch {
+    try {
+      const { useToastStore } = await import('../stores/toast');
+      const toastStore = useToastStore();
+      toastStore.showToast('Could not send verification email automatically. You can resend it below.', 'warning');
+    } catch {
+      // Ignore if pinia/toast store is unavailable in test environment
+    }
+  }
+  // Store chosen name tied to uid in sessionStorage to submit to backend after verification
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    sessionStorage.setItem('pendingUserName', JSON.stringify({ uid: credential.user.uid, name }));
   }
   return credential.user;
 }

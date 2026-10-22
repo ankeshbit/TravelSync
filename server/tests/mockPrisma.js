@@ -181,6 +181,35 @@ function setupPrismaMock() {
     return results.map(u => ({ ...u }));
   });
 
+  prisma.user.upsert = jest.fn(async ({ where, update, create }) => {
+    let user = null;
+    if (where.id) {
+      user = users.get(where.id);
+    } else if (where.email) {
+      user = Array.from(users.values()).find(u => u.email.toLowerCase() === where.email.toLowerCase());
+    } else if (where.firebaseUid) {
+      user = Array.from(users.values()).find(u => u.firebaseUid === where.firebaseUid);
+    }
+    if (user) {
+      Object.assign(user, update);
+      return { ...user };
+    }
+    const newUser = {
+      id: create.id || `user-${crypto.randomUUID()}`,
+      name: create.name || '',
+      email: (create.email || '').toLowerCase(),
+      password: create.password || '',
+      firebaseUid: create.firebaseUid || null,
+      picture: create.picture || '',
+      refreshToken: create.refreshToken || null,
+      deletedAt: create.deletedAt || null,
+      createdAt: new Date(),
+      ...create
+    };
+    users.set(newUser.id, newUser);
+    return { ...newUser };
+  });
+
   // ── prisma.trip ────────────────────────────────────────────────────────────
   function populateTrip(trip) {
     if (!trip) return null;
@@ -285,6 +314,22 @@ function setupPrismaMock() {
 
   prisma.trip.findMany = jest.fn(async ({ where, include, select }) => {
     let results = Array.from(trips.values());
+    if (where?.ownerId) {
+      results = results.filter(t => t.ownerId === where.ownerId);
+    }
+    if (where?.members?.some) {
+      results = results.filter(t => {
+        const cond = where.members.some;
+        const tripMems = Array.from(tripMembers.values()).filter(m => m.tripId === t.id);
+        if (cond.userId?.not) {
+          return tripMems.some(m => m.userId !== cond.userId.not);
+        }
+        if (cond.userId) {
+          return tripMems.some(m => m.userId === cond.userId);
+        }
+        return tripMems.length > 0;
+      });
+    }
     if (where?.OR) {
       results = results.filter(t => {
         return where.OR.some(cond => {
@@ -318,7 +363,10 @@ function setupPrismaMock() {
   prisma.trip.deleteMany = jest.fn(async ({ where }) => {
     let count = 0;
     for (const [id, t] of trips.entries()) {
-      if (where?.name?.in && where.name.in.includes(t.name)) {
+      if (where?.ownerId && t.ownerId === where.ownerId) {
+        trips.delete(id);
+        count++;
+      } else if (where?.name?.in && where.name.in.includes(t.name)) {
         trips.delete(id);
         count++;
       }
@@ -394,10 +442,12 @@ function setupPrismaMock() {
     );
   });
 
-  prisma.tripMember.deleteMany = jest.fn(async ({ where }) => {
+  prisma.tripMember.deleteMany = jest.fn(async ({ where } = {}) => {
     let count = 0;
     for (const [id, m] of tripMembers.entries()) {
-      if (where?.tripId && m.tripId === where.tripId) {
+      const matchTrip = !where?.tripId || m.tripId === where.tripId;
+      const matchUser = !where?.userId || m.userId === where.userId;
+      if (matchTrip && matchUser) {
         tripMembers.delete(id);
         count++;
       }

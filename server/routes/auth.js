@@ -90,6 +90,9 @@ const {
   resolveOtpTargetEmail
 } = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
+const cache = require('../services/cache');
+const { getIO, removeAllUsersFromTripRoom } = require('../socket');
+const accountDeletion = require('../services/accountDeletionReconciliation');
 
 // ─── Multer Setup ─────────────────────────────────────────────────────────────
 const upload = multer({
@@ -245,7 +248,8 @@ const activeDeletions = new Set();
  * @swagger
  * /api/auth/me:
  *   delete:
- *     summary: Delete user account
+ *     summary: Delete or anonymize user account
+ *     description: Deletes user account with OTP verification. Users with expense records are anonymized to preserve ledger integrity. Users who own trips with other members must transfer or delete them first.
  *     tags: [Auth]
  *     security:
  *       - BearerAuth: []
@@ -271,23 +275,49 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    // Pre-check: if the user has any expenses paid or splits, or owns trips that have expenses, reject with 409 before burning the OTP
-    const [expensesPaidCount, expenseSplitsCount, tripExpensesCount] = await Promise.all([
-      prisma.expense.count({ where: { paidById: req.userId } }),
-      prisma.expenseSplit.count({ where: { userId: req.userId } }),
-      prisma.expense.count({ where: { trip: { ownerId: req.userId } } })
-    ]);
-
-    if (expensesPaidCount > 0 || expenseSplitsCount > 0 || tripExpensesCount > 0) {
-      return res.status(409).json({
-        message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
-        code: 'ACCOUNT_HAS_EXPENSES'
-      });
-    }
-
     const otpResult = await verifyOtp(user.email, otp, 'delete');
     if (!otpResult.ok) {
       return res.status(403).json({ message: otpResult.reason || 'Invalid or expired OTP.' });
+    }
+
+    // Item 4: Before deleting anything, if user owns any trip that has OTHER members, return 409 OWNS_SHARED_TRIPS
+    const ownedTripsWithOtherMembers = await prisma.trip.findMany({
+      where: {
+        ownerId: req.userId,
+        members: {
+          some: {
+            userId: { not: req.userId }
+          }
+        }
+      },
+      select: { id: true, name: true }
+    });
+
+    if (ownedTripsWithOtherMembers.length > 0) {
+      const tripNames = ownedTripsWithOtherMembers.map(t => t.name);
+      return res.status(409).json({
+        message: `Cannot delete account while you own shared trips (${tripNames.join(', ')}). Please transfer ownership or delete these trips first.`,
+        code: 'OWNS_SHARED_TRIPS',
+        trips: tripNames
+      });
+    }
+
+    // Query affected trips and members before deletion for cache & socket cleanup
+    let affectedTrips = [];
+    try {
+      affectedTrips = await prisma.trip.findMany({
+        where: {
+          OR: [
+            { ownerId: req.userId },
+            { members: { some: { userId: req.userId } } }
+          ]
+        },
+        include: {
+          members: { select: { userId: true } }
+        }
+      });
+    } catch (queryErr) {
+      logger.warn({ err: queryErr.message }, 'Failed to query affected trips for deletion invalidation');
     }
 
     // Stage user as pending deletion durably in PostgreSQL and in memory
@@ -304,69 +334,56 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       logger.warn({ err: stageErr.message }, 'Failed to set user status to pending_deletion');
     }
 
-    // Delete Firebase user via firebase-admin if firebaseUid is present
-    if (user.firebaseUid) {
-      try {
-        const { getAdminApp } = require('../config/firebaseAdmin');
-        const { getAuth } = require('firebase-admin/auth');
-        const adminApp = getAdminApp();
-        await getAuth(adminApp).deleteUser(user.firebaseUid);
-      } catch (fbErr) {
-        const isNotFound = fbErr && (
-          fbErr.code === 'auth/user-not-found' ||
-          String(fbErr.message || '').includes('user-not-found')
-        );
-        if (!isNotFound) {
-          logger.error({ err: fbErr.message }, 'Failed to delete Firebase user during account deletion');
-          // Rollback pending deletion state so user can retry or use account safely
-          unmarkUserPendingDeletion(user.firebaseUid);
-          try {
-            await prisma.user.update({
-              where: { id: req.userId },
-              data: {
-                deletedAt: null,
-                refreshToken: null
-              }
-            });
-          } catch (_rollbackErr) {
-            logger.warn({ err: _rollbackErr.message }, 'Failed to rollback pending deletion state');
-          }
-          return res.status(502).json({
-            message: 'Failed to delete authentication account. Please try again.',
-            code: 'FIREBASE_DELETE_FAILED'
-          });
-        }
-        logger.info('Firebase user already deleted (auth/user-not-found), continuing database deletion');
-      }
-    }
-
-    // Delete DB user inside a transaction mapping P2003 to 409
+    // Item 3 safe reordering: Run DB work (hard delete or anonymise) inside a transaction FIRST
+    let outcome;
     try {
-      await prisma.$transaction(async (tx) => {
-        await tx.tripMember.deleteMany({ where: { userId: req.userId } });
-        await tx.trip.deleteMany({ where: { ownerId: req.userId } });
-        await tx.user.delete({ where: { id: req.userId } });
-      });
+      outcome = await accountDeletion.deleteOrAnonymizeUser(prisma, user);
     } catch (dbErr) {
-      if (dbErr.code === 'P2025') {
-        // Record already deleted, proceed as success
-        markUserDeleted(user.firebaseUid);
-        return res.json({ message: 'Account deleted successfully.' });
-      }
-      if (dbErr.code === 'P2003') {
-        return res.status(409).json({
-          message: 'Cannot delete account because you have recorded expenses or splits. Please delete or settle them before deleting your account.',
-          code: 'ACCOUNT_HAS_EXPENSES'
-        });
-      }
       logger.error({ err: dbErr.message }, 'Failed to delete user profile from database');
+      unmarkUserPendingDeletion(user.firebaseUid);
+      try {
+        await prisma.user.update({
+          where: { id: req.userId },
+          data: {
+            deletedAt: null,
+            refreshToken: null
+          }
+        });
+      } catch (_rollbackErr) {
+        logger.warn({ err: _rollbackErr.message }, 'Failed to rollback pending deletion state');
+      }
       return res.status(500).json({
         message: 'Failed to delete user profile from database. Account deletion incomplete.',
         code: 'DATABASE_DELETE_FAILED'
       });
     }
 
-    markUserDeleted(user.firebaseUid);
+    // THEN delete Firebase user (if DB succeeded)
+    if (user.firebaseUid) {
+      try {
+        const { getAdminApp } = require('../config/firebaseAdmin');
+        const { getAuth } = require('firebase-admin/auth');
+        const adminApp = getAdminApp();
+        await getAuth(adminApp).deleteUser(user.firebaseUid);
+        markUserDeleted(user.firebaseUid);
+      } catch (fbErr) {
+        const isNotFound = fbErr && (
+          fbErr.code === 'auth/user-not-found' ||
+          String(fbErr.message || '').includes('user-not-found')
+        );
+        if (!isNotFound) {
+          logger.warn(
+            { err: fbErr.message, userId: user.id },
+            'Firebase user deletion failed after DB success; recorded for reconciler'
+          );
+        } else {
+          markUserDeleted(user.firebaseUid);
+        }
+        // Still return 200 because DB work is complete and user cannot log in
+      }
+    } else {
+      markUserDeleted(user.firebaseUid);
+    }
 
     // Remove the user's uploaded photo file
     if (user.picture && user.picture.startsWith('/uploads/')) {
@@ -378,6 +395,32 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       } catch (fileErr) {
         logger.warn({ err: fileErr.message }, 'Failed to delete user uploaded photo during account deletion');
       }
+    }
+
+    // Cache and socket cleanup (Item 4)
+    try {
+      const allAffectedUserIds = new Set([req.userId]);
+      for (const t of affectedTrips) {
+        const memberIds = (t.members || []).map(m => m.userId);
+        memberIds.forEach(id => allAffectedUserIds.add(id));
+
+        // Call cache.invalidateTrip
+        await cache.invalidateTrip(t.id, memberIds);
+
+        // If trip was owned by user and deleted, notify and clean room
+        if (t.ownerId === req.userId && outcome?.deleted) {
+          const io = req.io || getIO();
+          if (io) {
+            io.to(`trip:${t.id}`).emit('trip:deleted', { tripId: t.id });
+          }
+          await removeAllUsersFromTripRoom(t.id, { silent: true });
+        }
+      }
+
+      await cache.invalidateUserDashboard(Array.from(allAffectedUserIds));
+      await cache.invalidateExplore(req.userId);
+    } catch (cleanupErr) {
+      logger.warn({ err: cleanupErr.message }, 'Post-deletion cache/socket cleanup warning');
     }
 
     res.json({ message: 'Account deleted successfully.' });
@@ -531,6 +574,26 @@ router.post(
   validate({ body: verifyOtpSchema }),
   asyncHandler(async (req, res) => {
     const { email, otp, purpose = 'register' } = req.body;
+
+    // Hardening (Item 10): purpose: 'delete' requires a valid Bearer token whose email matches target email
+    if (purpose === 'delete') {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+      if (!token) {
+        return res.status(401).json({ message: 'Authentication required.' });
+      }
+      let authedUser;
+      try {
+        const { verifyAuthToken } = require('../utils/verifyAuthToken');
+        authedUser = await verifyAuthToken(token);
+      } catch (err) {
+        return res.status(err.statusCode || 401).json({ message: err.message || 'Invalid or expired token.' });
+      }
+      const targetEmail = (email || '').toLowerCase().trim();
+      if (!authedUser || !authedUser.email || authedUser.email.toLowerCase().trim() !== targetEmail) {
+        return res.status(401).json({ message: 'Token email does not match requested email.' });
+      }
+    }
 
     const result = await verifyOtp(email.toLowerCase().trim(), otp, purpose);
     if (!result.ok) {

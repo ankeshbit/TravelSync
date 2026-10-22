@@ -1,5 +1,60 @@
+const path = require('path');
+const fs = require('fs');
 const { prisma: defaultPrisma } = require('../db');
 const logger = require('../utils/logger');
+
+/**
+ * Deletes or anonymizes a user in PostgreSQL based on financial records.
+ * - If user has expenses paid, splits, or trips with expenses:
+ *   Removes trip memberships, and updates user row to anonymized tombstone:
+ *   name: 'Deleted User', email: `deleted-${id}@deleted.travelsync.local`, picture: '',
+ *   password: '', firebaseUid: null, refreshToken: 'deleted', deletedAt set.
+ * - If user has no financial history:
+ *   Hard-deletes memberships, owned empty trips, and user row.
+ *
+ * @param {object} dbClient - Prisma client instance
+ * @param {object} user - User record (id, firebaseUid, deletedAt, picture)
+ * @returns {Promise<{ deleted: boolean, anonymized: boolean }>}
+ */
+async function deleteOrAnonymizeUser(dbClient, user) {
+  const [expensesPaidCount, expenseSplitsCount, tripExpensesCount] = await Promise.all([
+    dbClient.expense.count({ where: { paidById: user.id } }),
+    dbClient.expenseSplit.count({ where: { userId: user.id } }),
+    dbClient.expense.count({ where: { trip: { ownerId: user.id } } })
+  ]);
+
+  const hasFinancialHistory = expensesPaidCount > 0 || expenseSplitsCount > 0 || tripExpensesCount > 0;
+
+  const performDbWork = async (tx) => {
+    // Delete user's TripMember rows
+    await tx.tripMember.deleteMany({ where: { userId: user.id } });
+
+    if (!hasFinancialHistory) {
+      await tx.trip.deleteMany({ where: { ownerId: user.id } });
+      await tx.user.delete({ where: { id: user.id } });
+      return { deleted: true, anonymized: false };
+    } else {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          name: 'Deleted User',
+          email: `deleted-${user.id}@deleted.travelsync.local`,
+          picture: '',
+          password: '',
+          firebaseUid: null,
+          refreshToken: 'deleted',
+          deletedAt: user.deletedAt || new Date()
+        }
+      });
+      return { deleted: false, anonymized: true };
+    }
+  };
+
+  if (typeof dbClient.$transaction === 'function') {
+    return await dbClient.$transaction(performDbWork);
+  }
+  return await performDbWork(dbClient);
+}
 
 /**
  * Background and on-demand reconciliation service for account deletions.
@@ -75,39 +130,27 @@ async function reconcilePendingDeletions({
           }
         }
 
-        // 2. Check foreign key dependencies
-        const [expensesPaidCount, expenseSplitsCount, tripExpensesCount] = await Promise.all([
-          dbClient.expense.count({ where: { paidById: user.id } }),
-          dbClient.expenseSplit.count({ where: { userId: user.id } }),
-          dbClient.expense.count({ where: { trip: { ownerId: user.id } } })
-        ]);
-
-        if (expensesPaidCount === 0 && expenseSplitsCount === 0 && tripExpensesCount === 0) {
-          // Clean deletion: remove memberships, owned empty trips, and user record
-          await dbClient.$transaction(async (tx) => {
-            await tx.tripMember.deleteMany({ where: { userId: user.id } });
-            await tx.trip.deleteMany({ where: { ownerId: user.id } });
-            await tx.user.delete({ where: { id: user.id } });
-          });
+        // 2. Perform DB deletion or anonymization
+        const outcome = await deleteOrAnonymizeUser(dbClient, user);
+        if (outcome.deleted) {
           result.deleted++;
           logger.info({ userId: user.id }, '[Reconciliation] Cleanly deleted pending user from database');
         } else {
-          // User has shared financial history: preserve integrity by anonymizing PII
-          await dbClient.user.update({
-            where: { id: user.id },
-            data: {
-              name: 'Deleted User',
-              email: `deleted-${user.id}@deleted.travelsync.local`,
-              picture: '',
-              password: '',
-              refreshToken: 'deleted'
-            }
-          });
           result.anonymized++;
           logger.info(
-            { userId: user.id, expensesPaidCount, expenseSplitsCount },
+            { userId: user.id },
             '[Reconciliation] Anonymized user profile with preserved financial records'
           );
+        }
+
+        // Clean up uploaded photo if any
+        if (user.picture && user.picture.startsWith('/uploads/')) {
+          const photoPath = path.join(__dirname, '..', user.picture);
+          try {
+            if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+          } catch (_e) {
+            // Ignore photo deletion errors on disk
+          }
         }
       } catch (err) {
         logger.error({ userId: user.id, err: err.message }, '[Reconciliation] Error reconciling user');
@@ -122,5 +165,6 @@ async function reconcilePendingDeletions({
 }
 
 module.exports = {
+  deleteOrAnonymizeUser,
   reconcilePendingDeletions
 };
