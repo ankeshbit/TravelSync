@@ -91,8 +91,12 @@ api.interceptors.response.use(
     }
 
     if (status === 401) {
-      // Firebase tokens expire after 1 hour. Try a forced refresh once.
       const originalRequest = error.config || {};
+      if (originalRequest.skipAuthRedirect) {
+        return Promise.reject(error);
+      }
+
+      // Firebase tokens expire after 1 hour. Try a forced refresh once.
       if (!originalRequest._firebaseRetry) {
         originalRequest._firebaseRetry = true;
         try {

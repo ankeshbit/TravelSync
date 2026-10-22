@@ -44,14 +44,18 @@
         <div class="flex items-center gap-1">
           <button
             @click="resetChat"
+            id="travel-chatbot-reset-btn"
             title="Reset conversation"
+            aria-label="Reset conversation"
             class="p-1.5 text-[#7E8075] dark:text-[#85867C] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors"
           >
             <span class="material-symbols-outlined text-[18px]">refresh</span>
           </button>
           <button
             @click="toggleChat"
+            id="travel-chatbot-close-btn"
             title="Minimize"
+            aria-label="Close"
             class="p-1.5 text-[#7E8075] dark:text-[#85867C] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors"
           >
             <span class="material-symbols-outlined text-[20px]">close</span>
@@ -184,13 +188,13 @@
                   <!-- Badges / Budget -->
                   <div class="flex flex-wrap gap-1.5 text-[10px]">
                     <span class="px-2 py-0.5 bg-[#F5F4EE] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] rounded text-[#1C1D1A] dark:text-[#D5D3CA] font-medium">
-                      💰 {{ rec.currency }} {{ rec.estimated_daily_cost.toLocaleString() }}/day (~${{ rec.estimated_daily_cost_usd }} USD)
+                      💰 {{ rec.currency || 'USD' }} {{ rec.estimated_daily_cost != null ? Number(rec.estimated_daily_cost).toLocaleString() : 'N/A' }}/day (~${{ rec.estimated_daily_cost_usd != null ? rec.estimated_daily_cost_usd : 'N/A' }} USD)
                     </span>
-                    <span class="px-2 py-0.5 bg-[#F5F4EE] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] rounded text-[#1C1D1A] dark:text-[#D5D3CA]">
-                      ☀️ Best: {{ (rec.best_seasons || []).join(', ') }}
+                    <span v-if="Array.isArray(rec.best_seasons) && rec.best_seasons.length > 0" class="px-2 py-0.5 bg-[#F5F4EE] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] rounded text-[#1C1D1A] dark:text-[#D5D3CA]">
+                      ☀️ Best: {{ rec.best_seasons.join(', ') }}
                     </span>
-                    <span class="px-2 py-0.5 bg-[#F5F4EE] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] rounded text-[#1C1D1A] dark:text-[#D5D3CA]">
-                      👥 {{ (rec.suitable_companions || []).join(', ') }}
+                    <span v-if="Array.isArray(rec.suitable_companions) && rec.suitable_companions.length > 0" class="px-2 py-0.5 bg-[#F5F4EE] dark:bg-[#141512] border border-[#E3E0D8] dark:border-[#30312C] rounded text-[#1C1D1A] dark:text-[#D5D3CA]">
+                      👥 {{ rec.suitable_companions.join(', ') }}
                     </span>
                   </div>
 
@@ -325,9 +329,12 @@ const answerFollowUp = (question) => {
   inputQuery.value = cleanPrompt;
 };
 
+let activeRequestId = 0;
+
 const selectOption = async (field, opt) => {
   if (loading.value) return;
 
+  const currentReqId = ++activeRequestId;
   const userLabel = opt.label;
   messages.value.push({
     sender: 'user',
@@ -342,7 +349,12 @@ const selectOption = async (field, opt) => {
       message: userLabel,
       previous_preferences: previousPreferences.value,
       direct_preference_update: directUpdate
+    }, {
+      skipAuthRedirect: true,
+      skipErrorToast: true
     });
+
+    if (currentReqId !== activeRequestId) return; // Stale response discarded
 
     const data = res.data;
     if (data.extracted_preferences) {
@@ -357,10 +369,14 @@ const selectOption = async (field, opt) => {
       recommendations: data.recommendations || []
     });
   } catch (err) {
-    handleChatError(err);
+    if (currentReqId === activeRequestId) {
+      handleChatError(err);
+    }
   } finally {
-    loading.value = false;
-    scrollToBottom();
+    if (currentReqId === activeRequestId) {
+      loading.value = false;
+      scrollToBottom();
+    }
   }
 };
 
@@ -392,6 +408,10 @@ const handleChatError = (err) => {
 
   if (status === 401) {
     errorMsg = 'Please sign in to your TravelSync account to receive personalized AI recommendations!';
+  } else if (status === 429) {
+    errorMsg = 'You are sending requests too quickly. Please wait a moment before asking again.';
+  } else if (status === 504) {
+    errorMsg = 'The recommendation request timed out. Please try again.';
   } else if (status === 502) {
     errorMsg = 'The recommendation engine is currently starting up or offline. Please ensure the ML service is running.';
   } else if (err.response?.data?.message) {
@@ -409,6 +429,8 @@ const sendMessage = async () => {
   const query = inputQuery.value.trim();
   if (!query || loading.value) return;
 
+  const currentReqId = ++activeRequestId;
+
   // Add user message
   messages.value.push({
     sender: 'user',
@@ -422,7 +444,12 @@ const sendMessage = async () => {
     const res = await api.post('/recommendations/chat', {
       message: query,
       previous_preferences: previousPreferences.value
+    }, {
+      skipAuthRedirect: true,
+      skipErrorToast: true
     });
+
+    if (currentReqId !== activeRequestId) return; // Stale response discarded
 
     const data = res.data;
     if (data.extracted_preferences) {
@@ -437,10 +464,14 @@ const sendMessage = async () => {
       recommendations: data.recommendations || []
     });
   } catch (err) {
-    handleChatError(err);
+    if (currentReqId === activeRequestId) {
+      handleChatError(err);
+    }
   } finally {
-    loading.value = false;
-    scrollToBottom();
+    if (currentReqId === activeRequestId) {
+      loading.value = false;
+      scrollToBottom();
+    }
   }
 };
 </script>

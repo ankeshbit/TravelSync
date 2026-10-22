@@ -205,6 +205,15 @@ export const useAuthStore = defineStore('auth', {
             sessionStorage.removeItem('verify_email_cooldown_end');
           }
         }
+        try {
+          const { useOfflineStore } = await import('./offline');
+          const offlineStore = useOfflineStore();
+          offlineStore.offlineTrips = [];
+          offlineStore.activeTripBundle = null;
+          offlineStore.pendingSyncQueue = [];
+        } catch {
+          // Non-fatal if pinia is not yet mounted
+        }
       }
     },
 

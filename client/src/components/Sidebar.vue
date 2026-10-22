@@ -88,6 +88,15 @@
             </router-link>
 
             <router-link 
+              :to="`/offline-trips/${currentTripId}`"
+              @click="closeSidebar"
+              class="px-3.5 py-2.5 flex items-center gap-3 rounded-xl text-[#575851] dark:text-[#A5A69B] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] text-sm font-medium transition-all border border-transparent"
+            >
+              <span class="material-symbols-outlined text-[20px] text-[#86A98B]">offline_bolt</span>
+              <span>Offline Companion</span>
+            </router-link>
+
+            <router-link 
               to="/settings"
               @click="closeSidebar"
               :class="isActive('/settings') ? activeNavClass : inactiveNavClass"
@@ -118,6 +127,21 @@
             >
               <span class="material-symbols-outlined text-[20px]">explore</span>
               <span>Explore</span>
+            </router-link>
+
+            <router-link 
+              to="/offline-trips" 
+              @click="closeSidebar"
+              :class="isActive('/offline-trips') ? activeNavClass : inactiveNavClass" 
+              class="px-3.5 py-2.5 flex items-center justify-between rounded-xl text-sm transition-all"
+            >
+              <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-[20px] text-[#86A98B]">offline_pin</span>
+                <span>Offline Trips</span>
+              </div>
+              <span v-if="offlineStore.offlineTrips.length > 0" class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#86A98B]/20 text-[#86A98B]">
+                {{ offlineStore.offlineTrips.length }}
+              </span>
             </router-link>
 
             <router-link 
@@ -184,10 +208,11 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSidebar } from '../composables/useSidebar';
 import { useAuthStore } from '../stores/auth';
+import { useOfflineStore } from '../stores/offline';
 import { getBaseUrl } from '../utils/url';
 import logoUrl from '../assets/logo.png';
 import ThemeToggle from './ThemeToggle.vue';
@@ -195,7 +220,15 @@ import ThemeToggle from './ThemeToggle.vue';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const offlineStore = useOfflineStore();
 const { isSidebarOpen, closeSidebar } = useSidebar();
+
+onMounted(() => {
+  const uid = authStore.currentUser?.id || authStore.firebaseUser?.uid;
+  if (uid) {
+    offlineStore.loadOfflineTrips(uid).catch(() => {});
+  }
+});
 
 const activeNavClass = 'bg-[#FFFFFF] dark:bg-[#292A25] text-[#1C1D1A] dark:text-[#D5D3CA] border border-[#D1CEC4] dark:border-[#414239] shadow-sm font-semibold';
 const inactiveNavClass = 'text-[#575851] dark:text-[#A5A69B] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] border border-transparent font-medium';

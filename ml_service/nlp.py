@@ -136,11 +136,31 @@ def parse_natural_language_query(
         follow_ups, is_ambiguous = compute_follow_ups(prefs)
         return prefs, follow_ups, is_ambiguous
 
+    # Check for negative / flexible resets (e.g. "no preference for the season", "any budget")
+    if re.search(r"\b(?:no\s+preference\s+(?:for\s+)?(?:the\s+)?season|any\s+season|flexible\s+(?:on\s+)?season|season\s+doesn'?t\s+matter)\b", text):
+        prefs.pop("travel_season", None)
+        prefs.pop("travel_month", None)
+
+    if re.search(r"\b(?:no\s+preference\s+(?:for\s+)?(?:the\s+)?budget|any\s+budget|flexible\s+(?:on\s+)?budget|budget\s+doesn'?t\s+matter)\b", text):
+        prefs.pop("budget_level", None)
+
+    if re.search(r"\b(?:no\s+preference\s+(?:for\s+)?(?:the\s+)?region|any\s+region|anywhere|worldwide|flexible\s+(?:on\s+)?region|region\s+doesn'?t\s+matter)\b", text):
+        prefs.pop("region", None)
+
+    if re.search(r"\b(?:no\s+preference\s+(?:for\s+)?(?:the\s+)?duration|any\s+duration|flexible\s+(?:on\s+)?duration|duration\s+doesn'?t\s+matter)\b", text):
+        prefs.pop("duration_days", None)
+
+    if re.search(r"\b(?:no\s+preference\s+(?:for\s+)?(?:the\s+)?companion|any\s+companion|flexible\s+(?:on\s+)?companion)\b", text):
+        prefs.pop("companions", None)
+
+    if re.search(r"\b(?:no\s+preference\s+(?:for\s+)?(?:the\s+)?pace|any\s+pace|flexible\s+(?:on\s+)?pace)\b", text):
+        prefs.pop("travel_pace", None)
+
     # 3. Budget detection (canonical normalization)
     for b_level, words in BUDGET_KEYWORDS.items():
         # Match whole words or phrases (e.g. "on a budget", "low cost", "luxury")
         pattern = r"\b(" + "|".join(re.escape(w) for w in words) + r")\b"
-        if re.search(pattern, text):
+        if re.search(pattern, text) and not re.search(r"\b(?:no\s+preference\s+(?:for\s+)?(?:the\s+)?budget|any\s+budget)\b", text):
             prefs["budget_level"] = b_level
             break
 

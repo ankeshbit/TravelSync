@@ -324,7 +324,18 @@ const verifyOtpEmailLimiter = rateLimit({
   legacyHeaders: false
 });
 
-
+// Recommendation & Chatbot endpoints: 60 requests per 15 minutes per IP or user
+const recommendationsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  store: createLimiterStore('recommendations'),
+  keyGenerator: (req) => (req.user?.uid ? `user:${req.user.uid}` : ipKeyGenerator(req.ip)),
+  message: {
+    message: 'Too many recommendation requests, please try again in 15 minutes.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 module.exports = {
   generalApiLimiter,
@@ -333,6 +344,7 @@ module.exports = {
   sendOtpEmailLimiter,
   verifyOtpIpLimiter,
   verifyOtpEmailLimiter,
+  recommendationsLimiter,
   resolveOtpTargetEmail,
   closeRedis,
   ResilientRateLimitStore,

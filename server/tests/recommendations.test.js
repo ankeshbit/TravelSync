@@ -71,7 +71,15 @@ describe('Recommendations API Routes', () => {
   });
 
   describe('POST /api/recommendations/chat', () => {
-    it('rejects empty message with 400', async () => {
+    it('rejects unauthenticated chat requests with 401', async () => {
+      const res = await request(app)
+        .post('/api/recommendations/chat')
+        .send({ message: 'Hello' });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects empty message and no direct_preference_update with 400', async () => {
       const res = await request(app)
         .post('/api/recommendations/chat')
         .set('Authorization', `Bearer ${authToken}`)
@@ -79,6 +87,25 @@ describe('Recommendations API Routes', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('non-empty');
+    });
+
+    it('accepts direct_preference_update without message', async () => {
+      const res = await request(app)
+        .post('/api/recommendations/chat')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          direct_preference_update: { budget_level: 'budget' },
+          previous_preferences: {
+            travel_type: 'adventure',
+            region: 'Europe'
+          }
+        });
+
+      expect([200, 502]).toContain(res.status);
+      if (res.status === 200) {
+        expect(res.body).toHaveProperty('extracted_preferences');
+        expect(res.body.extracted_preferences.budget_level).toBe('budget');
+      }
     });
 
     it('processes authenticated natural language query with structured direct_preference_update and previous_preferences', async () => {

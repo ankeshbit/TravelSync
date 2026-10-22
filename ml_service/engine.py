@@ -296,13 +296,23 @@ class TravelRecommendationEngine:
 
     def load_dataset(self, path: str):
         """Loads and precomputes destination features with strict data integrity checks."""
-        if not os.path.exists(path):
-            candidate = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", path))
-            if os.path.exists(candidate):
-                path = candidate
-            else:
-                raise FileNotFoundError(f"Destination CSV not found at '{path}' or '{candidate}'")
+        resolved_path = None
+        candidates = [
+            path,
+            os.path.abspath(path) if path else None,
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", path)) if path else None,
+            os.path.abspath(os.path.join(os.path.dirname(__file__), path)) if path else None,
+            os.path.abspath(os.path.join(os.getcwd(), path)) if path else None,
+        ]
+        for cand in candidates:
+            if cand and os.path.exists(cand) and os.path.isfile(cand):
+                resolved_path = cand
+                break
 
+        if not resolved_path:
+            raise FileNotFoundError(f"Destination CSV not found at '{path}'. Checked candidate paths: {[c for c in candidates if c][:3]}")
+
+        path = resolved_path
         df = pd.read_csv(path)
         if df.empty:
             raise DataIntegrityError("Destination catalog CSV is empty.")
@@ -327,7 +337,7 @@ class TravelRecommendationEngine:
             lambda r: r["estimated_daily_cost"] * ILLUSTRATIVE_USD_RATES[r["currency"]], axis=1
         )
         df["budget_tier"] = df["estimated_daily_cost_usd"].map(budget_level_from_usd)
-        df["budget_rank"] = df["budget_level"].map({b: i for i, b in enumerate(BUDGET_LEVELS)})
+        df["budget_rank"] = df["budget_tier"].map({b: i for i, b in enumerate(BUDGET_LEVELS)})
         if df["budget_rank"].isna().any():
             raise DataIntegrityError("Found invalid budget_level values in dataset.")
 

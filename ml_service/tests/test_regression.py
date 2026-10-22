@@ -188,3 +188,60 @@ def test_12_no_html_entities_in_explanations():
                 val = rec.get(field, "")
                 assert "&#x" not in val
                 assert "&#" not in val
+
+
+def test_13_direct_preference_update_without_message():
+    with TestClient(app) as client:
+        resp = client.post("/chat", json={
+            "direct_preference_update": {"budget_level": "moderate"},
+            "previous_preferences": {"region": "India", "travel_type": "beach"}
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["extracted_preferences"]["budget_level"] == "moderate"
+        assert data["extracted_preferences"]["region"] == "India"
+
+
+def test_14_empty_message_and_no_update_returns_400():
+    with TestClient(app) as client:
+        resp = client.post("/chat", json={
+            "message": "   "
+        })
+        assert resp.status_code == 400
+        assert "Either a non-empty 'message' or 'direct_preference_update' must be provided" in resp.json()["detail"]
+
+
+def test_15_flexible_and_negative_preference_clearing(engine):
+    # Season clearing
+    p1 = {"region": "Europe", "travel_season": "summer"}
+    res1, _, _ = parse_natural_language_query("I have no preference for the season", previous_prefs=p1)
+    assert "travel_season" not in res1
+    assert res1["region"] == "Europe"
+
+    # Budget clearing
+    p2 = {"region": "India", "budget_level": "budget"}
+    res2, _, _ = parse_natural_language_query("Any budget is fine", previous_prefs=p2)
+    assert "budget_level" not in res2
+    assert res2["region"] == "India"
+
+
+def test_16_preference_corrections(engine):
+    p = {"region": "Europe", "duration_days": 7}
+    # Region correction
+    res1, _, _ = parse_natural_language_query("Show me destinations in India instead", previous_prefs=p)
+    assert res1["region"] == "India"
+    assert res1["duration_days"] == 7
+
+    # Duration correction
+    res2, _, _ = parse_natural_language_query("Actually, make it 5 days", previous_prefs=p)
+    assert res2["duration_days"] == 5
+    assert res2["region"] == "Europe"
+
+
+def test_17_excessively_long_message_rejected():
+    with TestClient(app) as client:
+        resp = client.post("/chat", json={
+            "message": "a" * 1001
+        })
+        assert resp.status_code == 422
+
