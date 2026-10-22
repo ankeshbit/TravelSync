@@ -86,6 +86,9 @@ describe('TravelChatbot.vue', () => {
     expect(api.post).toHaveBeenCalledWith('/recommendations/chat', {
       message: 'Goa beach vacation',
       previous_preferences: null
+    }, {
+      skipAuthRedirect: true,
+      skipErrorToast: true
     });
 
     expect(wrapper.text()).toContain('Goa');
@@ -286,6 +289,9 @@ describe('TravelChatbot.vue', () => {
     expect(api.post).toHaveBeenNthCalledWith(1, '/recommendations/chat', {
       message: 'Mountain adventure in Europe for 7 days',
       previous_preferences: null
+    }, {
+      skipAuthRedirect: true,
+      skipErrorToast: true
     });
 
     // Check that structured chip buttons rendered
@@ -340,6 +346,9 @@ describe('TravelChatbot.vue', () => {
         duration_days: 7
       },
       direct_preference_update: { budget_level: 'budget' }
+    }, {
+      skipAuthRedirect: true,
+      skipErrorToast: true
     });
 
     // Check that user message bubble displays the chip label cleanly
@@ -389,5 +398,91 @@ describe('TravelChatbot.vue', () => {
     expect(wrapper.text()).not.toContain('&#x49;');
     expect(wrapper.text()).not.toContain('&#x20;');
     expect(wrapper.text()).not.toContain('&amp;');
+  });
+
+  it('tolerates missing or null optional fields in destination cards without throwing', async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        message: 'Top match with missing optional attributes:',
+        recommendations: [
+          {
+            rank: 1,
+            destination_id: 'minimal_dest',
+            destination: 'Minimal Destination',
+            country: 'Nowhere',
+            region: 'Unknown',
+            subregion: 'Somewhere',
+            match_score: 80.0,
+            budget_level: 'budget',
+            estimated_daily_cost: null, // null daily cost
+            currency: null,
+            estimated_daily_cost_usd: null,
+            suggested_duration: null,
+            suitable_activities: null,
+            best_seasons: null, // null seasons list
+            travel_pace: null,
+            suitable_companions: null, // null companions list
+            explanation: 'Grounded match description',
+            trade_offs: '',
+            destination_description: ''
+          }
+        ]
+      }
+    });
+
+    const wrapper = mount(TravelChatbot);
+    await wrapper.find('#travel-chatbot-toggle-btn').trigger('click');
+    const input = wrapper.find('#travel-chatbot-input');
+    await input.setValue('Minimal request');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Minimal Destination');
+    expect(wrapper.text()).toContain('80% match');
+  });
+
+  it('displays rate limit error message when 429 is returned', async () => {
+    api.post.mockRejectedValueOnce({
+      response: {
+        status: 429,
+        data: { message: 'Too many requests' }
+      }
+    });
+
+    const wrapper = mount(TravelChatbot);
+    await wrapper.find('#travel-chatbot-toggle-btn').trigger('click');
+    const input = wrapper.find('#travel-chatbot-input');
+    await input.setValue('Fast query');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('You are sending requests too quickly');
+  });
+
+  it('resets conversation state when reset button is clicked', async () => {
+    api.post.mockResolvedValueOnce({
+      data: {
+        message: 'Here is your recommendation:',
+        recommendations: []
+      }
+    });
+
+    const wrapper = mount(TravelChatbot);
+    await wrapper.find('#travel-chatbot-toggle-btn').trigger('click');
+    const input = wrapper.find('#travel-chatbot-input');
+    await input.setValue('First turn');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('First turn');
+
+    // Click reset button
+    const resetBtn = wrapper.find('#travel-chatbot-reset-btn');
+    expect(resetBtn.exists()).toBe(true);
+    await resetBtn.trigger('click');
+    await flushPromises();
+
+    // Check that previous message was cleared
+    expect(wrapper.text()).not.toContain('First turn');
   });
 });

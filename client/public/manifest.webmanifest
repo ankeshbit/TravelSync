@@ -1,0 +1,42 @@
+{
+  "name": "TravelSync — Group Trip Planner & Offline Companion",
+  "short_name": "TravelSync",
+  "description": "Collaborative group trip planning made simple. Access your itineraries, bookings, and emergency info anytime, even offline.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#141512",
+  "theme_color": "#FAF9F5",
+  "categories": ["travel", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Offline Trips",
+      "short_name": "Offline",
+      "description": "Access your downloaded trips without internet",
+      "url": "/offline-trips",
+      "icons": [{ "src": "/logo.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "My Trips",
+      "short_name": "Trips",
+      "description": "View all trips",
+      "url": "/dashboard",
+      "icons": [{ "src": "/logo.png", "sizes": "96x96" }]
+    }
+  ]
+}

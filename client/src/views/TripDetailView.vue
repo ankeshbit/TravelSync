@@ -105,6 +105,19 @@
               </button>
 
               <button 
+                @click="toggleOfflineDownload"
+                :disabled="offlineStore.isDownloading"
+                class="text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 border backdrop-blur-md"
+                :class="isSavedOffline ? 'bg-[#86A98B] hover:bg-[#729777] text-white border-[#86A98B]/50' : 'bg-white/20 hover:bg-white/30 text-white border-white/20'"
+                :title="isSavedOffline ? 'Open offline companion' : 'Save trip to device for offline access in airplane mode'"
+              >
+                <span class="material-symbols-outlined text-[18px]" :class="{ 'animate-spin': offlineStore.isDownloading }">
+                  {{ offlineStore.isDownloading ? 'sync' : (isSavedOffline ? 'offline_pin' : 'cloud_download') }}
+                </span>
+                <span>{{ offlineStore.isDownloading ? `Saving ${offlineStore.downloadProgress}%` : (isSavedOffline ? 'Offline Ready' : 'Save Offline') }}</span>
+              </button>
+
+              <button 
                 @click="$router.push(`/trips/${currentTrip.id || currentTrip._id}/edit`)"
                 class="bg-[#A7A99A] hover:bg-[#B9BBAA] text-[#171813] text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-sm border border-[#A7A99A]/40 transition-all active:scale-95"
               >
@@ -258,6 +271,23 @@
               </div>
               <span class="material-symbols-outlined text-[#7E8075] dark:text-[#85867C] group-hover:text-[#1C1D1A] dark:group-hover:text-[#D5D3CA] text-[18px]">chevron_right</span>
             </router-link>
+
+            <!-- Action 4: Offline Travel Companion -->
+            <router-link 
+              :to="`/offline-trips/${currentTrip.id || currentTrip._id}`"
+              class="p-4 rounded-xl bg-[#86A98B]/10 hover:bg-[#86A98B]/20 border border-[#86A98B]/30 flex items-center justify-between transition-all group"
+            >
+              <div class="flex items-center gap-3.5">
+                <div class="w-8 h-8 rounded-lg bg-[#86A98B]/20 text-[#86A98B] flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[18px]">offline_bolt</span>
+                </div>
+                <div>
+                  <span class="text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] block">Offline Companion</span>
+                  <span class="text-[11px] text-[#7E8075] dark:text-[#85867C] block">{{ isSavedOffline ? 'Saved & verified locally' : 'Download for airplane mode' }}</span>
+                </div>
+              </div>
+              <span class="material-symbols-outlined text-[#86A98B] group-hover:translate-x-0.5 transition-transform text-[18px]">chevron_right</span>
+            </router-link>
           </section>
 
         </div>
@@ -297,6 +327,9 @@ import TripPresence from '../components/TripPresence.vue';
 import AiPlannerModal from '../components/AiPlannerModal.vue';
 import { useSocket } from '../composables/useSocket';
 import { useTripsStore } from '../stores/trips';
+import { useOfflineStore } from '../stores/offline';
+import { useAuthStore } from '../stores/auth';
+import { useToastStore } from '../stores/toast';
 import api from '../api';
 import { DEFAULT_TRIP_COVER_IMAGE } from '../constants';
 import { formatCurrency } from '../utils/format';
@@ -304,6 +337,33 @@ import { formatCurrency } from '../utils/format';
 const route = useRoute();
 const router = useRouter();
 const tripsStore = useTripsStore();
+const offlineStore = useOfflineStore();
+const authStore = useAuthStore();
+const toastStore = useToastStore();
+
+const currentUserId = computed(() => authStore.currentUser?.id || authStore.firebaseUser?.uid || 'offline-user');
+
+const isSavedOffline = computed(() => {
+  const tid = currentTrip.value?.id || currentTrip.value?._id;
+  return offlineStore.isTripSavedOffline(tid);
+});
+
+async function toggleOfflineDownload() {
+  const tid = currentTrip.value?.id || currentTrip.value?._id;
+  if (!tid) return;
+
+  if (isSavedOffline.value) {
+    router.push(`/offline-trips/${tid}`);
+    return;
+  }
+
+  try {
+    await offlineStore.downloadTripForOffline(currentUserId.value, tid);
+    toastStore.showToast('Trip itinerary & travel essentials saved for offline access!', 'success');
+  } catch (err) {
+    toastStore.showToast(err.message || 'Failed to download trip offline', 'error');
+  }
+}
 
 const loading = ref(true);
 const trip = computed(() => tripsStore.currentTrip);
@@ -395,5 +455,8 @@ watch(() => currentTripId.value, (newId) => {
 
 onMounted(() => {
   fetchTrip();
+  if (currentUserId.value) {
+    offlineStore.loadOfflineTrips(currentUserId.value).catch(() => {});
+  }
 });
 </script>

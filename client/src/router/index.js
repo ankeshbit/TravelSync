@@ -57,6 +57,16 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/offline-trips',
+    component: () => import('../views/OfflineDashboardView.vue'),
+    meta: { requiresAuth: true, isOfflineAllowed: true }
+  },
+  {
+    path: '/offline-trips/:tripId',
+    component: () => import('../views/OfflineTripDetailView.vue'),
+    meta: { requiresAuth: true, isOfflineAllowed: true }
+  },
+  {
     path: '/:pathMatch(.*)*',
     component: NotFoundView
   }
@@ -73,6 +83,11 @@ const router = createRouter({
 // Navigation guard — wait for Firebase auth to initialise before deciding
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+
+  // If navigating to an offline-allowed route while offline, permit navigation to local storage
+  if (to.meta.isOfflineAllowed && (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return next()
+  }
 
   // waitForAuth() resolves immediately after the first onAuthStateChanged call
   // so there is no redirect loop even when already initialized
@@ -97,6 +112,9 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    if (to.meta.isOfflineAllowed) {
+      return next()
+    }
     next({ path: '/login', query: { redirect: to.fullPath } })
   } else if (
     (to.path === '/login' || to.path === '/register' || to.path === '/forgot-password') &&

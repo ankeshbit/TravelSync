@@ -3,6 +3,7 @@
     :visible="appLoader.isVisible"
     :message="appLoader.loadingMessage"
   />
+  <OfflineBanner />
   <ToastNotification />
   <router-view />
   <TravelChatbot />
@@ -14,6 +15,7 @@ import { useToastStore } from './stores/toast';
 import { useDarkMode } from './composables/useDarkMode';
 import { useAppLoader } from './composables/useAppLoader';
 import ToastNotification from './components/ToastNotification.vue';
+import OfflineBanner from './components/OfflineBanner.vue';
 import TravelChatbot from './components/TravelChatbot.vue';
 
 const EarthLoadingOverlay = defineAsyncComponent(() =>

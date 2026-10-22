@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
+const { recommendationsLimiter } = require('../middleware/rateLimiter');
 const config = require('../config/env');
 const logger = require('../utils/logger');
 
@@ -25,8 +26,6 @@ async function callMlService(endpoint, options = {}) {
       }
     });
 
-    clearTimeout(timeoutId);
-
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
@@ -38,7 +37,6 @@ async function callMlService(endpoint, options = {}) {
 
     return data;
   } catch (err) {
-    clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
       const timeoutErr = new Error('Recommendation service timed out.');
       timeoutErr.status = 504;
@@ -51,6 +49,8 @@ async function callMlService(endpoint, options = {}) {
     const connErr = new Error('Recommendation service is temporarily unavailable. Please verify the ML service is running.');
     connErr.status = 502;
     throw connErr;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -120,9 +120,11 @@ router.get('/health', asyncHandler(async (req, res) => {
  *       502:
  *         description: ML service unavailable
  */
-router.post('/recommend', verifyToken, asyncHandler(async (req, res) => {
-  const topN = parseInt(req.query.top_n, 10) || 5;
-  const diversity = parseFloat(req.query.diversity) || 0.15;
+router.post('/recommend', recommendationsLimiter, verifyToken, asyncHandler(async (req, res) => {
+  const rawTopN = parseInt(req.query.top_n, 10);
+  const topN = Math.max(1, Math.min(20, Number.isFinite(rawTopN) ? rawTopN : 5));
+  const rawDiversity = parseFloat(req.query.diversity);
+  const diversity = Math.max(0.0, Math.min(1.0, Number.isFinite(rawDiversity) ? rawDiversity : 0.15));
 
   try {
     const data = await callMlService(`/recommend?top_n=${topN}&diversity=${diversity}`, {
@@ -169,7 +171,7 @@ router.post('/recommend', verifyToken, asyncHandler(async (req, res) => {
  *       502:
  *         description: ML service unavailable
  */
-router.post('/chat', verifyToken, asyncHandler(async (req, res) => {
+router.post('/chat', recommendationsLimiter, verifyToken, asyncHandler(async (req, res) => {
   const { message, previous_preferences, direct_preference_update } = req.body || {};
   if ((!message || typeof message !== 'string' || !message.trim()) && !direct_preference_update) {
     return res.status(400).json({

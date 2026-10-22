@@ -20,6 +20,11 @@ setupApiInterceptors({ toastStore, authStore })
 // Start the Firebase auth listener so onAuthStateChanged fires
 authStore.initializeAuth()
 
+// Register PWA service worker for offline app shell caching
+import('./services/pwa').then(({ registerServiceWorker }) => {
+  registerServiceWorker();
+});
+
 app.use(router)
 app.mount('#app')
 

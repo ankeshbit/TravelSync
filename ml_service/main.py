@@ -18,16 +18,22 @@ from .schemas import (
 )
 
 engine: Optional[TravelRecommendationEngine] = None
+initialization_error: Optional[str] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global engine
+    global engine, initialization_error
     csv_path = os.getenv("TRAVELSYNC_CSV_PATH", "ML/travelsync_destin.original.csv")
+    fail_fast = os.getenv("FAIL_FAST_STARTUP", "false").lower() in ("true", "1", "yes")
     try:
         engine = TravelRecommendationEngine(csv_path=csv_path)
+        initialization_error = None
         print(f"[ML Service] Successfully loaded {len(engine.df)} destinations from {csv_path}")
     except Exception as e:
+        initialization_error = str(e)
         print(f"[ML Service] Error initializing recommendation engine: {e}")
+        if fail_fast:
+            raise RuntimeError(f"Startup failed: Unable to initialize TravelRecommendationEngine: {e}") from e
     yield
 
 app = FastAPI(
@@ -37,11 +43,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+raw_origins = os.getenv("ML_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
+allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -52,7 +61,10 @@ async def health_check():
     if engine is None or engine.df is None:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "unhealthy", "error": "Recommendation engine not initialized"}
+            content={
+                "status": "unhealthy",
+                "error": initialization_error or "Recommendation engine not initialized"
+            }
         )
     return {
         "status": "healthy",
@@ -93,7 +105,8 @@ async def get_recommendations(
     except PreferenceValidationError as pve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=pve.errors)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        print(f"[ML Service Error] in /recommend: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred while generating recommendations.")
 
 
 @app.post("/chat", response_model=ChatResponse, tags=["Chatbot"])
@@ -105,9 +118,16 @@ async def chat_recommend(request: ChatRequest, top_n: int = Query(4, ge=1, le=10
             detail="Recommendation engine is not initialized."
         )
 
+    user_msg = (request.message or "").strip()
+    if not user_msg and not request.direct_preference_update:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either a non-empty 'message' or 'direct_preference_update' must be provided."
+        )
+
     prev_dict = request.previous_preferences.model_dump(exclude_none=True) if request.previous_preferences else None
     extracted_prefs, follow_ups, is_ambiguous = parse_natural_language_query(
-        request.message,
+        user_msg,
         previous_prefs=prev_dict,
         region_lookup=engine.region_lookup,
         direct_update=request.direct_preference_update
@@ -184,7 +204,8 @@ async def chat_recommend(request: ChatRequest, top_n: int = Query(4, ge=1, le=10
             is_ambiguous=True
         )
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        print(f"[ML Service Error] in /chat: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred while processing the chat request.")
 
 
 @app.get("/destinations", tags=["Catalog"])
