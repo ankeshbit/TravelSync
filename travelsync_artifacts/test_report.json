@@ -1,0 +1,187 @@
+{
+  "total_tests": 30,
+  "passed_count": 30,
+  "failed_count": 0,
+  "tests": [
+    {
+      "test_num": 1,
+      "name": "Catalog construction works",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 2,
+      "name": "Catalog loading from valid CSV works",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 3,
+      "name": "Discovery does not pass directories to read_csv",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 4,
+      "name": "Missing paths produce actionable errors",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 5,
+      "name": "Ambiguous multiple-file selection deterministic",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 6,
+      "name": "Empty and malformed CSV handled safely",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 7,
+      "name": "Required-column validation works",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 8,
+      "name": "Duplicate destination IDs detected & quarantined",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 9,
+      "name": "Invalid numeric values detected",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 10,
+      "name": "Preference validation handles valid and invalid profiles",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 11,
+      "name": "Region filtering correctly handles European subregions",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 12,
+      "name": "India and international filtering remain distinct",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 13,
+      "name": "Feature-space creation succeeds on validated catalog",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 14,
+      "name": "Scoring returns documented schema",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 15,
+      "name": "Scoring values are finite and in [0.0, 1.0]",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 16,
+      "name": "Eligibility filtering is respected",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 17,
+      "name": "recommend_destinations exists and runs successfully",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 18,
+      "name": "show_recommendations handles empty output safely",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 19,
+      "name": "top_n=1 returns at most one result",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 20,
+      "name": "Invalid top_n values raise documented errors",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 21,
+      "name": "No duplicate destinations in results",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 22,
+      "name": "Empty eligible results do not crash",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 23,
+      "name": "Destination ID lookups invariant to DataFrame index shuffle",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 24,
+      "name": "Explanations grounded in catalog evidence (Zero unsupported claims)",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 25,
+      "name": "Similar-destination search excludes source & runs safely",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 26,
+      "name": "Repeated runs with same input produce identical results",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 27,
+      "name": "No hidden state from previous executions required",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 28,
+      "name": "Complete demo workflow succeeds from scratch",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 29,
+      "name": "Evaluation metrics explicitly labeled synthetic",
+      "status": "PASSED",
+      "error": null
+    },
+    {
+      "test_num": 30,
+      "name": "Final report dynamically backed by actual test outcomes",
+      "status": "PASSED",
+      "error": null
+    }
+  ]
+}

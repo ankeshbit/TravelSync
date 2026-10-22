@@ -199,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import AppLayout from '../components/AppLayout.vue';
@@ -297,6 +297,14 @@ onMounted(() => {
   });
   fetchSummary();
   if (route.query.create) {
+    initialDestination.value = route.query.dest || '';
+    showCreateModal.value = true;
+    router.replace({ path: route.path, query: {} }).catch(() => {});
+  }
+});
+
+watch(() => route.query.create, (newVal) => {
+  if (newVal) {
     initialDestination.value = route.query.dest || '';
     showCreateModal.value = true;
     router.replace({ path: route.path, query: {} }).catch(() => {});

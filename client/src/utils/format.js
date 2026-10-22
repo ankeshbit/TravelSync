@@ -29,3 +29,23 @@ export function formatCurrency(amount, currency = 'USD') {
     })}`;
   }
 }
+
+/**
+ * Decodes HTML entities (both named and hex/decimal numerical entities)
+ * e.g. &#x20;, &#x49;t, &#x47;ood, &#x4C;imited, &amp;, &quot;, &#39;
+ *
+ * @param {string} str - String potentially containing HTML entities
+ * @returns {string} Clean, unescaped plain text string
+ */
+export function decodeHtml(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+}

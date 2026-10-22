@@ -1,0 +1,9 @@
+{
+  "evaluation_type": "Synthetic Benchmark (Illustrative Only)",
+  "real_world_labels_available": false,
+  "synthetic_cohort_trials": 40,
+  "mean_latency_ms": 35.1,
+  "p95_latency_ms": 53.67,
+  "ranking_stability_rate": 1.0,
+  "scientific_note": "NOTICE: Metrics reflect algorithmic execution efficiency and ranking determinism over synthetic profiles. Real-world precision/recall requires verified user engagement data."
+}

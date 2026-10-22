@@ -250,6 +250,7 @@ if (process.env.NODE_ENV !== 'production') {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/trips', require('./routes/trips'));
 app.use('/api/explore', require('./routes/explore'));
+app.use('/api/recommendations', require('./routes/recommendations'));
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 app.use((req, res) => {
