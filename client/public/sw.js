@@ -1,26 +1,53 @@
 /* ==========================================================================
-   TravelSync Service Worker — Offline App Shell & Static Asset Cache
+   TravelSync Service Worker — Offline App Shell & Resilient Asset Cache
    ========================================================================== */
 
-const CACHE_NAME = 'travelsync-app-v1';
-const STATIC_ASSETS = [
+const CACHE_NAME = 'travelsync-app-v2';
+
+// 1. Essential application shell assets required to load offline
+const ESSENTIAL_ASSETS = [
   '/',
-  '/index.html',
+  '/index.html'
+];
+
+// 2. Optional visual and manifest assets (precached with graceful failure)
+const OPTIONAL_ASSETS = [
   '/manifest.webmanifest',
   '/favicon.ico',
   '/favicon.svg',
   '/logo.png'
 ];
 
-// 1. Installation: pre-cache the essential application shell
+// 1. Installation: pre-cache application shell with resilient asset handling
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
-        // Pre-caching failure should not block SW installation in dev
-        console.warn('[SW] Initial pre-cache warning:', err);
-      });
-    }).then(() => self.skipWaiting())
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+
+      // Precaching essential assets
+      for (const asset of ESSENTIAL_ASSETS) {
+        try {
+          await cache.add(asset);
+        } catch (err) {
+          console.error(`[SW] Error precaching essential app shell asset '${asset}':`, err);
+        }
+      }
+
+      // Precaching optional static assets resiliently
+      const optionalResults = await Promise.allSettled(
+        OPTIONAL_ASSETS.map(async (asset) => {
+          try {
+            await cache.add(asset);
+          } catch (err) {
+            console.warn(`[SW] Notice: Optional asset '${asset}' could not be precached:`, err);
+            throw err;
+          }
+        })
+      );
+
+      const successfulOptional = optionalResults.filter(r => r.status === 'fulfilled').length;
+      console.log(`[SW] Shell installation completed. ${successfulOptional}/${OPTIONAL_ASSETS.length} optional assets cached.`);
+    })().then(() => self.skipWaiting())
   );
 });
 
@@ -31,7 +58,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[SW] Removing old cache version:', key);
+            console.log('[SW] Purging outdated cache version:', key);
             return caches.delete(key);
           }
         })
@@ -46,7 +73,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   // CRITICAL SECURITY RULE:
-  // NEVER cache API requests, Socket.IO polling, or Firebase authentication endpoints.
+  // NEVER cache API requests, Socket.IO polling, or Firebase authentication endpoints in static cache.
   // Sensitive user trip and authentication data is handled securely via IndexedDB
   // with strict per-user authorization scoping.
   if (
@@ -65,7 +92,7 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           // If valid response, update shell cache
-          if (response.status === 200) {
+          if (response && response.status === 200) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           }

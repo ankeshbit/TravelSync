@@ -150,28 +150,35 @@ describe('Offline Travel Companion API Endpoints', () => {
       expect(Array.isArray(res.body.itinerary)).toBe(true);
       expect(res.body.itinerary.length).toBe(2);
 
-      // Accommodations & Transport
+      // Accommodations & Transport — grounded in real saved places, no fabricated booking refs
       expect(Array.isArray(res.body.staysAndTransport)).toBe(true);
-      expect(res.body.staysAndTransport.length).toBeGreaterThanOrEqual(1);
-      const stay = res.body.staysAndTransport.find(s => s.type === 'hotel');
-      expect(stay).toBeDefined();
+      expect(res.body.staysAndTransport.length).toBe(1);
+      const stay = res.body.staysAndTransport[0];
+      expect(stay.type).toBe('hotel');
       expect(stay.name).toContain('Victoria Jungfrau Grand Hotel');
+      expect(stay.bookingRef).toBeNull(); // No fabricated booking references
 
-      // Emergency Contacts
+      // No fake flights generated
+      const flights = res.body.staysAndTransport.filter(s => s.type === 'flight');
+      expect(flights.length).toBe(0);
+
+      // Emergency Contacts — no fabricated phone numbers
       expect(Array.isArray(res.body.emergencyContacts)).toBe(true);
-      expect(res.body.emergencyContacts.length).toBeGreaterThanOrEqual(2);
       expect(res.body.emergencyContacts.some(c => c.phone === '112')).toBe(true);
+      const fakePhones = res.body.emergencyContacts.filter(c => c.phone && c.phone.includes('555-01'));
+      expect(fakePhones.length).toBe(0);
 
       // Checklists
       expect(Array.isArray(res.body.checklists)).toBe(true);
       expect(res.body.checklists.length).toBeGreaterThanOrEqual(5);
 
-      // Travel Notes
+      // Travel Notes derived from places
       expect(Array.isArray(res.body.notes)).toBe(true);
-      expect(res.body.notes.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.notes.length).toBe(2);
 
-      // Documents & Metadata
+      // Documents — no fake PDF vouchers generated
       expect(Array.isArray(res.body.documents)).toBe(true);
+      expect(res.body.documents.length).toBe(0);
       expect(res.body.version).toBe(1);
       expect(res.body.downloadTimestamp).toBeDefined();
     });
@@ -195,22 +202,27 @@ describe('Offline Travel Companion API Endpoints', () => {
       expect(res.status).toBe(403);
     });
 
-    it('processes offline changes successfully for authorized member', async () => {
+    it('persists place_note changes to database and returns granular per-operation results', async () => {
+      const places = await prisma.place.findMany({ where: { tripId: trip1.id } });
+      const targetPlace = places[0];
+
       const res = await request(app)
         .post(`/api/trips/${trip1.id}/offline-sync`)
         .set('Authorization', 'Bearer valid-user-1')
         .send({
           changes: [
             {
-              type: 'checklist_item',
-              itemId: `chk-1-${trip1.id}`,
-              completed: true,
+              id: 'op-sync-place-1',
+              type: 'place_note',
+              placeId: targetPlace.id,
+              note: 'Updated notes from mountain trail offline',
               modifiedAt: new Date().toISOString()
             },
             {
-              type: 'travel_note',
-              itemId: `note-1-${trip1.id}`,
-              content: 'Offline note update test',
+              id: 'op-sync-chk-1',
+              type: 'checklist_item',
+              itemId: `chk-1-${trip1.id}`,
+              completed: true,
               modifiedAt: new Date().toISOString()
             }
           ]
@@ -218,8 +230,135 @@ describe('Offline Travel Companion API Endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.syncedCount).toBe(2);
-      expect(res.body.serverTimestamp).toBeDefined();
+      expect(res.body.syncedCount).toBe(1);
+      expect(res.body.failedCount).toBe(1);
+      expect(Array.isArray(res.body.results)).toBe(true);
+      expect(res.body.results.length).toBe(2);
+
+      // Verify place_note succeeded
+      const placeResult = res.body.results.find(r => r.id === 'op-sync-place-1');
+      expect(placeResult.success).toBe(true);
+
+      // Verify checklist operation was explicitly identified as unsupported
+      const chkResult = res.body.results.find(r => r.id === 'op-sync-chk-1');
+      expect(chkResult.success).toBe(false);
+      expect(chkResult.code).toBe('UNSUPPORTED_OPERATION');
+
+      // Verify DB persistence
+      const updatedPlace = await prisma.place.findUnique({ where: { id: targetPlace.id } });
+      expect(updatedPlace.note).toBe('Updated notes from mountain trail offline');
+    });
+
+    it('rejects invalid placeId with structured failure without crashing or faking success', async () => {
+      const res = await request(app)
+        .post(`/api/trips/${trip1.id}/offline-sync`)
+        .set('Authorization', 'Bearer valid-user-1')
+        .send({
+          changes: [
+            {
+              id: 'op-nonexistent-place',
+              type: 'place_note',
+              placeId: '00000000-0000-0000-0000-000000000000',
+              note: 'Should fail gracefully'
+            }
+          ]
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.syncedCount).toBe(0);
+      expect(res.body.failedCount).toBe(1);
+      expect(res.body.results[0].success).toBe(false);
+      expect(res.body.results[0].code).toBe('RECORD_NOT_FOUND');
+    });
+
+    it('ensures sync is idempotent when retrying previously synced changes', async () => {
+      const places = await prisma.place.findMany({ where: { tripId: trip1.id } });
+      const targetPlace = places[0];
+
+      // First sync
+      const res1 = await request(app)
+        .post(`/api/trips/${trip1.id}/offline-sync`)
+        .set('Authorization', 'Bearer valid-user-1')
+        .send({
+          changes: [
+            {
+              id: 'idempotent-op-1',
+              type: 'place_note',
+              placeId: targetPlace.id,
+              note: 'Confirmed trail conditions'
+            }
+          ]
+        });
+
+      expect(res1.status).toBe(200);
+      expect(res1.body.syncedCount).toBe(1);
+
+      // Retry same sync
+      const res2 = await request(app)
+        .post(`/api/trips/${trip1.id}/offline-sync`)
+        .set('Authorization', 'Bearer valid-user-1')
+        .send({
+          changes: [
+            {
+              id: 'idempotent-op-1',
+              type: 'place_note',
+              placeId: targetPlace.id,
+              note: 'Confirmed trail conditions'
+            }
+          ]
+        });
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.syncedCount).toBe(1);
+      const after = await prisma.place.findUnique({ where: { id: targetPlace.id } });
+      expect(after.note).toBe('Confirmed trail conditions');
+    });
+
+    it('rejects attempt to update a place that belongs to a different trip', async () => {
+      // Create another trip with a place
+      const tripOther = await prisma.trip.create({
+        data: {
+          name: 'Other Trip',
+          destination: 'Rome',
+          startDate: new Date('2026-08-01'),
+          endDate: new Date('2026-08-05'),
+          ownerId: user2.id
+        }
+      });
+      const foreignPlace = await prisma.place.create({
+        data: {
+          tripId: tripOther.id,
+          name: 'Colosseum',
+          address: 'Piazza del Colosseo',
+          lat: 41.8902,
+          lng: 12.4922,
+          dayNumber: 1,
+          orderIndex: 0
+        }
+      });
+
+      // User 1 attempts to update foreign place via trip 1
+      const res = await request(app)
+        .post(`/api/trips/${trip1.id}/offline-sync`)
+        .set('Authorization', 'Bearer valid-user-1')
+        .send({
+          changes: [
+            {
+              id: 'cross-trip-attack',
+              type: 'place_note',
+              placeId: foreignPlace.id,
+              note: 'Unauthorized note update'
+            }
+          ]
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.syncedCount).toBe(0);
+      expect(res.body.failedCount).toBe(1);
+      expect(res.body.results[0].code).toBe('RECORD_NOT_FOUND');
+
+      const checkForeign = await prisma.place.findUnique({ where: { id: foreignPlace.id } });
+      expect(checkForeign.note).not.toBe('Unauthorized note update');
     });
   });
 });

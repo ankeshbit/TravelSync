@@ -84,15 +84,32 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
-  // If navigating to an offline-allowed route while offline, permit navigation to local storage
-  if (to.meta.isOfflineAllowed && (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return next()
-  }
-
-  // waitForAuth() resolves immediately after the first onAuthStateChanged call
-  // so there is no redirect loop even when already initialized
+  // Always wait for auth initialization first so that cached session is resolved
   if (!authStore.initialized) {
     await authStore.waitForAuth()
+  }
+
+  // Resolve verified identity: either currently active Firebase/DB user, or verified cached local user
+  let verifiedUserId = authStore.currentUser?.id || authStore.firebaseUser?.uid || null;
+  if (!verifiedUserId && typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const cached = JSON.parse(localStorage.getItem('user'));
+      if (cached && (cached.id || cached.firebaseUid)) {
+        verifiedUserId = cached.id || cached.firebaseUid;
+      }
+    } catch {}
+  }
+
+  // If navigating to an offline-allowed route
+  if (to.meta.isOfflineAllowed) {
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
+      // Must have a verified previously-authenticated account to access cached trips offline
+      if (!verifiedUserId) {
+        return next({ path: '/login', query: { redirect: to.fullPath, offlineBlocked: 'true' } });
+      }
+      return next();
+    }
   }
 
   const isUnverified = Boolean(authStore.firebaseUser && !authStore.firebaseUser.emailVerified)
@@ -112,8 +129,10 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    if (to.meta.isOfflineAllowed) {
-      return next()
+    // If user is offline and has a verified cached account, permit offline-allowed routes only
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline && to.meta.isOfflineAllowed && verifiedUserId) {
+      return next();
     }
     next({ path: '/login', query: { redirect: to.fullPath } })
   } else if (

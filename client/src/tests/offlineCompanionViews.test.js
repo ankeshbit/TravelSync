@@ -5,6 +5,7 @@ import OfflineDashboardView from '../views/OfflineDashboardView.vue';
 import OfflineTripDetailView from '../views/OfflineTripDetailView.vue';
 import OfflineBanner from '../components/OfflineBanner.vue';
 import { useOfflineStore } from '../stores/offline';
+import { useAuthStore } from '../stores/auth';
 
 const mockPush = vi.fn();
 let mockRouteParams = { tripId: 'trip-alpine-1' };
@@ -15,8 +16,10 @@ vi.mock('../services/offlineStorage', () => ({
   saveOfflineTripPack: vi.fn().mockResolvedValue({ success: true }),
   updateChecklistItemLocal: vi.fn().mockResolvedValue(true),
   updateNoteLocal: vi.fn().mockResolvedValue(true),
+  updatePlaceNoteLocal: vi.fn().mockResolvedValue(true),
   getPendingSyncQueue: vi.fn().mockResolvedValue([]),
   clearPendingSyncItem: vi.fn().mockResolvedValue(),
+  markPendingSyncItemError: vi.fn().mockResolvedValue(),
   deleteOfflineTrip: vi.fn().mockResolvedValue(),
   clearAllUserOfflineData: vi.fn().mockResolvedValue(),
   estimateStorage: vi.fn().mockResolvedValue({ usage: 45000, quota: 100000000, percentage: 1, humanUsage: '45.0 KB' })
@@ -55,9 +58,12 @@ vi.mock('../composables/useConnectivity', () => ({
 
 describe('Offline Travel Companion UI Views', () => {
   let offlineStore;
+  let authStore;
 
   beforeEach(() => {
     setActivePinia(createPinia());
+    authStore = useAuthStore();
+    authStore.currentUser = { id: 'user-1', email: 'traveler@travelsync.local' };
     offlineStore = useOfflineStore();
     vi.clearAllMocks();
     mockIsOnline = true;

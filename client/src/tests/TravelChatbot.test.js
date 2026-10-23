@@ -13,22 +13,32 @@ vi.mock('../api', () => ({
 }));
 
 const mockPush = vi.fn();
+let currentRoute = { path: '/dashboard' };
 vi.mock('vue-router', () => ({
   useRouter: () => ({
     push: mockPush
-  })
+  }),
+  useRoute: () => currentRoute
 }));
 
 describe('TravelChatbot.vue', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
+    currentRoute = { path: '/dashboard' };
   });
 
-  it('renders floating trigger button initially', () => {
+  it('renders floating trigger button initially on non-auth pages', () => {
     const wrapper = mount(TravelChatbot);
     const triggerBtn = wrapper.find('#travel-chatbot-toggle-btn');
     expect(triggerBtn.exists()).toBe(true);
+    expect(wrapper.find('#travel-chatbot-window').exists()).toBe(false);
+  });
+
+  it('does NOT render on login page or auth routes', () => {
+    currentRoute = { path: '/login' };
+    const wrapper = mount(TravelChatbot);
+    expect(wrapper.find('#travel-chatbot-toggle-btn').exists()).toBe(false);
     expect(wrapper.find('#travel-chatbot-window').exists()).toBe(false);
   });
 

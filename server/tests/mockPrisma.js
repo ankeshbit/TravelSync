@@ -490,6 +490,13 @@ function setupPrismaMock() {
     return { ...place };
   });
 
+  prisma.place.findFirst = jest.fn(async ({ where } = {}) => {
+    let results = Array.from(places.values());
+    if (where?.id) results = results.filter(p => p.id === where.id);
+    if (where?.tripId) results = results.filter(p => p.tripId === where.tripId);
+    return results[0] || null;
+  });
+
   prisma.place.findUnique = jest.fn(async ({ where }) => {
     return places.get(where.id) || null;
   });

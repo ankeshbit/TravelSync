@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div v-if="!isAuthPage">
     <!-- Floating Action Toggle Button -->
     <button
       v-if="!isOpen"
@@ -270,8 +270,8 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, nextTick } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
@@ -279,8 +279,19 @@ import { decodeHtml } from '../utils/format';
 import CreateTripModal from './CreateTripModal.vue';
 
 const router = useRouter();
+let route = null;
+try {
+  route = useRoute();
+} catch {}
+
 const authStore = useAuthStore();
 const toastStore = useToastStore();
+
+const AUTH_PAGES = ['/login', '/register', '/forgot-password', '/verify-email'];
+const isAuthPage = computed(() => {
+  if (!route || !route.path) return false;
+  return AUTH_PAGES.includes(route.path);
+});
 
 const isOpen = ref(false);
 const loading = ref(false);

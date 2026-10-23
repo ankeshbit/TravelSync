@@ -95,4 +95,41 @@ describe('Router navigation guards', () => {
     await router.push('/login?redirect=/\\evil.com');
     expect(router.currentRoute.value.path).toBe('/dashboard');
   });
+
+  it('blocks unauthenticated access to /offline-trips when offline and redirects to /login', async () => {
+    const authStore = useAuthStore();
+    authStore.firebaseUser = null;
+    authStore.currentUser = null;
+    localStorage.removeItem('user');
+
+    // Simulate navigator.onLine = false
+    const originalOnLine = navigator.onLine;
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+
+    try {
+      await router.push('/offline-trips');
+      expect(router.currentRoute.value.path).toBe('/login');
+      expect(router.currentRoute.value.query.offlineBlocked).toBe('true');
+    } finally {
+      Object.defineProperty(navigator, 'onLine', { value: originalOnLine, configurable: true });
+    }
+  });
+
+  it('permits access to /offline-trips when offline for verified previously authenticated account', async () => {
+    const authStore = useAuthStore();
+    authStore.firebaseUser = null;
+    authStore.currentUser = null;
+    localStorage.setItem('user', JSON.stringify({ id: 'cached-user-1', email: 'offline@travelsync.local' }));
+
+    const originalOnLine = navigator.onLine;
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+
+    try {
+      await router.push('/offline-trips');
+      expect(router.currentRoute.value.path).toBe('/offline-trips');
+    } finally {
+      localStorage.removeItem('user');
+      Object.defineProperty(navigator, 'onLine', { value: originalOnLine, configurable: true });
+    }
+  });
 });

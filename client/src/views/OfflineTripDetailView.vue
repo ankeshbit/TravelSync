@@ -174,8 +174,17 @@
                       <span class="material-symbols-outlined text-[14px]">pin_drop</span>
                       <span>{{ place.address || 'Address not specified' }}</span>
                     </p>
-                    <div v-if="place.note" class="mt-2 text-xs bg-white dark:bg-[#1B1C19] p-2.5 rounded-xl border border-[#E3E0D8] dark:border-[#30312C] text-[#575851] dark:text-[#A5A69B]">
-                      <span class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">Note:</span> {{ place.note }}
+                    <div class="mt-2.5 space-y-1.5">
+                      <div v-if="place.note" class="text-xs bg-white dark:bg-[#1B1C19] p-2.5 rounded-xl border border-[#E3E0D8] dark:border-[#30312C] text-[#575851] dark:text-[#A5A69B]">
+                        <span class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">Note:</span> {{ place.note }}
+                      </div>
+                      <button
+                        @click="openPlaceNoteModal(place)"
+                        class="inline-flex items-center gap-1 text-[11px] font-semibold text-[#86A98B] hover:text-[#729777] transition-colors"
+                      >
+                        <span class="material-symbols-outlined text-[14px]">edit_note</span>
+                        <span>{{ place.note ? 'Edit Note' : 'Add Note' }}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -200,11 +209,17 @@
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-lg font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">Accommodations & Transport</h2>
-            <p class="text-xs text-[#575851] dark:text-[#A5A69B] mt-0.5">Hotel reservations, boarding information, and check-in references saved for offline check-in.</p>
+            <p class="text-xs text-[#575851] dark:text-[#A5A69B] mt-0.5">Hotel reservations and transport references verified from your trip places.</p>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div v-if="!tripBundle.staysAndTransport || tripBundle.staysAndTransport.length === 0" class="p-8 text-center bg-[#FFFFFF] dark:bg-[#1B1C19] rounded-3xl border border-[#E3E0D8] dark:border-[#30312C]">
+          <span class="material-symbols-outlined text-3xl text-[#7E8075]">hotel</span>
+          <p class="text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mt-2">No accommodations or transport booked for this trip</p>
+          <p class="text-xs text-[#7E8075] dark:text-[#85867C] mt-1">Verified lodging places added to your itinerary will be displayed here.</p>
+        </div>
+
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div 
             v-for="stay in tripBundle.staysAndTransport" 
             :key="stay.id"
@@ -216,7 +231,7 @@
                   <span class="material-symbols-outlined text-[16px]">{{ stay.type === 'flight' ? 'flight' : 'hotel' }}</span>
                   <span>{{ stay.type }}</span>
                 </span>
-                <span class="text-xs font-mono font-bold bg-[#F0EEE9] dark:bg-[#22231F] px-2.5 py-1 rounded-lg text-[#1C1D1A] dark:text-[#D5D3CA]">
+                <span v-if="stay.bookingRef" class="text-xs font-mono font-bold bg-[#F0EEE9] dark:bg-[#22231F] px-2.5 py-1 rounded-lg text-[#1C1D1A] dark:text-[#D5D3CA]">
                   {{ stay.bookingRef }}
                 </span>
               </div>
@@ -224,12 +239,12 @@
               <h3 class="text-base font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">{{ stay.name }}</h3>
               <p class="text-xs text-[#7E8075] dark:text-[#85867C] mt-1 flex items-center gap-1">
                 <span class="material-symbols-outlined text-[15px]">location_on</span>
-                <span>{{ stay.address || stay.terminal || 'Designated Terminal' }}</span>
+                <span>{{ stay.address || stay.terminal || 'Address not specified' }}</span>
               </p>
 
               <div class="mt-4 p-3 rounded-2xl bg-[#F7F6F2] dark:bg-[#22231F] text-xs text-[#575851] dark:text-[#A5A69B] space-y-1.5">
-                <p><span class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">Check-In / Departure:</span> {{ formatDate(stay.checkIn || stay.departure) }}</p>
-                <p><span class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">Check-Out / Arrival:</span> {{ formatDate(stay.checkOut || stay.arrival) }}</p>
+                <p v-if="stay.checkIn || stay.departure"><span class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">Check-In / Departure:</span> {{ formatDate(stay.checkIn || stay.departure) }}</p>
+                <p v-if="stay.checkOut || stay.arrival"><span class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">Check-Out / Arrival:</span> {{ formatDate(stay.checkOut || stay.arrival) }}</p>
                 <p v-if="stay.notes"><span class="font-semibold text-[#1C1D1A] dark:text-[#D5D3CA]">Details:</span> {{ stay.notes }}</p>
               </div>
             </div>
@@ -237,7 +252,7 @@
             <div class="mt-5 pt-3 border-t border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-between text-xs text-[#7E8075]">
               <span class="flex items-center gap-1">
                 <span class="material-symbols-outlined text-[15px] text-[#86A98B]">verified</span>
-                <span>Offline Verified Record</span>
+                <span>Saved Place Record</span>
               </span>
             </div>
           </div>
@@ -248,10 +263,16 @@
       <section v-if="activeTab === 'documents'" class="space-y-6">
         <div>
           <h2 class="text-lg font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">Tickets & Travel Documents</h2>
-          <p class="text-xs text-[#575851] dark:text-[#A5A69B] mt-0.5">Locally stored travel documents and digital boarding confirmations.</p>
+          <p class="text-xs text-[#575851] dark:text-[#A5A69B] mt-0.5">Locally stored travel documents and digital confirmations.</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div v-if="!tripBundle.documents || tripBundle.documents.length === 0" class="p-8 text-center bg-[#FFFFFF] dark:bg-[#1B1C19] rounded-3xl border border-[#E3E0D8] dark:border-[#30312C]">
+          <span class="material-symbols-outlined text-3xl text-[#7E8075]">description</span>
+          <p class="text-sm font-semibold text-[#1C1D1A] dark:text-[#D5D3CA] mt-2">No travel documents stored for offline use</p>
+          <p class="text-xs text-[#7E8075] dark:text-[#85867C] mt-1">Uploaded tickets, boarding passes, and documents will appear here once downloaded.</p>
+        </div>
+
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div 
             v-for="doc in tripBundle.documents" 
             :key="doc.id"
@@ -286,12 +307,12 @@
       <section v-if="activeTab === 'emergency'" class="space-y-6">
         <div>
           <h2 class="text-lg font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">Emergency Contacts & Local Helplines</h2>
-          <p class="text-xs text-[#575851] dark:text-[#A5A69B] mt-0.5">Local emergency services numbers and contact cards for your travel companions. Tap to dial directly.</p>
+          <p class="text-xs text-[#575851] dark:text-[#A5A69B] mt-0.5">Verified emergency services and contacts for your organizers and co-travelers.</p>
         </div>
 
         <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2.5">
           <span class="material-symbols-outlined text-[20px] flex-shrink-0">info</span>
-          <span>Placing emergency phone calls requires standard cellular network or carrier coverage on your device.</span>
+          <span>Placing emergency phone calls requires standard cellular network coverage on your device.</span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -309,6 +330,10 @@
               </div>
               <h4 class="text-base font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">{{ contact.name }}</h4>
               <p v-if="contact.notes" class="text-xs text-[#7E8075] dark:text-[#85867C] mt-1">{{ contact.notes }}</p>
+              <p v-if="contact.source" class="text-[10px] text-[#86A98B] mt-1 flex items-center gap-1">
+                <span class="material-symbols-outlined text-[12px]">verified</span>
+                <span>Source: {{ contact.source }}</span>
+              </p>
             </div>
 
             <div class="mt-4 pt-3 border-t border-[#E3E0D8] dark:border-[#30312C] flex items-center justify-between">
@@ -320,6 +345,8 @@
                 <span class="material-symbols-outlined text-[15px]">call</span>
                 <span>{{ contact.phone }}</span>
               </a>
+              <span v-else class="text-[11px] text-[#7E8075] dark:text-[#85867C] italic">No phone on file</span>
+
               <a 
                 v-if="contact.email" 
                 :href="`mailto:${contact.email}`"
@@ -457,6 +484,46 @@
       </section>
     </div>
 
+    <!-- Place Note Modal (Offline Place Note Editing) -->
+    <div v-if="editingPlace" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <span class="material-symbols-outlined text-2xl text-[#86A98B]">edit_note</span>
+            <h3 class="text-base font-bold text-[#1C1D1A] dark:text-[#D5D3CA] truncate">{{ editingPlace.name }}</h3>
+          </div>
+          <button @click="editingPlace = null" class="text-[#7E8075] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA]">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-[#575851] dark:text-[#A5A69B] mb-1.5">Offline Place Note</label>
+          <textarea
+            v-model="placeNoteDraft"
+            rows="4"
+            class="w-full bg-[#F7F6F2] dark:bg-[#22231F] border border-[#E3E0D8] dark:border-[#30312C] rounded-2xl p-4 text-xs sm:text-sm text-[#1C1D1A] dark:text-[#D5D3CA] focus:outline-none focus:border-[#86A98B] transition-all resize-none"
+            placeholder="Add notes, entrance details, photography spots, or tips..."
+          ></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <button
+            @click="editingPlace = null"
+            class="px-4 py-2 rounded-xl text-xs font-semibold text-[#575851] dark:text-[#A5A69B] hover:bg-[#F0EEE9] dark:hover:bg-[#22231F] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="savePlaceNote"
+            class="px-4 py-2 rounded-xl bg-[#86A98B] hover:bg-[#729777] text-white text-xs font-semibold shadow-sm transition-all"
+          >
+            Save Note Locally
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Document Preview Modal -->
     <div v-if="selectedDoc" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-4">
@@ -514,12 +581,29 @@ const { isOnline, isServerReachable } = useConnectivity();
 const loading = ref(true);
 const activeTab = ref('itinerary');
 const selectedDoc = ref(null);
+const editingPlace = ref(null);
+const placeNoteDraft = ref('');
 
-const currentUserId = computed(() => authStore.currentUser?.id || authStore.firebaseUser?.uid || 'offline-user');
+const currentUserId = computed(() => {
+  if (authStore.currentUser?.id) return authStore.currentUser.id;
+  if (authStore.firebaseUser?.uid) return authStore.firebaseUser.uid;
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.id) return parsed.id;
+        if (parsed?.firebaseUid) return parsed.firebaseUid;
+      }
+    } catch {}
+  }
+  return null;
+});
+
 const tripBundle = computed(() => offlineStore.activeTripBundle);
 
 const completedCount = computed(() => {
-  return (tripBundle.value?.checklists || []).filter(c => c.completed).length;
+  return (tripBundle.value?.checklists || []).filter(c => c.completed || c.isCompleted).length;
 });
 
 const groupedItinerary = computed(() => {
@@ -546,7 +630,11 @@ const tabs = computed(() => [
 onMounted(async () => {
   loading.value = true;
   try {
-    await offlineStore.loadTripBundle(currentUserId.value, route.params.tripId);
+    if (currentUserId.value) {
+      await offlineStore.loadTripBundle(currentUserId.value, route.params.tripId);
+    } else {
+      offlineStore.activeTripBundle = null;
+    }
   } finally {
     loading.value = false;
   }
@@ -585,18 +673,40 @@ function openDocModal(doc) {
   selectedDoc.value = doc;
 }
 
-async function toggleItem(item) {
-  const nextVal = !item.completed;
+function openPlaceNoteModal(place) {
+  editingPlace.value = place;
+  placeNoteDraft.value = place.note || '';
+}
+
+async function savePlaceNote() {
+  if (!editingPlace.value || !currentUserId.value) return;
+  const targetPlaceId = editingPlace.value.originalId || editingPlace.value.placeId || editingPlace.value.id;
   try {
-    await offlineStore.toggleChecklistItem(currentUserId.value, route.params.tripId, item.id, nextVal);
+    await offlineStore.updatePlaceNote(currentUserId.value, route.params.tripId, targetPlaceId, placeNoteDraft.value);
+    editingPlace.value.note = placeNoteDraft.value;
+    toastStore.showToast('Place note saved locally. Queued for cloud sync.', 'success');
+    editingPlace.value = null;
+  } catch {
+    toastStore.showToast('Failed to save place note locally', 'error');
+  }
+}
+
+async function toggleItem(item) {
+  if (!currentUserId.value) return;
+  const nextVal = !Boolean(item.completed || item.isCompleted);
+  const targetId = item.originalId || item.id;
+  try {
+    await offlineStore.toggleChecklistItem(currentUserId.value, route.params.tripId, targetId, nextVal);
   } catch {
     toastStore.showToast('Failed to update checklist locally', 'error');
   }
 }
 
 async function saveNoteChanges(note) {
+  if (!currentUserId.value) return;
+  const targetId = note.originalId || note.id;
   try {
-    await offlineStore.updateNote(currentUserId.value, route.params.tripId, note.id, note.content);
+    await offlineStore.updateNote(currentUserId.value, route.params.tripId, targetId, note.content);
     toastStore.showToast('Note saved locally. Changes queued for cloud sync.', 'success');
   } catch {
     toastStore.showToast('Failed to save note locally', 'error');
@@ -604,9 +714,10 @@ async function saveNoteChanges(note) {
 }
 
 async function handleSyncNow() {
+  if (!currentUserId.value) return;
   try {
     await offlineStore.syncPendingChanges(currentUserId.value, route.params.tripId);
-    toastStore.showToast('Changes synced with cloud server!', 'success');
+    toastStore.showToast('Sync completed', 'success');
   } catch {
     toastStore.showToast('Sync failed', 'error');
   }

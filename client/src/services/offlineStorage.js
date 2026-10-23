@@ -1,84 +1,203 @@
 /**
  * TravelSync IndexedDB Offline Storage Layer
- * Powered by 'idb' with atomic transactions, user data isolation, and versioned schema.
+ * Powered by 'idb' with atomic transactions, multi-user account isolation,
+ * versioned schema migrations, and reliable offline-first persistence.
  */
 
 import { openDB } from 'idb';
 
-const DB_NAME = 'TravelSyncOfflineDB';
-const DB_VERSION = 1;
+export const DB_NAME = 'TravelSyncOfflineDB';
+export const DB_VERSION = 2;
 
 /**
- * Open database connection with schema migration
+ * Creates compound key string for scoped primary storage keys
+ */
+export function createScopedKey(userId, ...parts) {
+  return [userId, ...parts].join('::');
+}
+
+/**
+ * Open database connection with schema creation and migration
  */
 export async function getDb() {
   return openDB(DB_NAME, DB_VERSION, {
     upgrade(db, oldVersion, newVersion, transaction) {
       // 1. Trips Store
+      let tripStore;
       if (!db.objectStoreNames.contains('trips')) {
-        const tripStore = db.createObjectStore('trips', { keyPath: 'id' });
+        tripStore = db.createObjectStore('trips', { keyPath: 'id' });
+      } else {
+        tripStore = transaction.objectStore('trips');
+      }
+      if (!tripStore.indexNames.contains('userId')) {
         tripStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!tripStore.indexNames.contains('user_trip')) {
+        tripStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!tripStore.indexNames.contains('destination')) {
         tripStore.createIndex('destination', 'destination', { unique: false });
+      }
+      if (!tripStore.indexNames.contains('downloadedAt')) {
         tripStore.createIndex('downloadedAt', 'downloadedAt', { unique: false });
       }
 
       // 2. Itineraries (Places) Store
+      let itinStore;
       if (!db.objectStoreNames.contains('itineraries')) {
-        const itinStore = db.createObjectStore('itineraries', { keyPath: 'id' });
+        itinStore = db.createObjectStore('itineraries', { keyPath: 'id' });
+      } else {
+        itinStore = transaction.objectStore('itineraries');
+      }
+      if (!itinStore.indexNames.contains('user_trip')) {
+        itinStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!itinStore.indexNames.contains('userId')) {
+        itinStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!itinStore.indexNames.contains('tripId')) {
         itinStore.createIndex('tripId', 'tripId', { unique: false });
+      }
+      if (!itinStore.indexNames.contains('tripId_dayNumber')) {
         itinStore.createIndex('tripId_dayNumber', ['tripId', 'dayNumber'], { unique: false });
       }
 
       // 3. Stays and Transport Store (Hotels, Flights, Trains, etc.)
+      let stayStore;
       if (!db.objectStoreNames.contains('staysAndTransport')) {
-        const stayStore = db.createObjectStore('staysAndTransport', { keyPath: 'id' });
+        stayStore = db.createObjectStore('staysAndTransport', { keyPath: 'id' });
+      } else {
+        stayStore = transaction.objectStore('staysAndTransport');
+      }
+      if (!stayStore.indexNames.contains('user_trip')) {
+        stayStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!stayStore.indexNames.contains('userId')) {
+        stayStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!stayStore.indexNames.contains('tripId')) {
         stayStore.createIndex('tripId', 'tripId', { unique: false });
+      }
+      if (!stayStore.indexNames.contains('type')) {
         stayStore.createIndex('type', 'type', { unique: false });
       }
 
       // 4. Documents & Tickets Store
+      let docStore;
       if (!db.objectStoreNames.contains('documents')) {
-        const docStore = db.createObjectStore('documents', { keyPath: 'id' });
-        docStore.createIndex('tripId', 'tripId', { unique: false });
+        docStore = db.createObjectStore('documents', { keyPath: 'id' });
+      } else {
+        docStore = transaction.objectStore('documents');
+      }
+      if (!docStore.indexNames.contains('user_trip')) {
+        docStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!docStore.indexNames.contains('userId')) {
         docStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!docStore.indexNames.contains('tripId')) {
+        docStore.createIndex('tripId', 'tripId', { unique: false });
+      }
+      if (!docStore.indexNames.contains('docType')) {
         docStore.createIndex('docType', 'docType', { unique: false });
       }
 
       // 5. Emergency Contacts Store
+      let emStore;
       if (!db.objectStoreNames.contains('emergencyContacts')) {
-        const emStore = db.createObjectStore('emergencyContacts', { keyPath: 'id' });
-        emStore.createIndex('tripId', 'tripId', { unique: false });
+        emStore = db.createObjectStore('emergencyContacts', { keyPath: 'id' });
+      } else {
+        emStore = transaction.objectStore('emergencyContacts');
+      }
+      if (!emStore.indexNames.contains('user_trip')) {
+        emStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!emStore.indexNames.contains('userId')) {
         emStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!emStore.indexNames.contains('tripId')) {
+        emStore.createIndex('tripId', 'tripId', { unique: false });
       }
 
       // 6. Checklists Store (Packing & To-dos)
+      let chkStore;
       if (!db.objectStoreNames.contains('checklists')) {
-        const chkStore = db.createObjectStore('checklists', { keyPath: 'id' });
-        chkStore.createIndex('tripId', 'tripId', { unique: false });
+        chkStore = db.createObjectStore('checklists', { keyPath: 'id' });
+      } else {
+        chkStore = transaction.objectStore('checklists');
+      }
+      if (!chkStore.indexNames.contains('user_trip')) {
+        chkStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!chkStore.indexNames.contains('userId')) {
         chkStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!chkStore.indexNames.contains('tripId')) {
+        chkStore.createIndex('tripId', 'tripId', { unique: false });
+      }
+      if (!chkStore.indexNames.contains('category')) {
         chkStore.createIndex('category', 'category', { unique: false });
       }
 
       // 7. Travel Notes Store
+      let notesStore;
       if (!db.objectStoreNames.contains('notes')) {
-        const notesStore = db.createObjectStore('notes', { keyPath: 'id' });
-        notesStore.createIndex('tripId', 'tripId', { unique: false });
+        notesStore = db.createObjectStore('notes', { keyPath: 'id' });
+      } else {
+        notesStore = transaction.objectStore('notes');
+      }
+      if (!notesStore.indexNames.contains('user_trip')) {
+        notesStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!notesStore.indexNames.contains('userId')) {
         notesStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!notesStore.indexNames.contains('tripId')) {
+        notesStore.createIndex('tripId', 'tripId', { unique: false });
       }
 
       // 8. Pending Synchronization Queue
+      let queueStore;
       if (!db.objectStoreNames.contains('pendingSyncQueue')) {
-        const queueStore = db.createObjectStore('pendingSyncQueue', { keyPath: 'id' });
+        queueStore = db.createObjectStore('pendingSyncQueue', { keyPath: 'id' });
+      } else {
+        queueStore = transaction.objectStore('pendingSyncQueue');
+      }
+      if (!queueStore.indexNames.contains('user_trip')) {
+        queueStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!queueStore.indexNames.contains('userId')) {
         queueStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!queueStore.indexNames.contains('tripId')) {
         queueStore.createIndex('tripId', 'tripId', { unique: false });
+      }
+      if (!queueStore.indexNames.contains('createdAt')) {
         queueStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
 
       // 9. Sync & Download Metadata
+      let metaStore;
       if (!db.objectStoreNames.contains('syncMetadata')) {
-        const metaStore = db.createObjectStore('syncMetadata', { keyPath: 'tripId' });
+        metaStore = db.createObjectStore('syncMetadata', { keyPath: 'id' });
+      } else {
+        metaStore = transaction.objectStore('syncMetadata');
+      }
+      if (!metaStore.indexNames.contains('user_trip')) {
+        metaStore.createIndex('user_trip', ['userId', 'tripId'], { unique: false });
+      }
+      if (!metaStore.indexNames.contains('userId')) {
         metaStore.createIndex('userId', 'userId', { unique: false });
       }
+    },
+    blocked() {
+      console.warn('[OfflineStorage] IndexedDB upgrade blocked by an open connection in another tab.');
+    },
+    blocking() {
+      console.warn('[OfflineStorage] Database connection closing to permit upgrade in another tab.');
+    },
+    terminated() {
+      console.error('[OfflineStorage] Database connection abnormally terminated.');
     }
   });
 }
@@ -97,6 +216,7 @@ export function estimateObjectSize(obj) {
 
 /**
  * Saves a complete trip package to IndexedDB inside an atomic transaction.
+ * All records are strictly scoped to userId to ensure multi-account isolation.
  */
 export async function saveOfflineTripPack(userId, pack) {
   if (!userId) throw new Error('Cannot save offline trip: User ID is required.');
@@ -109,10 +229,11 @@ export async function saveOfflineTripPack(userId, pack) {
   // Calculate approximate data size
   const totalSizeBytes = estimateObjectSize(pack);
 
-  // Normalize trip record
+  // Normalize trip record with scoped primary key
+  const scopedTripId = createScopedKey(userId, tripId);
   const tripRecord = {
     ...pack.trip,
-    id: tripId,
+    id: scopedTripId,
     tripId,
     userId,
     downloadedAt: now,
@@ -136,65 +257,77 @@ export async function saveOfflineTripPack(userId, pack) {
     // 1. Put trip
     await tx.objectStore('trips').put(tripRecord);
 
-    // 2. Put itinerary places
+    // 2. Put itinerary places (clear previous places for this user + trip only)
     const itinStore = tx.objectStore('itineraries');
-    // Clear previous places for this trip to prevent duplicates
-    const oldItinKeys = await itinStore.index('tripId').getAllKeys(tripId);
+    const oldItinKeys = await itinStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldItinKeys) {
       await itinStore.delete(key);
     }
     if (Array.isArray(pack.itinerary)) {
       for (const item of pack.itinerary) {
+        const rawItemId = item.id || `place_${Math.random()}`;
         await itinStore.put({
           ...item,
+          id: createScopedKey(userId, tripId, rawItemId),
+          placeId: rawItemId,
+          originalId: rawItemId,
           tripId,
           userId
         });
       }
     }
 
-    // 3. Stays and Transport
+    // 3. Stays and Transport (clear previous stays for this user + trip only)
     const stayStore = tx.objectStore('staysAndTransport');
-    const oldStayKeys = await stayStore.index('tripId').getAllKeys(tripId);
+    const oldStayKeys = await stayStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldStayKeys) {
       await stayStore.delete(key);
     }
     if (Array.isArray(pack.staysAndTransport)) {
       for (const item of pack.staysAndTransport) {
+        const rawItemId = item.id || `stay_${Math.random()}`;
         await stayStore.put({
           ...item,
+          id: createScopedKey(userId, tripId, rawItemId),
+          originalId: rawItemId,
           tripId,
           userId
         });
       }
     }
 
-    // 4. Documents & Tickets
+    // 4. Documents & Tickets (clear previous docs for this user + trip only)
     const docStore = tx.objectStore('documents');
-    const oldDocKeys = await docStore.index('tripId').getAllKeys(tripId);
+    const oldDocKeys = await docStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldDocKeys) {
       await docStore.delete(key);
     }
     if (Array.isArray(pack.documents)) {
       for (const doc of pack.documents) {
+        const rawDocId = doc.id || `doc_${Math.random()}`;
         await docStore.put({
           ...doc,
+          id: createScopedKey(userId, tripId, rawDocId),
+          originalId: rawDocId,
           tripId,
           userId
         });
       }
     }
 
-    // 5. Emergency Contacts
+    // 5. Emergency Contacts (clear previous contacts for this user + trip only)
     const emStore = tx.objectStore('emergencyContacts');
-    const oldEmKeys = await emStore.index('tripId').getAllKeys(tripId);
+    const oldEmKeys = await emStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldEmKeys) {
       await emStore.delete(key);
     }
     if (Array.isArray(pack.emergencyContacts)) {
       for (const contact of pack.emergencyContacts) {
+        const rawContactId = contact.id || `em_${Math.random()}`;
         await emStore.put({
           ...contact,
+          id: createScopedKey(userId, tripId, rawContactId),
+          originalId: rawContactId,
           tripId,
           userId
         });
@@ -203,37 +336,48 @@ export async function saveOfflineTripPack(userId, pack) {
 
     // 6. Checklists (preserves local completion status if already present)
     const chkStore = tx.objectStore('checklists');
-    const existingChecklistItems = await chkStore.index('tripId').getAll(tripId);
+    const existingChecklistItems = await chkStore.index('user_trip').getAll([userId, tripId]);
     const completedMap = new Map();
     for (const item of existingChecklistItems) {
-      if (item.isCompleted) completedMap.set(item.id, true);
+      const origId = item.originalId || item.id;
+      if (item.isCompleted || item.completed) {
+        completedMap.set(origId, true);
+      }
     }
 
-    const oldChkKeys = await chkStore.index('tripId').getAllKeys(tripId);
+    const oldChkKeys = await chkStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldChkKeys) {
       await chkStore.delete(key);
     }
     if (Array.isArray(pack.checklists)) {
       for (const item of pack.checklists) {
+        const rawItemId = item.id || `chk_${Math.random()}`;
+        const isCompleted = completedMap.get(rawItemId) ?? Boolean(item.completed || item.isCompleted);
         await chkStore.put({
           ...item,
+          id: createScopedKey(userId, tripId, rawItemId),
+          originalId: rawItemId,
           tripId,
           userId,
-          isCompleted: completedMap.get(item.id) ?? Boolean(item.isCompleted)
+          completed: isCompleted,
+          isCompleted
         });
       }
     }
 
     // 7. Travel Notes
     const notesStore = tx.objectStore('notes');
-    const oldNoteKeys = await notesStore.index('tripId').getAllKeys(tripId);
+    const oldNoteKeys = await notesStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldNoteKeys) {
       await notesStore.delete(key);
     }
     if (Array.isArray(pack.notes)) {
       for (const note of pack.notes) {
+        const rawNoteId = note.id || `note_${Math.random()}`;
         await notesStore.put({
           ...note,
+          id: createScopedKey(userId, tripId, rawNoteId),
+          originalId: rawNoteId,
           tripId,
           userId
         });
@@ -241,13 +385,15 @@ export async function saveOfflineTripPack(userId, pack) {
     }
 
     // 8. Update sync metadata
-    await tx.objectStore('syncMetadata').put({
+    const metaStore = tx.objectStore('syncMetadata');
+    await metaStore.put({
+      id: scopedTripId,
       tripId,
       userId,
       lastSyncedAt: now,
       lastDownloadSizeBytes: totalSizeBytes,
       status: 'synced',
-      version: 1
+      version: DB_VERSION
     });
 
     await tx.done;
@@ -259,7 +405,7 @@ export async function saveOfflineTripPack(userId, pack) {
       dataSizeBytes: totalSizeBytes
     };
   } catch (err) {
-    tx.abort();
+    try { tx.abort(); } catch {}
     console.error('[OfflineStorage] Error saving trip pack:', err);
     throw err;
   }
@@ -275,7 +421,11 @@ export async function getOfflineTrips(userId) {
   const store = tx.objectStore('trips');
   const userTrips = await store.index('userId').getAll(userId);
   await tx.done;
-  return userTrips;
+  return userTrips.map(t => ({
+    ...t,
+    id: t.tripId || t.id,
+    scopedId: t.id
+  }));
 }
 
 /**
@@ -284,18 +434,20 @@ export async function getOfflineTrips(userId) {
 export async function isTripAvailableOffline(userId, tripId) {
   if (!userId || !tripId) return false;
   const db = await getDb();
-  const trip = await db.get('trips', tripId);
+  const scopedKey = createScopedKey(userId, tripId);
+  const trip = await db.get('trips', scopedKey);
   return Boolean(trip && trip.userId === userId);
 }
 
 /**
- * Fetch full offline bundle for a saved trip
+ * Fetch full offline bundle for a saved trip scoped strictly to userId
  */
 export async function getOfflineTripBundle(userId, tripId) {
   if (!userId || !tripId) return null;
   const db = await getDb();
 
-  const trip = await db.get('trips', tripId);
+  const scopedKey = createScopedKey(userId, tripId);
+  const trip = await db.get('trips', scopedKey);
   if (!trip || trip.userId !== userId) {
     return null; // Not found or data isolation guard
   }
@@ -309,23 +461,33 @@ export async function getOfflineTripBundle(userId, tripId) {
     notes,
     metadata
   ] = await Promise.all([
-    db.getAllFromIndex('itineraries', 'tripId', tripId),
-    db.getAllFromIndex('staysAndTransport', 'tripId', tripId),
-    db.getAllFromIndex('documents', 'tripId', tripId),
-    db.getAllFromIndex('emergencyContacts', 'tripId', tripId),
-    db.getAllFromIndex('checklists', 'tripId', tripId),
-    db.getAllFromIndex('notes', 'tripId', tripId),
-    db.get('syncMetadata', tripId)
+    db.getAllFromIndex('itineraries', 'user_trip', [userId, tripId]),
+    db.getAllFromIndex('staysAndTransport', 'user_trip', [userId, tripId]),
+    db.getAllFromIndex('documents', 'user_trip', [userId, tripId]),
+    db.getAllFromIndex('emergencyContacts', 'user_trip', [userId, tripId]),
+    db.getAllFromIndex('checklists', 'user_trip', [userId, tripId]),
+    db.getAllFromIndex('notes', 'user_trip', [userId, tripId]),
+    db.get('syncMetadata', scopedKey)
   ]);
 
+  const normalizeItem = item => ({
+    ...item,
+    id: item.originalId || item.placeId || item.id,
+    scopedId: item.id
+  });
+
   return {
-    trip,
-    itinerary: (itinerary || []).sort((a, b) => (a.dayNumber - b.dayNumber) || (a.orderIndex - b.orderIndex)),
-    staysAndTransport: staysAndTransport || [],
-    documents: documents || [],
-    emergencyContacts: emergencyContacts || [],
-    checklists: checklists || [],
-    notes: notes || [],
+    trip: {
+      ...trip,
+      id: trip.tripId || trip.id,
+      scopedId: trip.id
+    },
+    itinerary: (itinerary || []).map(normalizeItem).sort((a, b) => (a.dayNumber - b.dayNumber) || (a.orderIndex - b.orderIndex)),
+    staysAndTransport: (staysAndTransport || []).map(normalizeItem),
+    documents: (documents || []).map(normalizeItem),
+    emergencyContacts: (emergencyContacts || []).map(normalizeItem),
+    checklists: (checklists || []).map(normalizeItem),
+    notes: (notes || []).map(normalizeItem),
     metadata: metadata || null
   };
 }
@@ -333,14 +495,21 @@ export async function getOfflineTripBundle(userId, tripId) {
 /**
  * Update checklist item status offline and register pending sync action
  */
-export async function updateChecklistItemLocal(userId, tripId, itemId, isCompleted) {
-  if (!userId || !tripId || !itemId) return false;
+export async function updateChecklistItemLocal(userId, tripId, rawItemId, isCompleted) {
+  if (!userId || !tripId || !rawItemId) return false;
   const db = await getDb();
   const tx = db.transaction(['checklists', 'pendingSyncQueue'], 'readwrite');
 
-  const item = await tx.objectStore('checklists').get(itemId);
+  const scopedKey = createScopedKey(userId, tripId, rawItemId);
+  let item = await tx.objectStore('checklists').get(scopedKey);
+  if (!item) {
+    // Fallback: check by raw ID matching this user and trip
+    const all = await tx.objectStore('checklists').index('user_trip').getAll([userId, tripId]);
+    item = all.find(i => i.originalId === rawItemId || i.id === rawItemId);
+  }
+
   if (!item || item.userId !== userId) {
-    tx.abort();
+    try { tx.abort(); } catch {}
     return false;
   }
 
@@ -355,15 +524,16 @@ export async function updateChecklistItemLocal(userId, tripId, itemId, isComplet
   await tx.objectStore('checklists').put(updatedItem);
 
   // Enqueue pending sync action
-  const syncOpId = `sync_chk_${itemId}_${Date.now()}`;
+  const syncOpId = `sync_chk_${rawItemId}_${Date.now()}`;
   await tx.objectStore('pendingSyncQueue').put({
-    id: syncOpId,
+    id: createScopedKey(userId, syncOpId),
+    queueKey: syncOpId,
     userId,
     tripId,
     entityType: 'checklist',
     recordType: 'checklist',
-    entityId: itemId,
-    recordId: itemId,
+    entityId: rawItemId,
+    recordId: rawItemId,
     action: 'toggle',
     payload: { isCompleted, completed: isCompleted },
     createdAt: new Date().toISOString(),
@@ -377,8 +547,8 @@ export async function updateChecklistItemLocal(userId, tripId, itemId, isComplet
 /**
  * Save or update a travel note locally and register pending sync action
  */
-export async function updateNoteLocal(userId, tripId, noteId, titleOrContent, maybeContent) {
-  if (!userId || !tripId || !noteId) return false;
+export async function updateNoteLocal(userId, tripId, rawNoteId, titleOrContent, maybeContent) {
+  if (!userId || !tripId || !rawNoteId) return false;
   const db = await getDb();
   const tx = db.transaction(['notes', 'pendingSyncQueue'], 'readwrite');
 
@@ -389,14 +559,21 @@ export async function updateNoteLocal(userId, tripId, noteId, titleOrContent, ma
     title = '';
   }
 
-  const existing = await tx.objectStore('notes').get(noteId);
+  const scopedKey = createScopedKey(userId, tripId, rawNoteId);
+  let existing = await tx.objectStore('notes').get(scopedKey);
+  if (!existing) {
+    const all = await tx.objectStore('notes').index('user_trip').getAll([userId, tripId]);
+    existing = all.find(n => n.originalId === rawNoteId || n.id === rawNoteId);
+  }
+
   const noteTitle = (title || existing?.title || 'Travel Note').trim();
   const noteContent = (content || existing?.content || '').trim();
-
   const now = new Date().toISOString();
+
   const noteRecord = {
     ...(existing || {}),
-    id: noteId,
+    id: existing?.id || scopedKey,
+    originalId: rawNoteId,
     userId,
     tripId,
     title: noteTitle,
@@ -408,17 +585,19 @@ export async function updateNoteLocal(userId, tripId, noteId, titleOrContent, ma
   await tx.objectStore('notes').put(noteRecord);
 
   // Enqueue pending sync action
-  const syncOpId = `sync_note_${noteId}_${Date.now()}`;
+  const syncOpId = `sync_note_${rawNoteId}_${Date.now()}`;
   await tx.objectStore('pendingSyncQueue').put({
-    id: syncOpId,
+    id: createScopedKey(userId, syncOpId),
+    queueKey: syncOpId,
     userId,
     tripId,
     entityType: 'note',
-    recordType: 'note',
-    entityId: noteId,
-    recordId: noteId,
+    recordType: existing?.placeId ? 'place_note' : 'note',
+    placeId: existing?.placeId || undefined,
+    entityId: rawNoteId,
+    recordId: rawNoteId,
     action: 'update',
-    payload: { title: noteTitle, content: noteContent, updatedAt: now },
+    payload: { title: noteTitle, content: noteContent, note: noteContent, placeId: existing?.placeId, updatedAt: now },
     createdAt: now,
     retryCount: 0
   });
@@ -428,16 +607,71 @@ export async function updateNoteLocal(userId, tripId, noteId, titleOrContent, ma
 }
 
 /**
- * Get all pending sync items for user
+ * Update place note directly on an itinerary spot locally and register pending sync action
  */
-export async function getPendingSyncQueue(userId) {
+export async function updatePlaceNoteLocal(userId, tripId, rawPlaceId, note) {
+  if (!userId || !tripId || !rawPlaceId) return false;
+  const db = await getDb();
+  const tx = db.transaction(['itineraries', 'pendingSyncQueue'], 'readwrite');
+
+  const scopedKey = createScopedKey(userId, tripId, rawPlaceId);
+  let place = await tx.objectStore('itineraries').get(scopedKey);
+  if (!place) {
+    const all = await tx.objectStore('itineraries').index('user_trip').getAll([userId, tripId]);
+    place = all.find(p => p.originalId === rawPlaceId || p.placeId === rawPlaceId || p.id === rawPlaceId);
+  }
+
+  if (!place || place.userId !== userId) {
+    try { tx.abort(); } catch {}
+    return false;
+  }
+
+  const sanitizedNote = (note || '').trim();
+  const updatedPlace = {
+    ...place,
+    note: sanitizedNote,
+    updatedAt: new Date().toISOString(),
+    isLocalEdit: true
+  };
+
+  await tx.objectStore('itineraries').put(updatedPlace);
+
+  // Enqueue pending sync action
+  const syncOpId = `sync_place_${rawPlaceId}_${Date.now()}`;
+  await tx.objectStore('pendingSyncQueue').put({
+    id: createScopedKey(userId, syncOpId),
+    queueKey: syncOpId,
+    userId,
+    tripId,
+    entityType: 'place_note',
+    recordType: 'place_note',
+    placeId: rawPlaceId,
+    entityId: rawPlaceId,
+    recordId: rawPlaceId,
+    action: 'update_place_note',
+    payload: { placeId: rawPlaceId, note: sanitizedNote },
+    createdAt: new Date().toISOString(),
+    retryCount: 0
+  });
+
+  await tx.done;
+  return true;
+}
+
+/**
+ * Get all pending sync items for user, optionally scoped to a trip
+ */
+export async function getPendingSyncQueue(userId, tripId = null) {
   if (!userId) return [];
   const db = await getDb();
+  if (tripId) {
+    return db.getAllFromIndex('pendingSyncQueue', 'user_trip', [userId, tripId]);
+  }
   return db.getAllFromIndex('pendingSyncQueue', 'userId', userId);
 }
 
 /**
- * Clear a synced item from pending queue
+ * Clear a successfully synchronized item from the pending queue
  */
 export async function clearPendingSyncItem(queueId) {
   if (!queueId) return;
@@ -446,12 +680,30 @@ export async function clearPendingSyncItem(queueId) {
 }
 
 /**
- * Delete a single trip's offline data completely
+ * Mark a pending sync item with failure details to preserve user data without loss
+ */
+export async function markPendingSyncItemError(queueId, errorMsg) {
+  if (!queueId) return;
+  const db = await getDb();
+  const item = await db.get('pendingSyncQueue', queueId);
+  if (!item) return;
+
+  item.lastError = errorMsg || 'Sync failed';
+  item.retryCount = (item.retryCount || 0) + 1;
+  item.lastAttemptAt = new Date().toISOString();
+
+  return db.put('pendingSyncQueue', item);
+}
+
+/**
+ * Delete a single trip's offline data completely for the specified user ONLY.
+ * Guarantees that deleting User A's trip never removes or corrupts User B's records.
  */
 export async function deleteOfflineTrip(userId, tripId) {
   if (!userId || !tripId) return false;
   const db = await getDb();
 
+  const scopedTripKey = createScopedKey(userId, tripId);
   const tx = db.transaction([
     'trips',
     'itineraries',
@@ -465,13 +717,15 @@ export async function deleteOfflineTrip(userId, tripId) {
   ], 'readwrite');
 
   try {
-    await tx.objectStore('trips').delete(tripId);
-    await tx.objectStore('syncMetadata').delete(tripId);
+    // Delete user's trip header and metadata
+    await tx.objectStore('trips').delete(scopedTripKey);
+    await tx.objectStore('syncMetadata').delete(scopedTripKey);
 
+    // Delete associated items belonging to [userId, tripId]
     const stores = ['itineraries', 'staysAndTransport', 'documents', 'emergencyContacts', 'checklists', 'notes', 'pendingSyncQueue'];
     for (const storeName of stores) {
       const store = tx.objectStore(storeName);
-      const keys = await store.index('tripId').getAllKeys(tripId);
+      const keys = await store.index('user_trip').getAllKeys([userId, tripId]);
       for (const k of keys) {
         await store.delete(k);
       }
@@ -480,14 +734,15 @@ export async function deleteOfflineTrip(userId, tripId) {
     await tx.done;
     return true;
   } catch (err) {
-    tx.abort();
+    try { tx.abort(); } catch {}
     console.error('[OfflineStorage] Error deleting offline trip:', err);
     throw err;
   }
 }
 
 /**
- * Clear all offline data belonging to a user (e.g. on sign out or user switch)
+ * Clear all offline data belonging to a user (e.g. on sign out or user switch).
+ * Safely covers every object store without touching other accounts' records.
  */
 export async function clearAllUserOfflineData(userId) {
   if (!userId) return;
@@ -506,8 +761,10 @@ export async function clearAllUserOfflineData(userId) {
   ], 'readwrite');
 
   try {
-    const storesWithUserIndex = [
+    const allStores = [
       'trips',
+      'itineraries',
+      'staysAndTransport',
       'documents',
       'emergencyContacts',
       'checklists',
@@ -516,7 +773,7 @@ export async function clearAllUserOfflineData(userId) {
       'syncMetadata'
     ];
 
-    for (const storeName of storesWithUserIndex) {
+    for (const storeName of allStores) {
       const store = tx.objectStore(storeName);
       const keys = await store.index('userId').getAllKeys(userId);
       for (const k of keys) {
@@ -527,7 +784,7 @@ export async function clearAllUserOfflineData(userId) {
     await tx.done;
     console.log(`[OfflineStorage] Wiped all offline records for user: ${userId}`);
   } catch (err) {
-    tx.abort();
+    try { tx.abort(); } catch {}
     console.error('[OfflineStorage] Error clearing user offline data:', err);
   }
 }

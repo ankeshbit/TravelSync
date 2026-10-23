@@ -13,7 +13,7 @@ const { calculateBalances } = require('../utils/calculateBalances');
 const logger = require('../utils/logger');
 const cache = require('../services/cache');
 const crypto = require('crypto');
-const { createTripSchema, updateTripSchema, addMemberSchema, aiSuggestionsSchema } = require('../validators/trip');
+const { createTripSchema, updateTripSchema, addMemberSchema, aiSuggestionsSchema, offlineSyncSchema } = require('../validators/trip');
 const { createPlaceSchema, updatePlaceNoteSchema, reorderPlacesSchema } = require('../validators/place');
 const { createExpenseSchema } = require('../validators/expense');
 const { tripIdParamSchema, idParamSchema, tripAndPlaceParamSchema, tripAndExpenseParamSchema, tripAndMemberParamSchema } = require('../validators/common');
@@ -1512,7 +1512,7 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
   const formattedExpenses = (trip.expenses || []).map(formatExpense);
   const balances = calculateBalances(formattedExpenses);
 
-  // Derive accommodations and transport
+  // Derive accommodations and transport (grounded in user's saved records only)
   const staysAndTransport = [];
   const lodgingPlaces = formattedPlaces.filter(p => {
     const cat = (p.category || '').toLowerCase();
@@ -1527,60 +1527,28 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
         tripId: trip.id,
         type: 'hotel',
         name: p.name,
-        address: p.address || `${trip.destination} Central`,
-        bookingRef: `REF-${p.id.replace(/-/g, '').slice(0, 8).toUpperCase()}`,
-        checkIn: trip.startDate,
-        checkOut: trip.endDate,
-        notes: p.note || 'Confirmed accommodation. Show booking confirmation upon arrival.'
+        address: p.address || '',
+        bookingRef: null, // No fabricated booking reference numbers
+        checkIn: null,
+        checkOut: null,
+        notes: p.note || '',
+        isUserAdded: true
       });
     });
-  } else {
-    staysAndTransport.push({
-      id: `stay-default-${trip.id}`,
-      tripId: trip.id,
-      type: 'hotel',
-      name: `${trip.destination} Grand Suites & Resort`,
-      address: `Central Avenue, ${trip.destination}`,
-      bookingRef: `HTL-${trip.id.replace(/-/g, '').slice(0, 8).toUpperCase()}`,
-      checkIn: trip.startDate,
-      checkOut: trip.endDate,
-      notes: 'Standard check-in: 14:00. Complimentary breakfast and high-speed Wi-Fi included.'
-    });
   }
+  // Note: If no accommodations or transit are stored, returns empty array — no fabricated hotels or flights.
 
-  // Transport itinerary
-  staysAndTransport.push({
-    id: `trans-arrival-${trip.id}`,
-    tripId: trip.id,
-    type: 'flight',
-    name: `Outbound Flight to ${trip.destination}`,
-    provider: 'TravelSync Transit Partner',
-    bookingRef: `TRN-${trip.id.replace(/-/g, '').slice(0, 6).toUpperCase()}`,
-    departure: trip.startDate,
-    arrival: trip.startDate,
-    terminal: 'Terminal 2 / Gate TBD',
-    notes: 'Online check-in opens 24h before departure. Keep passport and boarding pass ready.'
-  });
-
-  // Emergency contacts
+  // Emergency contacts (grounded in verified numbers and member profile records)
   const emergencyContacts = [
     {
-      id: `emg-local-1-${trip.id}`,
+      id: `emg-universal-${trip.id}`,
       tripId: trip.id,
-      name: 'Local Emergency Services',
+      name: 'Universal Emergency Services',
       relationship: 'Police / Ambulance / Fire',
       phone: '112',
       email: '',
-      notes: 'Universal emergency services number'
-    },
-    {
-      id: `emg-local-2-${trip.id}`,
-      tripId: trip.id,
-      name: 'Tourist Police & Assistance',
-      relationship: 'Helpline',
-      phone: '+1-800-555-0199',
-      email: 'helpline@travelsync.local',
-      notes: '24/7 tourist safety assistance'
+      source: 'Universal Emergency Dispatch (112)',
+      notes: 'Universal emergency dispatch dialable from GSM mobile devices without SIM or pin.'
     }
   ];
 
@@ -1590,9 +1558,10 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
       tripId: trip.id,
       name: trip.owner.name || 'Trip Leader',
       relationship: 'Trip Leader',
-      phone: '+1-555-014-9981',
-      email: trip.owner.email,
-      notes: 'Trip organizer primary contact'
+      phone: trip.owner.phone || null, // Real phone only; never fabricate fake numbers
+      email: trip.owner.email || '',
+      source: 'Trip Organizer Profile',
+      notes: 'Trip organizer'
     });
   }
 
@@ -1603,57 +1572,40 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
         tripId: trip.id,
         name: m.user.name || 'Travel Companion',
         relationship: 'Trip Member',
-        phone: '+1-555-018-4422',
-        email: m.user.email,
+        phone: m.user.phone || null, // Real phone only
+        email: m.user.email || '',
+        source: 'Trip Member Profile',
         notes: 'Co-traveler'
       });
     }
   });
 
-  // Smart checklists
+  // Suggested packing checklists (explicitly identified as starter templates)
   const checklists = [
-    { id: `chk-1-${trip.id}`, tripId: trip.id, title: 'Passport, Visa & Government Photo ID', category: 'Essential Documents', completed: false },
-    { id: `chk-2-${trip.id}`, tripId: trip.id, title: 'Boarding Passes & Travel Ticket E-Vouchers', category: 'Essential Documents', completed: false },
-    { id: `chk-3-${trip.id}`, tripId: trip.id, title: 'Hotel / Accommodation Confirmation Details', category: 'Lodging', completed: false },
-    { id: `chk-4-${trip.id}`, tripId: trip.id, title: 'Universal Power Adapter & Electronics Charger', category: 'Gear', completed: false },
-    { id: `chk-5-${trip.id}`, tripId: trip.id, title: 'Prescription Medication & Travel First-Aid', category: 'Health & Safety', completed: false },
-    { id: `chk-6-${trip.id}`, tripId: trip.id, title: 'Local Currency Cash & Secondary Card', category: 'Finance', completed: false },
-    { id: `chk-7-${trip.id}`, tripId: trip.id, title: 'Weather-appropriate Clothes & Comfortable Shoes', category: 'Attire', completed: false },
-    { id: `chk-8-${trip.id}`, tripId: trip.id, title: 'Offline Travel Companion App Saved', category: 'Preparation', completed: true }
+    { id: `chk-1-${trip.id}`, tripId: trip.id, title: 'Passport, Visa & Government Photo ID', category: 'Essential Documents', completed: false, isTemplate: true },
+    { id: `chk-2-${trip.id}`, tripId: trip.id, title: 'Universal Power Adapter & Electronics Charger', category: 'Gear', completed: false, isTemplate: true },
+    { id: `chk-3-${trip.id}`, tripId: trip.id, title: 'Prescription Medication & Travel First-Aid', category: 'Health & Safety', completed: false, isTemplate: true },
+    { id: `chk-4-${trip.id}`, tripId: trip.id, title: 'Local Currency Cash & Secondary Payment Card', category: 'Finance', completed: false, isTemplate: true },
+    { id: `chk-5-${trip.id}`, tripId: trip.id, title: 'Weather-appropriate Clothes & Comfortable Shoes', category: 'Attire', completed: false, isTemplate: true }
   ];
 
-  // Notes
-  const notes = [
-    {
-      id: `note-1-${trip.id}`,
-      tripId: trip.id,
-      title: 'Arrival & Local Logistics',
-      content: `Welcome to ${trip.destination}! Official airport taxis and express transit connect directly to downtown. Use metered taxis or pre-booked transfers.`,
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: `note-2-${trip.id}`,
-      tripId: trip.id,
-      title: 'Safety & Emergency Preparedness',
-      content: 'Store an offline copy of your emergency contacts. In case of lost documents, contact the local tourist assistance office immediately.',
-      updatedAt: new Date().toISOString()
+  // Notes derived from real itinerary places
+  const notes = [];
+  formattedPlaces.forEach(p => {
+    if (p.note && p.note.trim()) {
+      notes.push({
+        id: `note-place-${p.id}`,
+        placeId: p.id,
+        tripId: trip.id,
+        title: `${p.name} Notes`,
+        content: p.note,
+        updatedAt: p.createdAt || trip.createdAt
+      });
     }
-  ];
+  });
 
-  // Documents
-  const documents = [
-    {
-      id: `doc-1-${trip.id}`,
-      tripId: trip.id,
-      name: `${trip.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_Summary_Voucher.pdf`,
-      type: 'pdf',
-      size: 148200,
-      mimeType: 'application/pdf',
-      createdAt: trip.createdAt,
-      availableOffline: true,
-      description: 'Official TravelSync Trip Confirmation & Emergency Voucher'
-    }
-  ];
+  // Real travel documents only — empty array when no verified documents have been stored
+  const documents = [];
 
   res.json({
     trip: formattedTrip,
@@ -1674,7 +1626,7 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
  * @swagger
  * /api/trips/{tripId}/offline-sync:
  *   post:
- *     summary: Synchronize pending changes made offline
+ *     summary: Synchronize pending changes made offline with transactional validation
  *     tags: [Trips]
  *     security:
  *       - BearerAuth: []
@@ -1691,48 +1643,169 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
  *           schema:
  *             type: object
  *             properties:
+ *               clientSyncId:
+ *                 type: string
  *               changes:
  *                 type: array
  *                 items:
  *                   type: object
  *     responses:
  *       200:
- *         description: Offline changes processed
+ *         description: Offline changes processed with granular per-operation results
+ *       400:
+ *         description: Invalid payload or parameters
  *       403:
  *         description: Access denied
  */
-router.post('/:tripId/offline-sync', verifyToken, validate({ params: tripIdParamSchema }), checkTripMembership, asyncHandler(async (req, res) => {
+router.post('/:tripId/offline-sync', verifyToken, validate({ params: tripIdParamSchema, body: offlineSyncSchema }), checkTripMembership, asyncHandler(async (req, res) => {
   const { changes } = req.body;
+  const results = [];
   let syncedCount = 0;
+  let failedCount = 0;
 
   if (Array.isArray(changes) && changes.length > 0) {
     for (const change of changes) {
-      if (change.type === 'place_note' && change.placeId && typeof change.note === 'string') {
-        const place = await prisma.place.findFirst({
-          where: { id: change.placeId, tripId: req.params.tripId }
-        });
-        if (place) {
-          await prisma.place.update({
-            where: { id: change.placeId },
-            data: { note: change.note.trim() }
+      const changeId = change.id || change.itemId || `change-${Date.now()}`;
+      const changeType = (change.type || '').trim().toLowerCase();
+
+      try {
+        if (changeType === 'place_note') {
+          const targetPlaceId = change.placeId || change.itemId;
+          if (!targetPlaceId) {
+            results.push({
+              id: changeId,
+              type: changeType,
+              success: false,
+              code: 'MISSING_PLACE_ID',
+              error: 'placeId is required for place_note synchronization'
+            });
+            failedCount++;
+            continue;
+          }
+
+          const rawNote = change.note !== undefined ? change.note : (change.content !== undefined ? change.content : '');
+          if (typeof rawNote !== 'string') {
+            results.push({
+              id: changeId,
+              type: changeType,
+              success: false,
+              code: 'INVALID_NOTE_TYPE',
+              error: 'note content must be a string'
+            });
+            failedCount++;
+            continue;
+          }
+
+          // Verify ownership & place existence within this trip
+          const place = await prisma.place.findFirst({
+            where: { id: targetPlaceId, tripId: req.params.tripId }
           });
+
+          if (!place) {
+            results.push({
+              id: changeId,
+              type: changeType,
+              success: false,
+              code: 'RECORD_NOT_FOUND',
+              error: 'Referenced place was not found in this trip'
+            });
+            failedCount++;
+            continue;
+          }
+
+          const sanitizedNote = rawNote.trim().slice(0, 2000);
+          await prisma.place.update({
+            where: { id: targetPlaceId },
+            data: { note: sanitizedNote }
+          });
+
           syncedCount++;
+          results.push({
+            id: changeId,
+            type: changeType,
+            success: true,
+            message: 'Place note synchronized and persisted successfully'
+          });
+        } else if (changeType === 'note' || changeType === 'travel_note') {
+          // If note is associated with a place, persist to that place
+          const targetPlaceId = change.placeId || change.itemId;
+          let place = null;
+          if (targetPlaceId) {
+            place = await prisma.place.findFirst({
+              where: { id: targetPlaceId, tripId: req.params.tripId }
+            });
+          }
+
+          if (place) {
+            const rawNote = change.note !== undefined ? change.note : (change.content !== undefined ? change.content : '');
+            const sanitizedNote = String(rawNote).trim().slice(0, 2000);
+            await prisma.place.update({
+              where: { id: place.id },
+              data: { note: sanitizedNote }
+            });
+
+            syncedCount++;
+            results.push({
+              id: changeId,
+              type: changeType,
+              success: true,
+              message: 'Place-linked travel note synchronized and persisted successfully'
+            });
+          } else {
+            // Unattached general travel note — not supported by cloud schema
+            results.push({
+              id: changeId,
+              type: changeType,
+              success: false,
+              code: 'UNSUPPORTED_OPERATION',
+              error: 'General travel notes are stored locally on this device only. Attach notes to places to sync with cloud.'
+            });
+            failedCount++;
+          }
+        } else if (changeType === 'checklist' || changeType === 'checklist_item') {
+          // Packing checklists are device-local only (no cloud table)
+          results.push({
+            id: changeId,
+            type: changeType,
+            success: false,
+            code: 'UNSUPPORTED_OPERATION',
+            error: 'Checklist modifications are stored locally on this device only and cannot be synchronized to cloud.'
+          });
+          failedCount++;
+        } else {
+          results.push({
+            id: changeId,
+            type: changeType,
+            success: false,
+            code: 'UNSUPPORTED_OPERATION',
+            error: `Unsupported sync operation '${changeType}'`
+          });
+          failedCount++;
         }
-      } else {
-        // Acknowledged client-side change (e.g. checklist status, personal travel notes)
-        syncedCount++;
+      } catch (opErr) {
+        logger.error(`[OfflineSync] Error syncing operation ${changeId}:`, opErr);
+        results.push({
+          id: changeId,
+          type: changeType,
+          success: false,
+          code: 'PERSISTENCE_ERROR',
+          error: 'Database error occurred while persisting operation'
+        });
+        failedCount++;
       }
     }
 
     if (syncedCount > 0) {
-      logActivity(req.params.tripId, req.userId, 'synchronized offline items', `${syncedCount} offline change(s) synced`).catch(() => {});
+      logActivity(req.params.tripId, req.userId, 'synchronized offline items', `${syncedCount} offline change(s) persisted`).catch(() => {});
     }
   }
 
   res.json({
     success: true,
-    message: 'Offline changes synchronized successfully',
+    message: syncedCount > 0 ? `Synchronized ${syncedCount} change(s)` : 'No changes were persisted',
     syncedCount,
+    failedCount,
+    results,
     serverTimestamp: new Date().toISOString()
   });
 }));

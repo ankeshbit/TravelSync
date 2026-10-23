@@ -6,8 +6,10 @@ import {
   saveOfflineTripPack,
   updateChecklistItemLocal,
   updateNoteLocal,
+  updatePlaceNoteLocal,
   getPendingSyncQueue,
   clearPendingSyncItem,
+  markPendingSyncItemError,
   deleteOfflineTrip,
   clearAllUserOfflineData,
   estimateStorage
@@ -128,7 +130,7 @@ export const useOfflineStore = defineStore('offline', {
       try {
         await updateChecklistItemLocal(userId, tripId, itemId, completed);
         if (this.activeTripBundle && this.activeTripBundle.checklists) {
-          const item = this.activeTripBundle.checklists.find(c => c.id === itemId);
+          const item = this.activeTripBundle.checklists.find(c => c.originalId === itemId || c.id === itemId);
           if (item) item.completed = completed;
         }
         await this.loadPendingSyncQueue(userId, tripId);
@@ -145,7 +147,7 @@ export const useOfflineStore = defineStore('offline', {
       try {
         await updateNoteLocal(userId, tripId, itemId, content);
         if (this.activeTripBundle && this.activeTripBundle.notes) {
-          const item = this.activeTripBundle.notes.find(n => n.id === itemId);
+          const item = this.activeTripBundle.notes.find(n => n.originalId === itemId || n.id === itemId);
           if (item) {
             item.content = content;
             item.updatedAt = new Date().toISOString();
@@ -154,6 +156,25 @@ export const useOfflineStore = defineStore('offline', {
         await this.loadPendingSyncQueue(userId, tripId);
       } catch (err) {
         console.error('Failed to update note locally:', err);
+        throw err;
+      }
+    },
+
+    /**
+     * Update place note locally on itinerary item
+     */
+    async updatePlaceNote(userId, tripId, placeId, note) {
+      try {
+        await updatePlaceNoteLocal(userId, tripId, placeId, note);
+        if (this.activeTripBundle && this.activeTripBundle.itinerary) {
+          const item = this.activeTripBundle.itinerary.find(p => p.originalId === placeId || p.placeId === placeId || p.id === placeId);
+          if (item) {
+            item.note = note;
+          }
+        }
+        await this.loadPendingSyncQueue(userId, tripId);
+      } catch (err) {
+        console.error('Failed to update place note locally:', err);
         throw err;
       }
     },
@@ -171,7 +192,7 @@ export const useOfflineStore = defineStore('offline', {
     },
 
     /**
-     * Synchronize pending local edits with the backend when online
+     * Synchronize pending local edits with backend with granular per-operation persistence
      */
     async syncPendingChanges(userId, tripId) {
       if (!userId || !tripId || this.isSyncing) return;
@@ -179,22 +200,48 @@ export const useOfflineStore = defineStore('offline', {
       if (this.pendingSyncQueue.length === 0) return;
 
       this.isSyncing = true;
+      // Capture an immutable snapshot of queue items to sync
+      const queueSnapshot = [...this.pendingSyncQueue];
+
       try {
-        const changes = this.pendingSyncQueue.map(item => ({
-          type: item.recordType,
-          itemId: item.recordId,
+        const changes = queueSnapshot.map(item => ({
+          id: item.id,
+          type: item.recordType || item.entityType,
+          placeId: item.placeId || item.entityId,
+          itemId: item.entityId || item.recordId,
           ...item.payload,
-          modifiedAt: item.modifiedAt
+          modifiedAt: item.createdAt || item.updatedAt
         }));
 
         const res = await api.post(`/trips/${tripId}/offline-sync`, { changes });
+        const results = res.data?.results || [];
+        const resultMap = new Map(results.map(r => [r.id, r]));
 
-        // On successful response, clear local queue items
-        for (const item of this.pendingSyncQueue) {
-          await clearPendingSyncItem(item.id);
+        let persistedCount = 0;
+        let failedCount = 0;
+
+        for (const item of queueSnapshot) {
+          const result = resultMap.get(item.id);
+          if (result && result.success) {
+            // ONLY remove items explicitly verified as persisted to cloud!
+            await clearPendingSyncItem(item.id);
+            persistedCount++;
+          } else {
+            // Preserve failed items locally with clear error reasons
+            const errorMsg = result?.error || 'Server rejected synchronization';
+            await markPendingSyncItemError(item.id, errorMsg);
+            failedCount++;
+          }
         }
 
-        this.syncMessage = `Successfully synced ${res.data.syncedCount || changes.length} local update(s).`;
+        if (persistedCount > 0 && failedCount === 0) {
+          this.syncMessage = `Successfully synced ${persistedCount} change(s) to cloud.`;
+        } else if (persistedCount > 0 && failedCount > 0) {
+          this.syncMessage = `Synced ${persistedCount} change(s). ${failedCount} item(s) preserved locally (device-only or error).`;
+        } else {
+          this.syncMessage = 'Local changes preserved on device (not yet persisted to cloud).';
+        }
+
         await this.loadPendingSyncQueue(userId, tripId);
       } catch (err) {
         console.error('Failed to sync offline changes:', err);
@@ -203,7 +250,7 @@ export const useOfflineStore = defineStore('offline', {
         this.isSyncing = false;
         setTimeout(() => {
           this.syncMessage = null;
-        }, 4000);
+        }, 5000);
       }
     },
 

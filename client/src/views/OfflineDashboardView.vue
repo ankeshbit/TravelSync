@@ -280,12 +280,26 @@ const refreshingTripId = ref(null);
 const tripToDelete = ref(null);
 
 const userEmail = computed(() => authStore.currentUser?.email || authStore.firebaseUser?.email || '');
-const currentUserId = computed(() => authStore.currentUser?.id || authStore.firebaseUser?.uid || 'offline-user');
+const currentUserId = computed(() => {
+  if (authStore.currentUser?.id) return authStore.currentUser.id;
+  if (authStore.firebaseUser?.uid) return authStore.firebaseUser.uid;
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.id) return parsed.id;
+        if (parsed?.firebaseUid) return parsed.firebaseUid;
+      }
+    } catch {}
+  }
+  return null;
+});
 
 const totalStoredSize = computed(() => {
   let bytes = 0;
   for (const t of offlineStore.offlineTrips) {
-    bytes += (t.dataSize || 35000);
+    bytes += (t.dataSizeBytes || t.dataSize || 35000);
   }
   return (bytes / 1024).toFixed(1) + ' KB';
 });
@@ -293,7 +307,11 @@ const totalStoredSize = computed(() => {
 onMounted(async () => {
   loading.value = true;
   try {
-    await offlineStore.loadOfflineTrips(currentUserId.value);
+    if (currentUserId.value) {
+      await offlineStore.loadOfflineTrips(currentUserId.value);
+    } else {
+      offlineStore.offlineTrips = [];
+    }
   } finally {
     loading.value = false;
   }

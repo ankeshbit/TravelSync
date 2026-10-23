@@ -34,6 +34,16 @@ class InMemoryIndex {
   }
 }
 
+const INDEX_KEY_MAP = {
+  user_trip: ['userId', 'tripId'],
+  tripId_dayNumber: ['tripId', 'dayNumber'],
+  userId: 'userId',
+  tripId: 'tripId',
+  type: 'type',
+  category: 'category',
+  createdAt: 'createdAt'
+};
+
 class InMemoryObjectStore {
   constructor(name) {
     this.name = name;
@@ -43,7 +53,7 @@ class InMemoryObjectStore {
 
   index(name) {
     if (!this.indexes.has(name)) {
-      this.indexes.set(name, new InMemoryIndex(this, name));
+      this.indexes.set(name, new InMemoryIndex(this, INDEX_KEY_MAP[name] || name));
     }
     return this.indexes.get(name);
   }
@@ -122,8 +132,10 @@ import {
   getOfflineTripBundle,
   updateChecklistItemLocal,
   updateNoteLocal,
+  updatePlaceNoteLocal,
   getPendingSyncQueue,
   clearPendingSyncItem,
+  markPendingSyncItemError,
   deleteOfflineTrip,
   clearAllUserOfflineData,
   estimateStorage
@@ -286,6 +298,69 @@ describe('offlineStorage.js — IndexedDB Operations & Offline Travel Companion'
 
     trips = await getOfflineTrips('user-alpha');
     expect(trips.length).toBe(0);
+  });
+
+  it('isolates offline records when two users download the same trip on the same browser', async () => {
+    // Both user A and user B save trip-101
+    await saveOfflineTripPack('user-alpha', samplePack);
+    await saveOfflineTripPack('user-beta', samplePack);
+
+    const alphaTrips = await getOfflineTrips('user-alpha');
+    const betaTrips = await getOfflineTrips('user-beta');
+
+    expect(alphaTrips.length).toBe(1);
+    expect(betaTrips.length).toBe(1);
+    expect(alphaTrips[0].tripId).toBe('trip-101');
+    expect(betaTrips[0].tripId).toBe('trip-101');
+
+    // Both can independently access their bundle
+    const alphaBundle = await getOfflineTripBundle('user-alpha', 'trip-101');
+    const betaBundle = await getOfflineTripBundle('user-beta', 'trip-101');
+    expect(alphaBundle).not.toBeNull();
+    expect(betaBundle).not.toBeNull();
+
+    // User A deleting trip-101 does NOT remove User B's trip or places
+    await deleteOfflineTrip('user-alpha', 'trip-101');
+
+    const alphaAfter = await getOfflineTripBundle('user-alpha', 'trip-101');
+    const betaAfter = await getOfflineTripBundle('user-beta', 'trip-101');
+
+    expect(alphaAfter).toBeNull();
+    expect(betaAfter).not.toBeNull();
+    expect(betaAfter.trip.tripId).toBe('trip-101');
+    expect(betaAfter.itinerary.length).toBe(1);
+  });
+
+  it('updates place notes locally and enqueues place_note operation', async () => {
+    await saveOfflineTripPack('user-alpha', samplePack);
+
+    const success = await updatePlaceNoteLocal('user-alpha', 'trip-101', 'place-1', 'Scenic viewpoint at sunrise');
+    expect(success).toBe(true);
+
+    const bundle = await getOfflineTripBundle('user-alpha', 'trip-101');
+    expect(bundle.itinerary[0].note).toBe('Scenic viewpoint at sunrise');
+
+    const queue = await getPendingSyncQueue('user-alpha', 'trip-101');
+    expect(queue.length).toBe(1);
+    expect(queue[0].recordType).toBe('place_note');
+    expect(queue[0].placeId).toBe('place-1');
+    expect(queue[0].payload.note).toBe('Scenic viewpoint at sunrise');
+  });
+
+  it('preserves failed sync items and records error information', async () => {
+    await saveOfflineTripPack('user-alpha', samplePack);
+    await updateChecklistItemLocal('user-alpha', 'trip-101', 'chk-1', true);
+
+    const queue = await getPendingSyncQueue('user-alpha', 'trip-101');
+    expect(queue.length).toBe(1);
+    const item = queue[0];
+
+    await markPendingSyncItemError(item.id, 'UNSUPPORTED_OPERATION: Checklists are local only');
+
+    const updatedQueue = await getPendingSyncQueue('user-alpha', 'trip-101');
+    expect(updatedQueue.length).toBe(1);
+    expect(updatedQueue[0].lastError).toContain('UNSUPPORTED_OPERATION');
+    expect(updatedQueue[0].retryCount).toBe(1);
   });
 
   it('estimates storage usage gracefully even if navigator.storage is unsupported', async () => {

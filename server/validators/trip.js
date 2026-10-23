@@ -50,11 +50,31 @@ const aiSuggestionsSchema = z.object({
   ]).optional().default('')
 });
 
+const offlineSyncItemSchema = z.object({
+  id: z.string().trim().min(1, 'Change ID is required').max(200),
+  type: z.string().trim().min(1, 'Operation type is required').max(50),
+  placeId: z.string().trim().min(1).max(100).optional(),
+  itemId: z.string().trim().min(1).max(100).optional(),
+  note: z.string().trim().max(2000, 'Note must be 2000 characters or fewer').optional(),
+  content: z.string().trim().max(2000, 'Content must be 2000 characters or fewer').optional(),
+  title: z.string().trim().max(200).optional(),
+  completed: z.boolean().optional(),
+  isCompleted: z.boolean().optional(),
+  modifiedAt: z.string().or(z.date()).optional()
+}).passthrough();
+
+const offlineSyncSchema = z.object({
+  clientSyncId: z.string().trim().max(100).optional(),
+  changes: z.array(offlineSyncItemSchema).max(100, 'Maximum of 100 changes per sync request')
+});
+
 module.exports = {
   ALLOWED_CURRENCIES,
   ALLOWED_STATUSES,
   createTripSchema,
   updateTripSchema,
   addMemberSchema,
-  aiSuggestionsSchema
+  aiSuggestionsSchema,
+  offlineSyncSchema,
+  offlineSyncItemSchema
 };
