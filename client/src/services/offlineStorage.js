@@ -250,6 +250,7 @@ export async function saveOfflineTripPack(userId, pack) {
     'emergencyContacts',
     'checklists',
     'notes',
+    'pendingSyncQueue',
     'syncMetadata'
   ], 'readwrite');
 
@@ -257,27 +258,48 @@ export async function saveOfflineTripPack(userId, pack) {
     // 1. Put trip
     await tx.objectStore('trips').put(tripRecord);
 
-    // 2. Put itinerary places (clear previous places for this user + trip only)
+    // ─── Collect all pending sync record IDs so we never delete locally-edited records ───
+    const pendingQueue = tx.objectStore('pendingSyncQueue');
+    const pendingItems = await pendingQueue.index('user_trip').getAll([userId, tripId]);
+    const pendingEntityIds = new Set(pendingItems.map(p => p.entityId || p.recordId).filter(Boolean));
+
+    // 2. Merge itinerary places — preserve locally-edited records; replace others
     const itinStore = tx.objectStore('itineraries');
     const oldItinKeys = await itinStore.index('user_trip').getAllKeys([userId, tripId]);
+    const existingItinItems = await itinStore.index('user_trip').getAll([userId, tripId]);
+    const localItinMap = new Map(existingItinItems.map(i => [i.originalId || i.placeId, i]));
+
     for (const key of oldItinKeys) {
-      await itinStore.delete(key);
+      // Only remove records that have no pending local edits
+      const record = await itinStore.get(key);
+      const origId = record?.originalId || record?.placeId;
+      if (!record?.isLocalEdit && !pendingEntityIds.has(origId)) {
+        await itinStore.delete(key);
+      }
     }
     if (Array.isArray(pack.itinerary)) {
       for (const item of pack.itinerary) {
-        const rawItemId = item.id || `place_${Math.random()}`;
+        if (!item.id) continue; // skip items without stable IDs to avoid random keys
+        const rawItemId = item.id;
+        const existing = localItinMap.get(rawItemId);
+        // If there is a pending edit for this record, preserve local note; server data wins for everything else
+        const mergedNote = (existing?.isLocalEdit && pendingEntityIds.has(rawItemId))
+          ? existing.note
+          : item.note;
         await itinStore.put({
           ...item,
+          note: mergedNote,
           id: createScopedKey(userId, tripId, rawItemId),
           placeId: rawItemId,
           originalId: rawItemId,
           tripId,
-          userId
+          userId,
+          isLocalEdit: existing?.isLocalEdit && pendingEntityIds.has(rawItemId) ? true : undefined
         });
       }
     }
 
-    // 3. Stays and Transport (clear previous stays for this user + trip only)
+    // 3. Stays and Transport — safe replace (no local edits possible)
     const stayStore = tx.objectStore('staysAndTransport');
     const oldStayKeys = await stayStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldStayKeys) {
@@ -285,18 +307,18 @@ export async function saveOfflineTripPack(userId, pack) {
     }
     if (Array.isArray(pack.staysAndTransport)) {
       for (const item of pack.staysAndTransport) {
-        const rawItemId = item.id || `stay_${Math.random()}`;
+        if (!item.id) continue;
         await stayStore.put({
           ...item,
-          id: createScopedKey(userId, tripId, rawItemId),
-          originalId: rawItemId,
+          id: createScopedKey(userId, tripId, item.id),
+          originalId: item.id,
           tripId,
           userId
         });
       }
     }
 
-    // 4. Documents & Tickets (clear previous docs for this user + trip only)
+    // 4. Documents — safe replace (no local edits possible; server always returns empty array)
     const docStore = tx.objectStore('documents');
     const oldDocKeys = await docStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldDocKeys) {
@@ -304,18 +326,18 @@ export async function saveOfflineTripPack(userId, pack) {
     }
     if (Array.isArray(pack.documents)) {
       for (const doc of pack.documents) {
-        const rawDocId = doc.id || `doc_${Math.random()}`;
+        if (!doc.id) continue;
         await docStore.put({
           ...doc,
-          id: createScopedKey(userId, tripId, rawDocId),
-          originalId: rawDocId,
+          id: createScopedKey(userId, tripId, doc.id),
+          originalId: doc.id,
           tripId,
           userId
         });
       }
     }
 
-    // 5. Emergency Contacts (clear previous contacts for this user + trip only)
+    // 5. Emergency Contacts — safe replace
     const emStore = tx.objectStore('emergencyContacts');
     const oldEmKeys = await emStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldEmKeys) {
@@ -323,26 +345,25 @@ export async function saveOfflineTripPack(userId, pack) {
     }
     if (Array.isArray(pack.emergencyContacts)) {
       for (const contact of pack.emergencyContacts) {
-        const rawContactId = contact.id || `em_${Math.random()}`;
+        if (!contact.id) continue;
         await emStore.put({
           ...contact,
-          id: createScopedKey(userId, tripId, rawContactId),
-          originalId: rawContactId,
+          id: createScopedKey(userId, tripId, contact.id),
+          originalId: contact.id,
           tripId,
           userId
         });
       }
     }
 
-    // 6. Checklists (preserves local completion status if already present)
+    // 6. Checklists — preserve local completion state; server data is the authoritative template list
+    //    Checklists are DEVICE-LOCAL ONLY: no sync queue entries are created for them.
     const chkStore = tx.objectStore('checklists');
     const existingChecklistItems = await chkStore.index('user_trip').getAll([userId, tripId]);
     const completedMap = new Map();
     for (const item of existingChecklistItems) {
       const origId = item.originalId || item.id;
-      if (item.isCompleted || item.completed) {
-        completedMap.set(origId, true);
-      }
+      completedMap.set(origId, { completed: item.isCompleted || item.completed || false });
     }
 
     const oldChkKeys = await chkStore.index('user_trip').getAllKeys([userId, tripId]);
@@ -351,8 +372,12 @@ export async function saveOfflineTripPack(userId, pack) {
     }
     if (Array.isArray(pack.checklists)) {
       for (const item of pack.checklists) {
-        const rawItemId = item.id || `chk_${Math.random()}`;
-        const isCompleted = completedMap.get(rawItemId) ?? Boolean(item.completed || item.isCompleted);
+        if (!item.id) continue;
+        const rawItemId = item.id;
+        const localState = completedMap.get(rawItemId);
+        const isCompleted = localState !== undefined
+          ? localState.completed
+          : Boolean(item.completed || item.isCompleted);
         await chkStore.put({
           ...item,
           id: createScopedKey(userId, tripId, rawItemId),
@@ -361,19 +386,31 @@ export async function saveOfflineTripPack(userId, pack) {
           userId,
           completed: isCompleted,
           isCompleted
+          // Note: isLocalEdit intentionally NOT set — checklists are device-only, no sync queue
         });
       }
     }
 
-    // 7. Travel Notes
+    // 7. Travel Notes — preserve pending local edits; replace synced records
     const notesStore = tx.objectStore('notes');
+    const existingNotes = await notesStore.index('user_trip').getAll([userId, tripId]);
+    const localNoteMap = new Map(existingNotes.map(n => [n.originalId, n]));
     const oldNoteKeys = await notesStore.index('user_trip').getAllKeys([userId, tripId]);
     for (const key of oldNoteKeys) {
-      await notesStore.delete(key);
+      const record = await notesStore.get(key);
+      if (!record?.isLocalEdit && !pendingEntityIds.has(record?.originalId)) {
+        await notesStore.delete(key);
+      }
     }
     if (Array.isArray(pack.notes)) {
       for (const note of pack.notes) {
-        const rawNoteId = note.id || `note_${Math.random()}`;
+        if (!note.id) continue;
+        const rawNoteId = note.id;
+        const existing = localNoteMap.get(rawNoteId);
+        // Skip server update if record has unsynced local edits
+        if (existing?.isLocalEdit && pendingEntityIds.has(rawNoteId)) {
+          continue;
+        }
         await notesStore.put({
           ...note,
           id: createScopedKey(userId, tripId, rawNoteId),
@@ -493,12 +530,16 @@ export async function getOfflineTripBundle(userId, tripId) {
 }
 
 /**
- * Update checklist item status offline and register pending sync action
+ * Update checklist item status locally.
+ * DEVICE-LOCAL ONLY: Checklists are not synchronized to the server because the server
+ * has no checklist persistence model. Changes are saved in IndexedDB and reflected
+ * in the UI immediately but are not added to the pendingSyncQueue.
  */
 export async function updateChecklistItemLocal(userId, tripId, rawItemId, isCompleted) {
   if (!userId || !tripId || !rawItemId) return false;
   const db = await getDb();
-  const tx = db.transaction(['checklists', 'pendingSyncQueue'], 'readwrite');
+  // Only open the checklists store — no pendingSyncQueue needed (device-only)
+  const tx = db.transaction(['checklists'], 'readwrite');
 
   const scopedKey = createScopedKey(userId, tripId, rawItemId);
   let item = await tx.objectStore('checklists').get(scopedKey);
@@ -517,29 +558,11 @@ export async function updateChecklistItemLocal(userId, tripId, rawItemId, isComp
     ...item,
     isCompleted,
     completed: isCompleted,
-    updatedAt: new Date().toISOString(),
-    isLocalEdit: true
+    updatedAt: new Date().toISOString()
+    // Deliberately NOT setting isLocalEdit — checklists are device-only, no sync
   };
 
   await tx.objectStore('checklists').put(updatedItem);
-
-  // Enqueue pending sync action
-  const syncOpId = `sync_chk_${rawItemId}_${Date.now()}`;
-  await tx.objectStore('pendingSyncQueue').put({
-    id: createScopedKey(userId, syncOpId),
-    queueKey: syncOpId,
-    userId,
-    tripId,
-    entityType: 'checklist',
-    recordType: 'checklist',
-    entityId: rawItemId,
-    recordId: rawItemId,
-    action: 'toggle',
-    payload: { isCompleted, completed: isCompleted },
-    createdAt: new Date().toISOString(),
-    retryCount: 0
-  });
-
   await tx.done;
   return true;
 }
@@ -680,9 +703,11 @@ export async function clearPendingSyncItem(queueId) {
 }
 
 /**
- * Mark a pending sync item with failure details to preserve user data without loss
+ * Mark a pending sync item with failure details to preserve user data without loss.
+ * For retryable errors (network, server error), increments retryCount.
+ * For permanent errors (UNSUPPORTED_OPERATION, schema mismatch), sets isPermanentFailure flag.
  */
-export async function markPendingSyncItemError(queueId, errorMsg) {
+export async function markPendingSyncItemError(queueId, errorMsg, isPermanent = false) {
   if (!queueId) return;
   const db = await getDb();
   const item = await db.get('pendingSyncQueue', queueId);
@@ -691,6 +716,9 @@ export async function markPendingSyncItemError(queueId, errorMsg) {
   item.lastError = errorMsg || 'Sync failed';
   item.retryCount = (item.retryCount || 0) + 1;
   item.lastAttemptAt = new Date().toISOString();
+  if (isPermanent) {
+    item.isPermanentFailure = true;
+  }
 
   return db.put('pendingSyncQueue', item);
 }

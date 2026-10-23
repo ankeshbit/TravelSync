@@ -223,13 +223,14 @@ export const useOfflineStore = defineStore('offline', {
         for (const item of queueSnapshot) {
           const result = resultMap.get(item.id);
           if (result && result.success) {
-            // ONLY remove items explicitly verified as persisted to cloud!
+            // ONLY remove items explicitly verified as persisted to cloud
             await clearPendingSyncItem(item.id);
             persistedCount++;
           } else {
-            // Preserve failed items locally with clear error reasons
+            // Distinguish permanent failures (UNSUPPORTED_OPERATION) from retryable errors
+            const isPermanent = result?.code === 'UNSUPPORTED_OPERATION' || result?.code === 'RECORD_NOT_FOUND';
             const errorMsg = result?.error || 'Server rejected synchronization';
-            await markPendingSyncItemError(item.id, errorMsg);
+            await markPendingSyncItemError(item.id, errorMsg, isPermanent);
             failedCount++;
           }
         }

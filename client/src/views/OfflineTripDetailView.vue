@@ -524,12 +524,12 @@
       </div>
     </div>
 
-    <!-- Document Preview Modal -->
+    <!-- Document Preview Modal — shown when a document record exists (metadata only) -->
     <div v-if="selectedDoc" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div class="bg-[#FFFFFF] dark:bg-[#1B1C19] border border-[#E3E0D8] dark:border-[#30312C] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2.5">
-            <span class="material-symbols-outlined text-2xl text-red-500">picture_as_pdf</span>
+            <span class="material-symbols-outlined text-2xl text-[#7E8075]">description</span>
             <h3 class="text-base font-bold text-[#1C1D1A] dark:text-[#D5D3CA] truncate">{{ selectedDoc.name }}</h3>
           </div>
           <button @click="selectedDoc = null" class="text-[#7E8075] hover:text-[#1C1D1A] dark:hover:text-[#D5D3CA]">
@@ -537,14 +537,16 @@
           </button>
         </div>
 
-        <div class="p-6 rounded-2xl bg-[#F7F6F2] dark:bg-[#22231F] text-center space-y-3 border border-dashed border-[#E3E0D8] dark:border-[#30312C]">
-          <span class="material-symbols-outlined text-4xl text-[#86A98B]">offline_pin</span>
-          <h4 class="text-sm font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">Offline Document Available</h4>
+        <!-- Honest state: metadata only, no file content stored offline -->
+        <div class="p-6 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center space-y-3">
+          <span class="material-symbols-outlined text-4xl text-amber-500">info</span>
+          <h4 class="text-sm font-bold text-[#1C1D1A] dark:text-[#D5D3CA]">Document Metadata Only</h4>
           <p class="text-xs text-[#575851] dark:text-[#A5A69B] leading-relaxed">
-            {{ selectedDoc.description || 'Verified travel document ready for inspection at transport hubs and check-in desks.' }}
+            This record contains document metadata, but the actual file content has not been downloaded to this device.
+            An internet connection is required to view or download the file.
           </p>
-          <div class="text-[11px] font-mono text-[#7E8075]">
-            Size: {{ (selectedDoc.size / 1024).toFixed(1) }} KB • Verified Offline Copy
+          <div v-if="selectedDoc.size" class="text-[11px] font-mono text-[#7E8075]">
+            Reported size: {{ (selectedDoc.size / 1024).toFixed(1) }} KB
           </div>
         </div>
 
@@ -553,7 +555,7 @@
             @click="selectedDoc = null"
             class="px-4 py-2 rounded-xl bg-[#86A98B] text-white text-xs font-semibold shadow-sm"
           >
-            Done
+            Close
           </button>
         </div>
       </div>

@@ -214,7 +214,7 @@ describe('offlineStorage.js — IndexedDB Operations & Offline Travel Companion'
     expect(betaBundle).toBeNull();
   });
 
-  it('updates checklist items locally and records a pending sync queue item', async () => {
+  it('updates checklist items locally without enqueuing to pendingSyncQueue (device-only)', async () => {
     await saveOfflineTripPack('user-alpha', samplePack);
 
     await updateChecklistItemLocal('user-alpha', 'trip-101', 'chk-1', true);
@@ -222,10 +222,9 @@ describe('offlineStorage.js — IndexedDB Operations & Offline Travel Companion'
     const bundle = await getOfflineTripBundle('user-alpha', 'trip-101');
     expect(bundle.checklists[0].completed).toBe(true);
 
+    // Checklists are device-only; no queue items created
     const queue = await getPendingSyncQueue('user-alpha', 'trip-101');
-    expect(queue.length).toBe(1);
-    expect(queue[0].recordType).toBe('checklist');
-    expect(queue[0].payload.completed).toBe(true);
+    expect(queue.length).toBe(0);
   });
 
   it('updates travel notes locally and queues them for synchronization', async () => {
@@ -244,7 +243,7 @@ describe('offlineStorage.js — IndexedDB Operations & Offline Travel Companion'
 
   it('clears pending sync items once synchronization succeeds', async () => {
     await saveOfflineTripPack('user-alpha', samplePack);
-    await updateChecklistItemLocal('user-alpha', 'trip-101', 'chk-1', true);
+    await updateNoteLocal('user-alpha', 'trip-101', 'note-1', 'Updated trail guide details');
 
     let queue = await getPendingSyncQueue('user-alpha', 'trip-101');
     expect(queue.length).toBe(1);
@@ -349,18 +348,46 @@ describe('offlineStorage.js — IndexedDB Operations & Offline Travel Companion'
 
   it('preserves failed sync items and records error information', async () => {
     await saveOfflineTripPack('user-alpha', samplePack);
-    await updateChecklistItemLocal('user-alpha', 'trip-101', 'chk-1', true);
+    await updateNoteLocal('user-alpha', 'trip-101', 'note-1', 'Updated note content');
 
     const queue = await getPendingSyncQueue('user-alpha', 'trip-101');
     expect(queue.length).toBe(1);
     const item = queue[0];
 
-    await markPendingSyncItemError(item.id, 'UNSUPPORTED_OPERATION: Checklists are local only');
-
-    const updatedQueue = await getPendingSyncQueue('user-alpha', 'trip-101');
+    // Retryable failure first
+    await markPendingSyncItemError(item.id, 'Temporary network glitch', false);
+    let updatedQueue = await getPendingSyncQueue('user-alpha', 'trip-101');
     expect(updatedQueue.length).toBe(1);
-    expect(updatedQueue[0].lastError).toContain('UNSUPPORTED_OPERATION');
+    expect(updatedQueue[0].lastError).toBe('Temporary network glitch');
     expect(updatedQueue[0].retryCount).toBe(1);
+    expect(updatedQueue[0].isPermanentFailure).toBeUndefined();
+
+    // Permanent failure
+    await markPendingSyncItemError(item.id, 'UNSUPPORTED_OPERATION: Rejected by server', true);
+    updatedQueue = await getPendingSyncQueue('user-alpha', 'trip-101');
+    expect(updatedQueue[0].retryCount).toBe(2);
+    expect(updatedQueue[0].isPermanentFailure).toBe(true);
+  });
+
+  it('preserves pending local edits when downloading a trip again', async () => {
+    await saveOfflineTripPack('user-alpha', samplePack);
+
+    // Make local un-synced edits to travel note and itinerary place
+    await updateNoteLocal('user-alpha', 'trip-101', 'note-1', 'Local unpersisted note edit');
+    await updatePlaceNoteLocal('user-alpha', 'trip-101', 'place-1', 'Local unpersisted place note');
+
+    // Re-downloading fresh trip pack from server must not wipe local edits
+    await saveOfflineTripPack('user-alpha', samplePack);
+
+    const bundle = await getOfflineTripBundle('user-alpha', 'trip-101');
+    // Note edit should be preserved
+    expect(bundle.notes[0].content).toBe('Local unpersisted note edit');
+    // Place note edit should be preserved
+    expect(bundle.itinerary[0].note).toBe('Local unpersisted place note');
+
+    // Pending sync queue should still retain both operations
+    const queue = await getPendingSyncQueue('user-alpha', 'trip-101');
+    expect(queue.length).toBe(2);
   });
 
   it('estimates storage usage gracefully even if navigator.storage is unsupported', async () => {

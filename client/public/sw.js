@@ -24,16 +24,19 @@ self.addEventListener('install', (event) => {
     (async () => {
       const cache = await caches.open(CACHE_NAME);
 
-      // Precaching essential assets
+      // Precache essential assets — MUST succeed for the SW to be considered installable.
+      // If any essential asset fails (404, network error) we throw to abort installation.
       for (const asset of ESSENTIAL_ASSETS) {
         try {
           await cache.add(asset);
         } catch (err) {
-          console.error(`[SW] Error precaching essential app shell asset '${asset}':`, err);
+          console.error(`[SW] FATAL: Could not cache essential app shell asset '${asset}'. Aborting SW installation.`, err);
+          // Re-throw so event.waitUntil rejects and the browser does not install this SW.
+          throw new Error(`Essential asset precache failed: ${asset}`);
         }
       }
 
-      // Precaching optional static assets resiliently
+      // Precache optional static assets resiliently — individual failures are non-fatal.
       const optionalResults = await Promise.allSettled(
         OPTIONAL_ASSETS.map(async (asset) => {
           try {

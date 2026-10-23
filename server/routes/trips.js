@@ -1558,7 +1558,9 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
       tripId: trip.id,
       name: trip.owner.name || 'Trip Leader',
       relationship: 'Trip Leader',
-      phone: trip.owner.phone || null, // Real phone only; never fabricate fake numbers
+      // Note: User model does not have a phone field. Add `phone String?` to schema
+      // and include it in the select above to surface real phone numbers here.
+      phone: null,
       email: trip.owner.email || '',
       source: 'Trip Organizer Profile',
       notes: 'Trip organizer'
@@ -1572,7 +1574,8 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
         tripId: trip.id,
         name: m.user.name || 'Travel Companion',
         relationship: 'Trip Member',
-        phone: m.user.phone || null, // Real phone only
+        // Note: User model does not have a phone field.
+        phone: null,
         email: m.user.email || '',
         source: 'Trip Member Profile',
         notes: 'Co-traveler'
