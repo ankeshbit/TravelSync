@@ -1929,7 +1929,7 @@ router.put('/:id', verifyToken,
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const { name, destination, startDate, endDate, budgetPerPerson, currency, status } = req.body;
+    const { name, destination, startDate, endDate, budgetPerPerson, currency, status, coverImageUrl } = req.body;
     // Body already validated and coerced by Zod
     const updateData = {};
 
@@ -1948,6 +1948,9 @@ router.put('/:id', verifyToken,
     if (budgetPerPerson !== undefined) updateData.budgetPerPerson = budgetPerPerson;
     if (currency) updateData.currency = currency.trim().toUpperCase();
     if (status)   updateData.status   = status;
+    if (coverImageUrl !== undefined) {
+      updateData.coverImageUrl = coverImageUrl === null ? '' : coverImageUrl.trim();
+    }
 
     const updatedTrip = await prisma.trip.update({
       where: { id: req.params.id },

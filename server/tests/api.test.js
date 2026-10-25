@@ -555,6 +555,33 @@ describe('TravelSync API Integration Tests', () => {
           .send({ name: 'Hijacked Name' });
         expect(res.status).toBe(403);
       });
+
+      it('should update and persist coverImageUrl when valid URL provided', async () => {
+        const coverUrl = 'https://images.unsplash.com/photo-test-123';
+        const res = await request(app)
+          .put(`/api/trips/${testTripId}`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({ coverImageUrl: coverUrl });
+        expect(res.status).toBe(200);
+        expect(res.body.coverImageUrl).toBe(coverUrl);
+      });
+
+      it('should clear coverImageUrl when set to null or empty string', async () => {
+        const res = await request(app)
+          .put(`/api/trips/${testTripId}`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({ coverImageUrl: null });
+        expect(res.status).toBe(200);
+        expect(res.body.coverImageUrl).toBe('');
+      });
+
+      it('should return 400 if coverImageUrl is an invalid URL format', async () => {
+        const res = await request(app)
+          .put(`/api/trips/${testTripId}`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({ coverImageUrl: 'not-a-valid-url' });
+        expect(res.status).toBe(400);
+      });
     });
 
     describe('Places API', () => {

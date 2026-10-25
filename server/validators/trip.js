@@ -27,7 +27,8 @@ const updateTripSchema = z.object({
   currency: z.string().trim().toUpperCase().refine(val => !val || ALLOWED_CURRENCIES.includes(val), {
     message: `Currency must be one of: ${ALLOWED_CURRENCIES.join(', ')}`
   }).optional(),
-  status: z.enum(ALLOWED_STATUSES).optional()
+  status: z.enum(ALLOWED_STATUSES).optional(),
+  coverImageUrl: z.string().trim().url('Invalid cover image URL').max(1000).or(z.literal('')).nullable().optional()
 }).refine(data => {
   if (data.startDate && data.endDate) {
     return data.endDate >= data.startDate;
