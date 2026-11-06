@@ -93,7 +93,8 @@ async function reconcilePendingDeletions({
     const cutoff = new Date(Date.now() - olderThanMs);
     const pendingUsers = await dbClient.user.findMany({
       where: {
-        deletedAt: { not: null }
+        deletedAt: { not: null },
+        refreshToken: { not: 'deleted' }
       }
     });
 
@@ -145,7 +146,8 @@ async function reconcilePendingDeletions({
 
         // Clean up uploaded photo if any
         if (user.picture && user.picture.startsWith('/uploads/')) {
-          const photoPath = path.join(__dirname, '..', user.picture);
+          const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+          const photoPath = path.join(uploadsDir, path.basename(user.picture));
           try {
             if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
           } catch (_e) {

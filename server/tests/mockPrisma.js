@@ -231,7 +231,17 @@ function setupPrismaMock() {
       });
 
     const tripPlaces = Array.from(places.values()).filter(p => p.tripId === trip.id);
-    const tripExpenses = Array.from(expenses.values()).filter(e => e.tripId === trip.id);
+    const tripExpenses = Array.from(expenses.values()).filter(e => e.tripId === trip.id).map(exp => {
+      const paidByUser = users.get(exp.paidById) || { id: exp.paidById, name: '', email: '' };
+      return {
+        ...exp,
+        paidBy: { id: paidByUser.id, name: paidByUser.name, email: paidByUser.email },
+        splits: (exp.splits || []).map(s => ({
+          ...s,
+          user: users.get(s.userId) || { id: s.userId, name: '', email: '' }
+        }))
+      };
+    });
 
     return {
       ...trip,
@@ -518,6 +528,14 @@ function setupPrismaMock() {
 
   // ── prisma.expense & expenseSplit ──────────────────────────────────────────
   prisma.expense.create = jest.fn(async ({ data, include: _include }) => {
+    if (data.idempotencyKey) {
+      const existing = Array.from(expenses.values()).find(e => e.tripId === data.tripId && e.idempotencyKey === data.idempotencyKey);
+      if (existing) {
+        const p2002Err = new Error('Unique constraint failed on the fields: (`tripId`, `idempotencyKey`)');
+        p2002Err.code = 'P2002';
+        throw p2002Err;
+      }
+    }
     const expense = {
       id: data.id || `expense-${crypto.randomUUID()}`,
       tripId: data.tripId,
@@ -527,6 +545,8 @@ function setupPrismaMock() {
       category: data.category || 'other',
       receiptUrl: data.receiptUrl || '',
       paidById: data.paidById,
+      idempotencyKey: data.idempotencyKey || null,
+      requestHash: data.requestHash || null,
       createdAt: new Date()
     };
     expenses.set(expense.id, expense);
@@ -562,8 +582,44 @@ function setupPrismaMock() {
     return results.length;
   });
 
+  prisma.expense.findFirst = jest.fn(async ({ where } = {}) => {
+    let results = Array.from(expenses.values());
+    if (where?.tripId) results = results.filter(e => e.tripId === where.tripId);
+    if (where?.paidById) results = results.filter(e => e.paidById === where.paidById);
+    if (where?.idempotencyKey) results = results.filter(e => e.idempotencyKey === where.idempotencyKey);
+    if (where?.title) results = results.filter(e => e.title === where.title);
+    if (where?.amount !== undefined) results = results.filter(e => Math.abs(e.amount - where.amount) < 0.0001);
+    if (where?.createdAt?.gte) results = results.filter(e => new Date(e.createdAt) >= where.createdAt.gte);
+    const exp = results[0];
+    if (!exp) return null;
+    const paidByUser = users.get(exp.paidById) || { id: exp.paidById, name: '', email: '' };
+    return { ...exp, paidBy: { id: paidByUser.id, name: paidByUser.name, email: paidByUser.email }, splits: exp.splits || [] };
+  });
+
   prisma.expense.findUnique = jest.fn(async ({ where }) => {
     return expenses.get(where.id) || null;
+  });
+
+  prisma.expense.update = jest.fn(async ({ where, data, include }) => {
+    const existing = expenses.get(where.id);
+    if (!existing) return null;
+    const updated = { ...existing, ...data, updatedAt: new Date() };
+    expenses.set(where.id, updated);
+    const paidByUser = users.get(updated.paidById) || { id: updated.paidById, name: '', email: '' };
+    return { ...updated, paidBy: { id: paidByUser.id, name: paidByUser.name, email: paidByUser.email }, splits: updated.splits || [] };
+  });
+
+  prisma.expenseSplit.createMany = jest.fn(async ({ data }) => {
+    const list = Array.isArray(data) ? data : [data];
+    for (const item of list) {
+      const exp = expenses.get(item.expenseId);
+      if (exp) {
+        if (!exp.splits) exp.splits = [];
+        const user = users.get(item.userId) || { id: item.userId, name: '', email: '' };
+        exp.splits.push({ id: `split-${crypto.randomUUID()}`, userId: item.userId, user, expenseId: item.expenseId, amount: item.amount });
+      }
+    }
+    return { count: list.length };
   });
 
   prisma.expense.delete = jest.fn(async ({ where }) => {
@@ -589,6 +645,7 @@ function setupPrismaMock() {
     let count = 0;
     for (const exp of expenses.values()) {
       if (where?.expense?.tripId && exp.tripId !== where.expense.tripId) continue;
+      if (where?.expenseId && exp.id !== where.expenseId) continue;
       if (exp.splits) {
         const before = exp.splits.length;
         if (where?.userId) {
@@ -735,6 +792,7 @@ function setupPrismaMock() {
     let count = 0;
     for (const [id, o] of otps.entries()) {
       let matches = true;
+      if (where?.id && o.id !== where.id) matches = false;
       if (where?.email && o.email.toLowerCase() !== where.email.toLowerCase()) matches = false;
       if (where?.purpose && o.purpose !== where.purpose) matches = false;
       if (where?.expiresAt?.lt && o.expiresAt >= where.expiresAt.lt) matches = false;

@@ -11,13 +11,15 @@ jest.mock('../config/firebaseAdmin', () => ({
       return {
         uid: 'test-firebase-uid',
         email: 'purpose-test@example.com',
-        name: 'Test User'
+        name: 'Test User',
+        email_verified: true
       };
     }
     return {
       uid: 'test-firebase-uid',
       email: 'test@example.com',
-      name: 'Test User'
+      name: 'Test User',
+      email_verified: true
     };
   }),
   getAdminApp: jest.fn().mockReturnValue({})

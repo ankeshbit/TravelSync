@@ -699,6 +699,125 @@ describe('TravelSync API Integration Tests', () => {
         expect(res.body).toHaveProperty('currency');
       });
 
+      it('POST /api/trips/:tripId/expenses should return existing expense on retry when Idempotency-Key is provided', async () => {
+        const key = 'test-idemp-key-dedupe-1';
+        const res1 = await request(app)
+          .post(`/api/trips/${testTripId}/expenses`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .set('Idempotency-Key', key)
+          .send({
+            title: 'Lunch Dedupe Test',
+            amount: 45,
+            currency: 'USD',
+            paidBy: testUser.id,
+            splitAmong: [testUser.id]
+          });
+        expect(res1.status).toBe(201);
+
+        const res2 = await request(app)
+          .post(`/api/trips/${testTripId}/expenses`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .set('Idempotency-Key', key)
+          .send({
+            title: 'Lunch Dedupe Test',
+            amount: 45,
+            currency: 'USD',
+            paidBy: testUser.id,
+            splitAmong: [testUser.id]
+          });
+        expect(res2.status).toBe(200);
+        expect(res2.body.id).toBe(res1.body.id);
+      });
+
+      it('POST /api/trips/:tripId/expenses should allow legitimate identical consecutive expenses without false rejection', async () => {
+        const res1 = await request(app)
+          .post(`/api/trips/${testTripId}/expenses`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({
+            title: 'Sequential Coffee',
+            amount: 5,
+            currency: 'USD',
+            paidBy: testUser.id,
+            splitAmong: [testUser.id]
+          });
+        expect(res1.status).toBe(201);
+
+        // Immediate subsequent request with identical details but without same idempotency key must succeed
+        const res2 = await request(app)
+          .post(`/api/trips/${testTripId}/expenses`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({
+            title: 'Sequential Coffee',
+            amount: 5,
+            currency: 'USD',
+            paidBy: testUser.id,
+            splitAmong: [testUser.id]
+          });
+        expect(res2.status).toBe(201);
+        expect(res2.body.id).not.toBe(res1.body.id);
+      });
+
+      it('POST /api/trips/:tripId/expenses isolates idempotency keys by user and handles concurrent requests', async () => {
+        const idempotencyStore = require('../utils/idempotencyStore');
+        const inFlightKey = 'concurrent-flight-key';
+
+        // Simulate an in-flight lock for testUser
+        await idempotencyStore.acquireLock(testUser.id, testTripId, inFlightKey);
+
+        const concurrentRes = await request(app)
+          .post(`/api/trips/${testTripId}/expenses`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .set('Idempotency-Key', inFlightKey)
+          .send({
+            title: 'Concurrent Expense',
+            amount: 20,
+            currency: 'USD',
+            paidBy: testUser.id,
+            splitAmong: [testUser.id]
+          });
+
+        expect(concurrentRes.status).toBe(409);
+        expect(concurrentRes.body.code).toBe('CONCURRENT_REQUEST');
+
+        // Release the simulated lock
+        await idempotencyStore.releaseLock(testUser.id, testTripId, inFlightKey);
+      });
+
+      it('PUT /api/trips/:tripId/expenses/:expenseId should update an expense', async () => {
+        if (!testExpenseId) return;
+        const res = await request(app)
+          .put(`/api/trips/${testTripId}/expenses/${testExpenseId}`)
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({
+            title: 'Updated Dinner',
+            amount: 180
+          });
+        expect(res.status).toBe(200);
+        expect(res.body.title).toBe('Updated Dinner');
+        expect(res.body.amount).toBe(180);
+      });
+
+      it('PUT /api/trips/:tripId/expenses/:expenseId should return 403 if unauthorized user attempts update', async () => {
+        if (!testExpenseId) return;
+        // thirdUser is a member but NOT expense creator or owner
+        const thirdUser = await prisma.user.create({
+          data: {
+            name: 'Member Only',
+            email: 'memberonly@example.com',
+            firebaseUid: 'test-firebase-uid-memberonly'
+          }
+        });
+        await prisma.tripMember.create({
+          data: { tripId: testTripId, userId: thirdUser.id }
+        });
+
+        const res = await request(app)
+          .put(`/api/trips/${testTripId}/expenses/${testExpenseId}`)
+          .set('Authorization', 'Bearer memberonly-token')
+          .send({ title: 'Hacked Title' });
+        expect(res.status).toBe(403);
+      });
+
       it('DELETE /api/trips/:tripId/expenses/:expenseId should delete expense', async () => {
         if (!testExpenseId) return;
         const res = await request(app)
@@ -995,9 +1114,8 @@ describe('TravelSync API Integration Tests', () => {
       const { createOtp } = require('../utils/otpStore');
       const otp = await createOtp('dbfail@example.com', 'delete');
 
-      const rec = require('../services/accountDeletionReconciliation');
-      const origFn = rec.deleteOrAnonymizeUser;
-      rec.deleteOrAnonymizeUser = jest.fn().mockRejectedValueOnce(new Error('Simulated DB failure'));
+      const origUpdate = prisma.user.update;
+      prisma.user.update = jest.fn().mockRejectedValueOnce(new Error('Simulated DB failure'));
       mockDeleteUser.mockClear();
 
       try {
@@ -1010,19 +1128,19 @@ describe('TravelSync API Integration Tests', () => {
         expect(res.body.code).toBe('DATABASE_DELETE_FAILED');
         expect(mockDeleteUser).not.toHaveBeenCalled();
 
-        // Account must still be usable (deletedAt rolled back)
+        // Account must still be usable (deletedAt was never committed)
         const meRes = await request(app)
           .get('/api/auth/me')
           .set('Authorization', 'Bearer dbfail-token');
         expect(meRes.status).toBe(200);
         expect(meRes.body.email).toBe('dbfail@example.com');
       } finally {
-        rec.deleteOrAnonymizeUser = origFn;
+        prisma.user.update = origUpdate;
         await prisma.user.deleteMany({ where: { id: dbFailUser.id } }).catch(() => {});
       }
     });
 
-    it('DELETE /api/auth/me Firebase failure after DB success returns 200', async () => {
+    it('DELETE /api/auth/me Firebase failure preserves deletion request and reconciler completes it', async () => {
       const fbFailUser = await prisma.user.create({
         data: {
           name: 'FB Fail User',
@@ -1043,10 +1161,22 @@ describe('TravelSync API Integration Tests', () => {
         .send({ otp });
 
       expect(res.status).toBe(200);
-      expect(res.body.message).toContain('Account deleted successfully');
+      expect(res.body.message).toContain('Account deletion in progress');
 
+      // 1. The deletion request is preserved in DB for reconciliation
       const dbUser = await prisma.user.findUnique({ where: { id: fbFailUser.id } });
-      expect(dbUser).toBeNull();
+      expect(dbUser).not.toBeNull();
+      expect(dbUser.refreshToken).toBe('pending_deletion');
+      expect(dbUser.deletedAt).not.toBeNull();
+
+      // 2. The account reconciliation service completes the deletion on the next cycle
+      const { reconcilePendingDeletions } = require('../services/accountDeletionReconciliation');
+      mockDeleteUser.mockResolvedValueOnce({});
+      const outcome = await reconcilePendingDeletions({ prisma, olderThanMs: 0 });
+      expect(outcome.processed).toBeGreaterThanOrEqual(1);
+
+      const dbUserAfter = await prisma.user.findUnique({ where: { id: fbFailUser.id } });
+      expect(dbUserAfter).toBeNull();
     });
 
     it('reconcilePendingDeletions completes a stuck pending user', async () => {

@@ -324,12 +324,21 @@ const verifyOtpEmailLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Recommendation & Chatbot endpoints: 60 requests per 15 minutes per IP or user
+// Recommendation & Chatbot endpoints: 60 requests per 15 minutes per user (or IP fallback)
 const recommendationsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 60,
   store: createLimiterStore('recommendations'),
-  keyGenerator: (req) => (req.user?.uid ? `user:${req.user.uid}` : ipKeyGenerator(req.ip)),
+  keyGenerator: (req) => {
+    const userId = req.userId || req.user?.id || req.user?.firebaseUid;
+    return userId ? `user:${userId}` : ipKeyGenerator(req.ip);
+  },
+  handler: (req, res, _next, options) => {
+    return res.status(options.statusCode || 429).json({
+      success: false,
+      message: options.message?.message || options.message || 'Too many recommendation requests, please try again in 15 minutes.'
+    });
+  },
   message: {
     message: 'Too many recommendation requests, please try again in 15 minutes.'
   },

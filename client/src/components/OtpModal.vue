@@ -177,13 +177,13 @@ async function handleVerify() {
     if (props.customVerify) {
       await props.customVerify(otpValue.value);
     } else {
-      await api.post('/auth/verify-otp', {
+      const res = await api.post('/auth/verify-otp', {
         email: props.email,
         otp: otpValue.value,
         purpose: props.purpose,
       }, { skipErrorToast: true });
+      emit('verified', otpValue.value, res.data?.deletionGrant);
     }
-    emit('verified', otpValue.value);
   } catch (err) {
     if (err.response?.data?.code === 'OWNS_SHARED_TRIPS') {
       const serverMsg = err.response.data.message || 'Cannot delete account while owning shared trips.';
