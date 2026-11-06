@@ -2,6 +2,7 @@ import { onUnmounted, ref, toValue, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { io } from 'socket.io-client';
 import { auth } from '../firebase';
+import { useAuthStore } from '../stores/auth';
 import { usePlacesStore } from '../stores/places';
 import { useExpensesStore } from '../stores/expenses';
 import { useTripsStore } from '../stores/trips';
@@ -10,6 +11,7 @@ import { getBaseUrl } from '../utils/url';
 
 export function useSocket(tripId) {
   const router = useRouter();
+  const authStore = useAuthStore();
   const placesStore = usePlacesStore();
   const expensesStore = useExpensesStore();
   const tripsStore = useTripsStore();
@@ -35,7 +37,14 @@ export function useSocket(tripId) {
     socket.value = io(socketURL, {
       auth: async (cb) => {
         try {
-          const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+          let token = null;
+          if (auth.currentUser) {
+            token = await auth.currentUser.getIdToken();
+          } else if (authStore?.firebaseUser?.getIdToken) {
+            token = await authStore.firebaseUser.getIdToken();
+          } else if (import.meta.env.DEV && typeof window !== 'undefined') {
+            token = localStorage.getItem('demo_token');
+          }
           cb({ token });
         } catch {
           cb({ token: null });
@@ -47,6 +56,15 @@ export function useSocket(tripId) {
     socket.value.on('connect_error', (err) => {
       console.error('Socket connect error:', err.message);
     });
+
+    if (socket.value.io) {
+      socket.value.io.on('reconnect', () => {
+        tripsStore.fetchTrip(rawTripId, { background: true }).catch(() => {});
+        placesStore.fetchPlaces(rawTripId).catch(() => {});
+        expensesStore.fetchExpenses(rawTripId).catch(() => {});
+        expensesStore.fetchBalances(rawTripId).catch(() => {});
+      });
+    }
 
     socket.value.on('presence:list', (list) => {
       activeMembers.value = (Array.isArray(list) ? list : []).map(u => ({
@@ -106,6 +124,18 @@ export function useSocket(tripId) {
       }
     });
 
+    socket.value.on('expense:updated', (updatedExpense) => {
+      const expenseId = updatedExpense.id || updatedExpense._id;
+      const index = expensesStore.expenses.findIndex(e => (e.id || e._id) === expenseId);
+      if (index !== -1) {
+        expensesStore.expenses[index] = updatedExpense;
+      } else {
+        expensesStore.expenses.push(updatedExpense);
+      }
+      expensesStore.fetchBalances(rawTripId).catch(() => {});
+      toastStore.showToast('A member updated an expense', 'info');
+    });
+
     socket.value.on('expense:deleted', (data) => {
       const exists = expensesStore.expenses.find(e => (e.id || e._id) === data.expenseId);
       if (exists) {
@@ -143,6 +173,12 @@ export function useSocket(tripId) {
   watch(() => toValue(tripId), (newTripId) => {
     connectSocket(newTripId);
   }, { immediate: true });
+
+  watch(() => authStore?.isAuthenticated, (isAuth) => {
+    if (isAuth === false && socket.value) {
+      disconnectSocket();
+    }
+  });
 
   onUnmounted(() => {
     disconnectSocket();

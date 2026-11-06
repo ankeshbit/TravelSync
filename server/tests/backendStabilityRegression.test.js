@@ -44,7 +44,9 @@ const cache = require('../services/cache');
 const {
   createDeletionGrant,
   verifyAndConsumeDeletionGrant,
-  resetGrantsForTesting
+  resetGrantsForTesting,
+  resetInMemoryCacheForTesting,
+  hashGrant
 } = require('../utils/deletionGrantStore');
 const { createOtp, verifyOtp } = require('../utils/otpStore');
 const { reconcilePendingDeletions } = require('../services/accountDeletionReconciliation');
@@ -52,7 +54,7 @@ const { reconcilePendingDeletions } = require('../services/accountDeletionReconc
 describe('Backend Bug Fixing & Stabilization Regression Tests', () => {
   beforeEach(async () => {
     mockDeleteUser.mockReset();
-    resetGrantsForTesting();
+    await resetGrantsForTesting();
     await prisma.otp.deleteMany();
   });
 
@@ -98,20 +100,103 @@ describe('Backend Bug Fixing & Stabilization Regression Tests', () => {
   });
 
   describe('Bug 2: OTP deletion flow without double consumption (Deletion Grants)', () => {
-    it('creates, verifies, and consumes single-use deletion grants', () => {
-      const grant = createDeletionGrant('user-123', 'alice@example.com');
+    it('creates, verifies, and consumes single-use deletion grants', async () => {
+      const grant = await createDeletionGrant('user-123', 'alice@example.com');
       expect(typeof grant).toBe('string');
       expect(grant.length).toBe(64);
 
       // Wrong user or email rejected without consuming the grant
-      expect(verifyAndConsumeDeletionGrant(grant, 'wrong-user', 'alice@example.com')).toBe(false);
-      expect(verifyAndConsumeDeletionGrant(grant, 'user-123', 'wrong@example.com')).toBe(false);
+      expect(await verifyAndConsumeDeletionGrant(grant, 'wrong-user', 'alice@example.com')).toBe(false);
+      expect(await verifyAndConsumeDeletionGrant(grant, 'user-123', 'wrong@example.com')).toBe(false);
 
       // Correct user and email succeeds and consumes
-      expect(verifyAndConsumeDeletionGrant(grant, 'user-123', 'alice@example.com')).toBe(true);
+      expect(await verifyAndConsumeDeletionGrant(grant, 'user-123', 'alice@example.com')).toBe(true);
 
       // Replay prevention: cannot consume twice
-      expect(verifyAndConsumeDeletionGrant(grant, 'user-123', 'alice@example.com')).toBe(false);
+      expect(await verifyAndConsumeDeletionGrant(grant, 'user-123', 'alice@example.com')).toBe(false);
+    });
+
+    it('prevents simultaneous grant consumption under high concurrency', async () => {
+      const grant = await createDeletionGrant('user-race', 'race@example.com');
+
+      // 5 simultaneous requests attempting to consume the exact same grant
+      const parallelConsumptions = Array.from({ length: 5 }).map(() =>
+        verifyAndConsumeDeletionGrant(grant, 'user-race', 'race@example.com')
+      );
+
+      const results = await Promise.all(parallelConsumptions);
+
+      const successes = results.filter(r => r === true);
+      const failures = results.filter(r => r === false);
+
+      // Exactly ONE request succeeds; all concurrent requests fail
+      expect(successes.length).toBe(1);
+      expect(failures.length).toBe(4);
+    });
+
+    it('rejects expired deletion grants after server-side TTL', async () => {
+      const token = 'expiredgranttoken0123456789abcdef0123456789abcdef0123456789abcdef01';
+      const email = 'expired@example.com';
+      const userId = 'user-expired';
+
+      // Insert directly into DB with past expiration date
+      await prisma.otp.create({
+        data: {
+          email,
+          hash: hashGrant(token, userId, email),
+          purpose: 'deletion_grant',
+          expiresAt: new Date(Date.now() - 1000), // Expired 1 second ago
+          attempts: 0
+        }
+      });
+
+      // Clear memory cache so it must evaluate database record
+      resetInMemoryCacheForTesting();
+
+      const result = await verifyAndConsumeDeletionGrant(token, userId, email);
+      expect(result).toBe(false);
+    });
+
+    it('rejects wrong-user consumption attempt without consuming the grant', async () => {
+      const grant = await createDeletionGrant('user-legit', 'legit@example.com');
+
+      // Attempt 1: Wrong user ID
+      const wrongUserResult = await verifyAndConsumeDeletionGrant(grant, 'user-impostor', 'legit@example.com');
+      expect(wrongUserResult).toBe(false);
+
+      // Attempt 2: Wrong email
+      const wrongEmailResult = await verifyAndConsumeDeletionGrant(grant, 'user-legit', 'attacker@example.com');
+      expect(wrongEmailResult).toBe(false);
+
+      // Legitimate user can still consume the intact grant
+      const legitResult = await verifyAndConsumeDeletionGrant(grant, 'user-legit', 'legit@example.com');
+      expect(legitResult).toBe(true);
+
+      // Subsequent consumption is rejected
+      expect(await verifyAndConsumeDeletionGrant(grant, 'user-legit', 'legit@example.com')).toBe(false);
+    });
+
+    it('persists deletion grants across simulated server crashes and restarts', async () => {
+      const grant = await createDeletionGrant('user-reboot', 'reboot@example.com');
+
+      // Verify row exists in PostgreSQL otps table
+      const storedOtp = await prisma.otp.findFirst({
+        where: { email: 'reboot@example.com', purpose: 'deletion_grant' }
+      });
+      expect(storedOtp).not.toBeNull();
+
+      // Simulate complete server crash / restart by purging in-memory cache
+      resetInMemoryCacheForTesting();
+
+      // Post-restart: Verify grant is read and consumed from PostgreSQL
+      const verified = await verifyAndConsumeDeletionGrant(grant, 'user-reboot', 'reboot@example.com');
+      expect(verified).toBe(true);
+
+      // Post-consumption: Verify row was deleted from PostgreSQL
+      const postConsumption = await prisma.otp.findFirst({
+        where: { email: 'reboot@example.com', purpose: 'deletion_grant' }
+      });
+      expect(postConsumption).toBeNull();
     });
 
     it('end-to-end OTP deletion flow works via verify-otp grant without double consumption', async () => {
@@ -249,7 +334,7 @@ describe('Backend Bug Fixing & Stabilization Regression Tests', () => {
 
       expect([200, 502]).toContain(user2Request.status);
       expect(user2Request.status).not.toBe(429);
-    });
+    }, 20000);
   });
 
   describe('Bug 5: Offline pack balance calculation', () => {

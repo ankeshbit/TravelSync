@@ -141,7 +141,10 @@ describe('Cache Service Core (get, set, del, delPattern)', () => {
     mockClient = {
       status: 'ready',
       get: jest.fn(async (key) => mockStore.get(key) ?? null),
-      set: jest.fn(async (key, val, _ex, _ttl) => {
+      set: jest.fn(async (key, val, _ex, _ttl, nx) => {
+        if (nx === 'NX' && mockStore.has(key)) {
+          return null;
+        }
         mockStore.set(key, val);
         return 'OK';
       }),
@@ -263,6 +266,33 @@ describe('Cache Service Core (get, set, del, delPattern)', () => {
     expect(await cache.set('ts:any:key', { data: 1 })).toBe(false);
     expect(await cache.del('ts:any:key')).toBe(false);
     expect(await cache.delPattern('ts:any:*')).toBe(0);
+  });
+
+
+  describe('setNX (atomic distributed locking)', () => {
+    it('returns true when lock key does not exist and acquires lock', async () => {
+      const lockAcquired = await cache.setNX('ts:lock:resource1', '1', 10);
+      expect(lockAcquired).toBe(true);
+      expect(mockStore.has('ts:lock:resource1')).toBe(true);
+    });
+
+    it('returns false when lock key already exists (atomic conflict)', async () => {
+      await cache.setNX('ts:lock:resource2', '1', 10);
+      const secondAttempt = await cache.setNX('ts:lock:resource2', '1', 10);
+      expect(secondAttempt).toBe(false);
+    });
+
+    it('returns null when Redis is disconnected', async () => {
+      _setRedisClientForTesting(null);
+      const res = await cache.setNX('ts:lock:any', '1', 10);
+      expect(res).toBeNull();
+    });
+
+    it('returns null when Redis throws an unexpected error', async () => {
+      mockClient.set.mockRejectedValueOnce(new Error('Connection dropped'));
+      const res = await cache.setNX('ts:lock:fail', '1', 10);
+      expect(res).toBeNull();
+    });
   });
 
   describe('Invalidation helpers', () => {

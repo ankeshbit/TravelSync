@@ -73,6 +73,8 @@ vi.mock('three', () => ({
   BackSide: 2,
 }));
 
+vi.mock('../utils/threeGlobe.js', () => import('three'));
+
 describe('EarthLoadingOverlay component', () => {
   let origGetContext;
   let origResizeObserver;

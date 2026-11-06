@@ -30,12 +30,22 @@ const redirectToLogin = () => {
 // Attach a fresh Firebase ID token before every request.
 api.interceptors.request.use(async (config) => {
   try {
-    const firebaseUser = auth.currentUser;
-    if (firebaseUser) {
+    const firebaseUser = auth.currentUser || authStoreRef?.firebaseUser;
+    if (firebaseUser && typeof firebaseUser.getIdToken === 'function') {
       // getIdToken(false) returns cached token; refreshes automatically when near expiry
       const token = await firebaseUser.getIdToken(false);
       config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
+      if (!config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } else if (import.meta.env.DEV && typeof window !== 'undefined') {
+      const demoToken = localStorage.getItem('demo_token');
+      if (demoToken) {
+        config.headers = config.headers || {};
+        if (!config.headers.Authorization) {
+          config.headers.Authorization = `Bearer ${demoToken}`;
+        }
+      }
     }
   } catch {
     // No user signed in — let the request proceed without a token.
@@ -100,8 +110,8 @@ api.interceptors.response.use(
       if (!originalRequest._firebaseRetry) {
         originalRequest._firebaseRetry = true;
         try {
-          const firebaseUser = auth.currentUser;
-          if (firebaseUser) {
+          const firebaseUser = auth.currentUser || authStoreRef?.firebaseUser;
+          if (firebaseUser && typeof firebaseUser.getIdToken === 'function') {
             const freshToken = await firebaseUser.getIdToken(true); // force refresh
             originalRequest.headers = originalRequest.headers || {};
             originalRequest.headers.Authorization = `Bearer ${freshToken}`;

@@ -80,7 +80,14 @@ export const useExpensesStore = defineStore('expenses', {
       this.loading = true;
       this.error = null;
       try {
-        const response = await api.post(`/trips/${tripId}/expenses`, expenseData);
+        if (!expenseData.idempotencyKey && typeof crypto !== 'undefined' && crypto.randomUUID) {
+          expenseData.idempotencyKey = crypto.randomUUID();
+        }
+        const idempotencyKey = expenseData.idempotencyKey;
+        const payload = { ...expenseData };
+        delete payload.idempotencyKey;
+        const config = idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {};
+        const response = await api.post(`/trips/${tripId}/expenses`, payload, config);
         const newId = response.data.id || response.data._id;
         if (!this.expenses.some(e => (e.id || e._id) === newId)) {
           this.expenses.push(response.data);
@@ -88,6 +95,29 @@ export const useExpensesStore = defineStore('expenses', {
         return response.data;
       } catch (err) {
         this.error = err.response?.data?.message || 'Failed to add expense';
+        throw err;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async updateExpense(tripId, expenseId, expenseData) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await api.put(`/trips/${tripId}/expenses/${expenseId}`, expenseData);
+        const updated = response.data;
+        const targetId = updated.id || updated._id;
+        const idx = this.expenses.findIndex(e => (e.id || e._id) === targetId);
+        if (idx !== -1) {
+          this.expenses[idx] = updated;
+        } else {
+          this.expenses.push(updated);
+        }
+        await this.fetchBalances(tripId).catch(() => {});
+        return updated;
+      } catch (err) {
+        this.error = err.response?.data?.message || 'Failed to update expense';
         throw err;
       } finally {
         this.loading = false;

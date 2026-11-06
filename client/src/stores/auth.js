@@ -78,6 +78,19 @@ export const useAuthStore = defineStore('auth', {
               // Non-fatal — the user is still authenticated via Firebase
             }
           }
+        } else if (import.meta.env.DEV && typeof window !== 'undefined' && localStorage.getItem('demo_token')) {
+          const demoToken = localStorage.getItem('demo_token');
+          if (demoToken.startsWith('demo-token-')) {
+            const role = demoToken.includes('bob') ? 'bob' : 'alice';
+            this.firebaseUser = {
+              uid: role === 'bob' ? 'demo-uid-bob' : 'demo-uid-alice',
+              email: role === 'bob' ? 'bob.demo@travelsync.local' : 'alice.demo@travelsync.local',
+              displayName: role === 'bob' ? 'Bob Demo' : 'Alice Demo',
+              emailVerified: true,
+              getIdToken: async () => demoToken,
+            };
+            this._syncMongoUser().catch(() => {});
+          }
         } else {
           this.currentUser = null;
           // Clean up any stale local storage from the old JWT system
@@ -187,11 +200,46 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    async loginDemoUser(role = 'alice') {
+      if (!import.meta.env.DEV) {
+        throw new Error('Demo login is only available in development mode');
+      }
+      this.loading = true;
+      try {
+        const demoEmail = role === 'bob' ? 'bob.demo@travelsync.local' : 'alice.demo@travelsync.local';
+        const demoName = role === 'bob' ? 'Bob Demo (Member)' : 'Alice Demo (Organizer)';
+        const demoUid = role === 'bob' ? 'demo-uid-bob' : 'demo-uid-alice';
+        const demoToken = `demo-token-${role}`;
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('demo_token', demoToken);
+        }
+
+        this.firebaseUser = {
+          uid: demoUid,
+          email: demoEmail,
+          displayName: demoName,
+          emailVerified: true,
+          getIdToken: async () => demoToken,
+        };
+
+        try {
+          await this._syncMongoUser();
+        } catch (e) {
+          // Dev warning only
+        }
+        return this.currentUser;
+      } finally {
+        this.loading = false;
+      }
+    },
+
     async logout() {
       try {
         // Best-effort call to invalidate server-side session metadata
         await api.post('/auth/logout').catch(() => {});
       } finally {
+        const userId = this.currentUser?.id || this.firebaseUser?.uid;
         await fbLogout();
         this.firebaseUser = null;
         this.currentUser = null;
@@ -200,6 +248,7 @@ export const useAuthStore = defineStore('auth', {
           localStorage.removeItem('refreshToken');
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          localStorage.removeItem('demo_token');
           if (window.sessionStorage) {
             sessionStorage.removeItem('pendingUserName');
             sessionStorage.removeItem('verify_email_cooldown_end');
@@ -213,6 +262,12 @@ export const useAuthStore = defineStore('auth', {
           offlineStore.pendingSyncQueue = [];
         } catch {
           // Non-fatal if pinia is not yet mounted
+        }
+        if (userId) {
+          try {
+            const { clearAllUserOfflineData } = await import('../services/offlineStorage');
+            await clearAllUserOfflineData(userId);
+          } catch {}
         }
       }
     },
@@ -279,6 +334,7 @@ export const useAuthStore = defineStore('auth', {
     setUser(user) { this.currentUser = user || null; },
     setSession({ user } = {}) { if (user) this.setUser(user); },
     clearAuth() {
+      const userId = this.currentUser?.id || this.firebaseUser?.uid;
       syncUserPromise = null;
       this.firebaseUser = null;
       this.currentUser = null;
@@ -291,6 +347,11 @@ export const useAuthStore = defineStore('auth', {
           sessionStorage.removeItem('pendingUserName');
           sessionStorage.removeItem('verify_email_cooldown_end');
         }
+      }
+      if (userId) {
+        import('../services/offlineStorage').then(({ clearAllUserOfflineData }) => {
+          clearAllUserOfflineData(userId).catch(() => {});
+        }).catch(() => {});
       }
     },
   },

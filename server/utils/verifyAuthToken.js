@@ -98,6 +98,37 @@ async function verifyAuthToken(token, options = {}) {
   const cleanToken = token.trim();
   let verifiedUserId = null;
 
+  // 0. Development Demo Token check (strictly non-production only)
+  if (!config.isProduction && cleanToken.startsWith('demo-token-')) {
+    const demoKey = cleanToken.slice('demo-token-'.length).toLowerCase();
+    let demoEmail = null;
+    if (demoKey === 'alice' || demoKey === 'alice.demo@travelsync.local') {
+      demoEmail = 'alice.demo@travelsync.local';
+    } else if (demoKey === 'bob' || demoKey === 'bob.demo@travelsync.local') {
+      demoEmail = 'bob.demo@travelsync.local';
+    } else {
+      // Strictly prevent impersonation of arbitrary accounts
+      const err = new Error('Invalid demo token: impersonation of arbitrary accounts is forbidden.');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    const demoUser = await prisma.user.findFirst({ where: { email: demoEmail } });
+    if (demoUser) {
+      if (isUserDeletedOrPending(demoUser)) {
+        const err = new Error('Account has been deleted or is pending deletion.');
+        err.statusCode = 401;
+        err.code = 'ACCOUNT_DELETED';
+        throw err;
+      }
+      return demoUser;
+    }
+
+    const notFoundErr = new Error(`Demo user (${demoEmail}) not found. Please run the database seeder first.`);
+    notFoundErr.statusCode = 401;
+    throw notFoundErr;
+  }
+
   // 1. Neon Auth session check (only if config.NEON_AUTH_ENABLED is true)
   if (config.NEON_AUTH_ENABLED) {
     const cached = neonSessionCache.get(cleanToken);
@@ -162,6 +193,12 @@ async function verifyAuthToken(token, options = {}) {
   try {
     decodedFirebaseToken = await verifyFirebaseToken(cleanToken);
   } catch (firebaseErr) {
+    if (!config.isProduction && !config.isTest) {
+      logger.warn({
+        code: firebaseErr.code || firebaseErr.name,
+        message: firebaseErr.message
+      }, '[Auth] Firebase token verification failed');
+    }
     if (firebaseErr.statusCode === 503 || isDatabaseDownError(firebaseErr)) {
       throw firebaseErr;
     }
@@ -286,6 +323,12 @@ async function verifyAuthToken(token, options = {}) {
               err.statusCode = 401;
               err.code = 'ACCOUNT_DELETED';
               throw err;
+            }
+            if (!user.firebaseUid && firebaseUid) {
+              user = await prisma.user.update({
+                where: { id: user.id },
+                data: { firebaseUid }
+              });
             }
             return user;
           }

@@ -10,12 +10,15 @@
     "postinstall": "prisma generate",
     "lint": "eslint .",
     "test": "jest --coverage --forceExit",
+    "test:integration": "jest tests/postgresIntegration.test.js --runInBand --forceExit",
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "node scripts/migrate.js deploy",
     "db:migrate:status": "node scripts/migrate.js status",
-    "db:reconcile": "node scripts/reconcile.js"
+    "db:reconcile": "node scripts/reconcile.js",
+    "test:smoke": "node scripts/staging_smoke_test.js",
+    "db:seed:demo": "node scripts/seed_demo.js --confirm"
   },
   "keywords": [],
   "author": "",

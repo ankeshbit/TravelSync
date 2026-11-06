@@ -279,7 +279,7 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
     // Verify deletion authorization: either via single-use deletion grant or direct OTP verification
     let authorized = false;
     if (deletionGrant) {
-      authorized = verifyAndConsumeDeletionGrant(deletionGrant, req.userId, user.email);
+      authorized = await verifyAndConsumeDeletionGrant(deletionGrant, req.userId, user.email);
       if (!authorized) {
         return res.status(403).json({ message: 'Invalid or expired deletion authorization grant. Please verify OTP again.' });
       }
@@ -395,9 +395,10 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
         });
       }
 
-      // Remove the user's uploaded photo file
+      // Remove the user's uploaded photo file with safe path resolution
       if (user.picture && user.picture.startsWith('/uploads/')) {
-        const photoPath = path.join(__dirname, '..', user.picture);
+        const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+        const photoPath = path.join(uploadsDir, path.basename(user.picture));
         try {
           if (fs.existsSync(photoPath)) {
             fs.unlinkSync(photoPath);
@@ -652,7 +653,7 @@ router.post(
     // Issue short-lived, single-use deletion authorization grant
     let deletionGrant = null;
     if (purpose === 'delete' && authedUser) {
-      deletionGrant = createDeletionGrant(authedUser.id, authedUser.email);
+      deletionGrant = await createDeletionGrant(authedUser.id, authedUser.email);
     }
 
     res.json({

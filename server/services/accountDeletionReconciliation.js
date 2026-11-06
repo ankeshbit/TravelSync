@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { prisma: defaultPrisma } = require('../db');
+const { markUserDeleted } = require('../utils/verifyAuthToken');
 const logger = require('../utils/logger');
 
 /**
@@ -17,6 +18,15 @@ const logger = require('../utils/logger');
  * @returns {Promise<{ deleted: boolean, anonymized: boolean }>}
  */
 async function deleteOrAnonymizeUser(dbClient, user) {
+  // Concurrency safeguard: check if user was already deleted or anonymized by a parallel worker
+  const existing = await dbClient.user.findUnique({ where: { id: user.id } });
+  if (!existing) {
+    return { deleted: true, anonymized: false };
+  }
+  if (existing.refreshToken === 'deleted') {
+    return { deleted: false, anonymized: true };
+  }
+
   const [expensesPaidCount, expenseSplitsCount, tripExpensesCount] = await Promise.all([
     dbClient.expense.count({ where: { paidById: user.id } }),
     dbClient.expenseSplit.count({ where: { userId: user.id } }),
@@ -93,12 +103,14 @@ async function reconcilePendingDeletions({
     const cutoff = new Date(Date.now() - olderThanMs);
     const pendingUsers = await dbClient.user.findMany({
       where: {
-        deletedAt: { not: null },
-        refreshToken: { not: 'deleted' }
+        deletedAt: { not: null }
       }
     });
 
-    const eligibleUsers = pendingUsers.filter(u => !u.deletedAt || new Date(u.deletedAt) <= cutoff);
+    const eligibleUsers = pendingUsers.filter(u => {
+      if (u.refreshToken === 'deleted') return false;
+      return !u.deletedAt || new Date(u.deletedAt) <= cutoff;
+    });
 
     for (const user of eligibleUsers) {
       result.processed++;
@@ -142,6 +154,11 @@ async function reconcilePendingDeletions({
             { userId: user.id },
             '[Reconciliation] Anonymized user profile with preserved financial records'
           );
+        }
+
+        // Mark UID permanently deleted in memory cache
+        if (user.firebaseUid) {
+          markUserDeleted(user.firebaseUid);
         }
 
         // Clean up uploaded photo if any
