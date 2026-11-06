@@ -87,21 +87,25 @@ model Place {
 }
 
 model Expense {
-  id         String         @id @default(uuid())
-  tripId     String
-  title      String
-  amount     Float
-  currency   String         @default("INR")
-  category   String         @default("other")
-  receiptUrl String         @default("")
-  paidById   String
-  createdAt  DateTime       @default(now())
+  id             String         @id @default(uuid())
+  tripId         String
+  title          String
+  amount         Float
+  currency       String         @default("INR")
+  category       String         @default("other")
+  receiptUrl     String         @default("")
+  paidById       String
+  idempotencyKey String?
+  requestHash    String?
+  createdAt      DateTime       @default(now())
 
   trip   Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
   paidBy User           @relation("ExpensePayer", fields: [paidById], references: [id], onDelete: Restrict)
   splits ExpenseSplit[]
 
+  @@unique([tripId, idempotencyKey])
   @@index([tripId])
+  @@index([paidById])
   @@map("expenses")
 }
 
@@ -114,6 +118,7 @@ model ExpenseSplit {
   user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([expenseId, userId])
+  @@index([userId])
   @@map("expense_splits")
 }
 

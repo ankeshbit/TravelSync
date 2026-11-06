@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { prisma: defaultPrisma } = require('../db');
+const { markUserDeleted } = require('../utils/verifyAuthToken');
 const logger = require('../utils/logger');
 
 /**
@@ -17,6 +18,15 @@ const logger = require('../utils/logger');
  * @returns {Promise<{ deleted: boolean, anonymized: boolean }>}
  */
 async function deleteOrAnonymizeUser(dbClient, user) {
+  // Concurrency safeguard: check if user was already deleted or anonymized by a parallel worker
+  const existing = await dbClient.user.findUnique({ where: { id: user.id } });
+  if (!existing) {
+    return { deleted: true, anonymized: false };
+  }
+  if (existing.refreshToken === 'deleted') {
+    return { deleted: false, anonymized: true };
+  }
+
   const [expensesPaidCount, expenseSplitsCount, tripExpensesCount] = await Promise.all([
     dbClient.expense.count({ where: { paidById: user.id } }),
     dbClient.expenseSplit.count({ where: { userId: user.id } }),
@@ -97,7 +107,10 @@ async function reconcilePendingDeletions({
       }
     });
 
-    const eligibleUsers = pendingUsers.filter(u => !u.deletedAt || new Date(u.deletedAt) <= cutoff);
+    const eligibleUsers = pendingUsers.filter(u => {
+      if (u.refreshToken === 'deleted') return false;
+      return !u.deletedAt || new Date(u.deletedAt) <= cutoff;
+    });
 
     for (const user of eligibleUsers) {
       result.processed++;
@@ -143,9 +156,15 @@ async function reconcilePendingDeletions({
           );
         }
 
+        // Mark UID permanently deleted in memory cache
+        if (user.firebaseUid) {
+          markUserDeleted(user.firebaseUid);
+        }
+
         // Clean up uploaded photo if any
         if (user.picture && user.picture.startsWith('/uploads/')) {
-          const photoPath = path.join(__dirname, '..', user.picture);
+          const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+          const photoPath = path.join(uploadsDir, path.basename(user.picture));
           try {
             if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
           } catch (_e) {

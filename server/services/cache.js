@@ -144,6 +144,33 @@ async function set(key, data, ttlSeconds = 300) {
  * @param {string} key
  * @returns {Promise<boolean>}
  */
+
+/**
+ * Atomically set key only if it does not already exist (SET NX EX).
+ * Returns true if key was set (lock acquired).
+ * Returns false if key already exists.
+ * Returns null if Redis is not ready/connected.
+ *
+ * @param {string} key
+ * @param {any} data
+ * @param {number} ttlSeconds
+ * @returns {Promise<boolean|null>}
+ */
+async function setNX(key, data, ttlSeconds = 10) {
+  try {
+    if (!isReady() || data === undefined || data === null) return null;
+    const client = getClient();
+    if (!client) return null;
+
+    const serialized = typeof data === 'string' ? data : JSON.stringify(data);
+    const result = await client.set(key, serialized, 'EX', ttlSeconds, 'NX');
+    return result === 'OK';
+  } catch (err) {
+    logger.warn({ key, err: sanitizeRedisError(err.message) }, '[Cache] SetNX failed');
+    return null;
+  }
+}
+
 async function del(key) {
   try {
     if (!isReady()) return false;
@@ -154,6 +181,47 @@ async function del(key) {
     return true;
   } catch (err) {
     logger.warn({ key, err: sanitizeRedisError(err.message) }, '[Cache] Del failed');
+    return false;
+  }
+}
+
+/**
+ * Safely release a distributed lock if the token matches.
+ * Uses atomic Redis Lua script when eval is available.
+ *
+ * @param {string} key
+ * @param {string} token
+ * @returns {Promise<boolean>}
+ */
+async function releaseLock(key, token) {
+  try {
+    if (!isReady() || !token) return false;
+    const client = getClient();
+    if (!client) return false;
+
+    const tokenStr = typeof token === 'string' ? token : JSON.stringify(token);
+
+    if (typeof client.eval === 'function') {
+      const lua = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      const result = await client.eval(lua, 1, key, tokenStr);
+      return result === 1;
+    } else {
+      // Fallback for mock clients without eval
+      const current = await client.get(key);
+      if (current === tokenStr) {
+        await client.del(key);
+        return true;
+      }
+      return false;
+    }
+  } catch (err) {
+    logger.warn({ key, err: sanitizeRedisError(err.message) }, '[Cache] releaseLock failed');
     return false;
   }
 }
@@ -339,7 +407,9 @@ module.exports = {
   keys,
   get,
   set,
+  setNX,
   del,
+  releaseLock,
   delPattern,
   invalidateUserDashboard,
   invalidateTrip,

@@ -81,6 +81,7 @@ const { validate } = require('../middleware/validate');
 const { updateProfileSchema, sendOtpSchema, verifyOtpSchema } = require('../validators/auth');
 const { sendOtpEmail } = require('../utils/mailer');
 const { createOtp, verifyOtp } = require('../utils/otpStore');
+const { createDeletionGrant, verifyAndConsumeDeletionGrant } = require('../utils/deletionGrantStore');
 const { markUserPendingDeletion, unmarkUserPendingDeletion, markUserDeleted } = require('../utils/verifyAuthToken');
 const {
   sendOtpIpLimiter,
@@ -91,7 +92,7 @@ const {
 } = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
 const cache = require('../services/cache');
-const { getIO, removeAllUsersFromTripRoom } = require('../socket');
+const { getIO, removeAllUsersFromTripRoom, removeUserFromTripRoom } = require('../socket');
 const accountDeletion = require('../services/accountDeletionReconciliation');
 
 // ─── Multer Setup ─────────────────────────────────────────────────────────────
@@ -249,15 +250,15 @@ const activeDeletions = new Set();
  * /api/auth/me:
  *   delete:
  *     summary: Delete or anonymize user account
- *     description: Deletes user account with OTP verification. Users with expense records are anonymized to preserve ledger integrity. Users who own trips with other members must transfer or delete them first.
+ *     description: Deletes user account with OTP or deletion grant verification. Users with expense records are anonymized to preserve ledger integrity. Users who own trips with other members must transfer or delete them first.
  *     tags: [Auth]
  *     security:
  *       - BearerAuth: []
  */
 router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
-  const { otp } = req.body || {};
+  const { otp, deletionGrant } = req.body || {};
 
-  if (!otp) {
+  if (!otp && !deletionGrant) {
     return res.status(403).json({ message: 'Valid OTP required for account deletion.' });
   }
 
@@ -275,12 +276,22 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    const otpResult = await verifyOtp(user.email, otp, 'delete');
-    if (!otpResult.ok) {
-      return res.status(403).json({ message: otpResult.reason || 'Invalid or expired OTP.' });
+    // Verify deletion authorization: either via single-use deletion grant or direct OTP verification
+    let authorized = false;
+    if (deletionGrant) {
+      authorized = await verifyAndConsumeDeletionGrant(deletionGrant, req.userId, user.email);
+      if (!authorized) {
+        return res.status(403).json({ message: 'Invalid or expired deletion authorization grant. Please verify OTP again.' });
+      }
+    } else if (otp) {
+      const otpResult = await verifyOtp(user.email, otp, 'delete');
+      if (!otpResult.ok) {
+        return res.status(403).json({ message: otpResult.reason || 'Invalid or expired OTP.' });
+      }
+      authorized = true;
     }
 
-    // Item 4: Before deleting anything, if user owns any trip that has OTHER members, return 409 OWNS_SHARED_TRIPS
+    // Check shared trip ownership: If user owns any trip that has other members, block with 409
     const ownedTripsWithOtherMembers = await prisma.trip.findMany({
       where: {
         ownerId: req.userId,
@@ -320,100 +331,108 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       logger.warn({ err: queryErr.message }, 'Failed to query affected trips for deletion invalidation');
     }
 
-    // Stage user as pending deletion durably in PostgreSQL and in memory
+    // Phase 1: Stage user as pending deletion durably in PostgreSQL BEFORE performing irreversible operations
     markUserPendingDeletion(user.firebaseUid);
+    const now = new Date();
     try {
       await prisma.user.update({
         where: { id: req.userId },
         data: {
-          deletedAt: user.deletedAt || new Date(),
+          deletedAt: user.deletedAt || now,
           refreshToken: 'pending_deletion'
         }
       });
     } catch (stageErr) {
-      logger.warn({ err: stageErr.message }, 'Failed to set user status to pending_deletion');
-    }
-
-    // Item 3 safe reordering: Run DB work (hard delete or anonymise) inside a transaction FIRST
-    let outcome;
-    try {
-      outcome = await accountDeletion.deleteOrAnonymizeUser(prisma, user);
-    } catch (dbErr) {
-      logger.error({ err: dbErr.message }, 'Failed to delete user profile from database');
       unmarkUserPendingDeletion(user.firebaseUid);
-      try {
-        await prisma.user.update({
-          where: { id: req.userId },
-          data: {
-            deletedAt: null,
-            refreshToken: null
-          }
-        });
-      } catch (_rollbackErr) {
-        logger.warn({ err: _rollbackErr.message }, 'Failed to rollback pending deletion state');
-      }
+      logger.error({ err: stageErr.message }, 'Failed to record pending deletion state in database');
       return res.status(500).json({
         message: 'Failed to delete user profile from database. Account deletion incomplete.',
         code: 'DATABASE_DELETE_FAILED'
       });
     }
 
-    // THEN delete Firebase user (if DB succeeded)
+    // Phase 2: Attempt Firebase deletion while durable pending state is preserved in DB
+    let firebaseDeletionSucceeded = false;
     if (user.firebaseUid) {
       try {
         const { getAdminApp } = require('../config/firebaseAdmin');
         const { getAuth } = require('firebase-admin/auth');
         const adminApp = getAdminApp();
         await getAuth(adminApp).deleteUser(user.firebaseUid);
+        firebaseDeletionSucceeded = true;
         markUserDeleted(user.firebaseUid);
       } catch (fbErr) {
         const isNotFound = fbErr && (
           fbErr.code === 'auth/user-not-found' ||
           String(fbErr.message || '').includes('user-not-found')
         );
-        if (!isNotFound) {
+        if (isNotFound) {
+          firebaseDeletionSucceeded = true;
+          markUserDeleted(user.firebaseUid);
+        } else {
           logger.warn(
             { err: fbErr.message, userId: user.id },
-            'Firebase user deletion failed after DB success; recorded for reconciler'
+            '[AccountDeletion] Firebase user deletion failed; record retained in pending_deletion for reconciler'
           );
-        } else {
-          markUserDeleted(user.firebaseUid);
         }
-        // Still return 200 because DB work is complete and user cannot log in
       }
     } else {
+      firebaseDeletionSucceeded = true;
       markUserDeleted(user.firebaseUid);
     }
 
-    // Remove the user's uploaded photo file
-    if (user.picture && user.picture.startsWith('/uploads/')) {
-      const photoPath = path.join(__dirname, '..', user.picture);
+    // Phase 3: Finalize DB outcome
+    let outcome = null;
+    if (firebaseDeletionSucceeded) {
+      // Firebase succeeded: finalize DB deletion or anonymization
       try {
-        if (fs.existsSync(photoPath)) {
-          fs.unlinkSync(photoPath);
-        }
-      } catch (fileErr) {
-        logger.warn({ err: fileErr.message }, 'Failed to delete user uploaded photo during account deletion');
+        outcome = await accountDeletion.deleteOrAnonymizeUser(prisma, user);
+      } catch (dbErr) {
+        logger.error({ err: dbErr.message }, 'Failed to delete user profile from database after Firebase success');
+        return res.status(500).json({
+          message: 'Failed to delete user profile from database. Account deletion incomplete.',
+          code: 'DATABASE_DELETE_FAILED'
+        });
       }
+
+      // Remove the user's uploaded photo file with safe path resolution
+      if (user.picture && user.picture.startsWith('/uploads/')) {
+        const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+        const photoPath = path.join(uploadsDir, path.basename(user.picture));
+        try {
+          if (fs.existsSync(photoPath)) {
+            fs.unlinkSync(photoPath);
+          }
+        } catch (fileErr) {
+          logger.warn({ err: fileErr.message }, 'Failed to delete user uploaded photo during account deletion');
+        }
+      }
+    } else {
+      // Firebase deletion failed: DO NOT hard delete or anonymize yet.
+      // Retain the durable record with deletedAt and refreshToken: 'pending_deletion' so the reconciler recovers it.
+      logger.info(
+        { userId: user.id },
+        '[AccountDeletion] Preserved pending deletion record in DB for background reconciliation'
+      );
     }
 
-    // Cache and socket cleanup (Item 4)
+    // Cache and socket cleanup
     try {
       const allAffectedUserIds = new Set([req.userId]);
       for (const t of affectedTrips) {
         const memberIds = (t.members || []).map(m => m.userId);
         memberIds.forEach(id => allAffectedUserIds.add(id));
 
-        // Call cache.invalidateTrip
         await cache.invalidateTrip(t.id, memberIds);
 
-        // If trip was owned by user and deleted, notify and clean room
         if (t.ownerId === req.userId && outcome?.deleted) {
-          const io = req.io || getIO();
+          let io; try { io = req.io || getIO(); } catch { io = null; }
           if (io) {
             io.to(`trip:${t.id}`).emit('trip:deleted', { tripId: t.id });
           }
           await removeAllUsersFromTripRoom(t.id, { silent: true });
+        } else {
+          await removeUserFromTripRoom(t.id, req.userId);
         }
       }
 
@@ -423,7 +442,14 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
       logger.warn({ err: cleanupErr.message }, 'Post-deletion cache/socket cleanup warning');
     }
 
-    res.json({ message: 'Account deleted successfully.' });
+    if (firebaseDeletionSucceeded) {
+      res.json({ message: 'Account deleted successfully.' });
+    } else {
+      res.status(200).json({
+        message: 'Account deletion in progress and scheduled for synchronization.',
+        code: 'DELETION_SCHEDULED'
+      });
+    }
   } finally {
     activeDeletions.delete(req.userId);
   }
@@ -439,35 +465,50 @@ router.delete('/me', verifyToken, asyncHandler(async (req, res) => {
  *       - BearerAuth: []
  */
 router.post('/upload-photo', verifyToken, (req, res, next) => {
-  upload.single('photo')(req, res, (err) => {
-    if (err) {
-      return res.status(400).json({ message: err.message || 'Upload failed.' });
+  upload.single('photo')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File too large. Maximum size is 5MB.' });
+      }
+      return res.status(400).json({ message: err.message });
+    } else if (err) {
+      return res.status(400).json({ message: err.message });
     }
-    if (!req.file || !req.file.buffer) {
+
+    const innerReq = req;
+    if (!innerReq.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
     }
 
-    asyncHandler(async (innerReq, innerRes) => {
-      const typeResult = await detectFileType(innerReq.file.buffer);
-      const ALLOWED_MIMES = {
-        'image/jpeg': 'jpg',
-        'image/png': 'png',
-        'image/webp': 'webp',
-        'image/gif': 'gif'
-      };
+    const ALLOWED_MIMES = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif'
+    };
 
+    try {
+      const typeResult = await detectFileType(innerReq.file.buffer);
       if (!typeResult || !ALLOWED_MIMES[typeResult.mime]) {
-        return innerRes.status(400).json({
-          message: 'Invalid image format. Only JPEG, PNG, WebP, and GIF images are allowed.'
+        return res.status(400).json({
+          message: 'Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed.'
         });
       }
 
       const user = await prisma.user.findUnique({ where: { id: innerReq.userId } });
-      if (!user) return innerRes.status(404).json({ message: 'User not found.' });
+      if (!user) {
+        return res.status(404).json({ message: 'User not found.' });
+      }
 
-      // Delete user's previous photo if in /uploads/
+      const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      // Delete user's previous photo if in /uploads/ with path traversal guard
       if (user.picture && user.picture.startsWith('/uploads/')) {
-        const oldPhotoPath = path.join(__dirname, '..', user.picture);
+        const safeBase = path.basename(user.picture);
+        const oldPhotoPath = path.join(uploadsDir, safeBase);
         try {
           if (fs.existsSync(oldPhotoPath)) {
             fs.unlinkSync(oldPhotoPath);
@@ -479,31 +520,32 @@ router.post('/upload-photo', verifyToken, (req, res, next) => {
 
       const ext = ALLOWED_MIMES[typeResult.mime];
       const filename = `user-${innerReq.userId}-${Date.now()}.${ext}`;
-      const uploadsDir = path.join(__dirname, '../uploads');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
-      const targetPath = path.join(uploadsDir, filename);
-      fs.writeFileSync(targetPath, innerReq.file.buffer);
+      const filePath = path.join(uploadsDir, filename);
+
+      fs.writeFileSync(filePath, innerReq.file.buffer);
 
       const pictureUrl = `/uploads/${filename}`;
-      await prisma.user.update({
+      const updated = await prisma.user.update({
         where: { id: innerReq.userId },
         data: { picture: pictureUrl }
       });
 
-      innerRes.json({ pictureUrl });
-    })(req, res, next);
+      res.json({
+        message: 'Photo uploaded successfully.',
+        picture: updated.picture,
+        pictureUrl: updated.picture
+      });
+    } catch (saveErr) {
+      next(saveErr);
+    }
   });
 });
-
-// ─── OTP endpoints (kept — used for account deletion verification) ─────────────
 
 /**
  * @swagger
  * /api/auth/send-otp:
  *   post:
- *     summary: Send OTP code to email (account deletion only)
+ *     summary: Send OTP code to email
  *     tags: [Auth]
  */
 router.post(
@@ -517,16 +559,16 @@ router.post(
 
     let targetEmail = req.targetEmail || (typeof req.body.email === 'string' ? req.body.email.toLowerCase().trim() : '');
 
-    // For delete, look up the authenticated user's email
+    // For delete, look up the authenticated user's email using verifyAuthToken (supports demo, Firebase, and Neon)
     if (purpose === 'delete') {
       const authHeader = req.headers.authorization || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
       if (!token) return res.status(401).json({ message: 'Authentication required.' });
 
       try {
-        const { verifyFirebaseToken } = require('../config/firebaseAdmin');
-        const decoded = await verifyFirebaseToken(token);
-        targetEmail = (decoded.email || targetEmail).toLowerCase().trim();
+        const { verifyAuthToken } = require('../utils/verifyAuthToken');
+        const authedUser = await verifyAuthToken(token);
+        targetEmail = (authedUser.email || targetEmail).toLowerCase().trim();
       } catch {
         return res.status(401).json({ message: 'Invalid or expired token.' });
       }
@@ -542,7 +584,15 @@ router.post(
       throw err;
     }
 
-    const mailResult = await sendOtpEmail(targetEmail, otp, purpose);
+    let mailResult;
+    try {
+      mailResult = await sendOtpEmail(targetEmail, otp, purpose);
+    } catch (mailErr) {
+      await prisma.otp.deleteMany({
+        where: { email: targetEmail.toLowerCase().trim(), purpose }
+      }).catch(() => {});
+      throw mailErr;
+    }
 
     const isProd = config.isProduction || process.env.NODE_ENV === 'production';
     const responseData = {
@@ -563,7 +613,7 @@ router.post(
  * @swagger
  * /api/auth/verify-otp:
  *   post:
- *     summary: Verify OTP code
+ *     summary: Verify OTP code and issue deletion grant when purpose is delete
  *     tags: [Auth]
  */
 router.post(
@@ -575,14 +625,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const { email, otp, purpose = 'register' } = req.body;
 
-    // Hardening (Item 10): purpose: 'delete' requires a valid Bearer token whose email matches target email
+    let authedUser = null;
+    // Hardening: purpose: 'delete' requires a valid Bearer token whose email matches target email
     if (purpose === 'delete') {
       const authHeader = req.headers.authorization || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
       if (!token) {
         return res.status(401).json({ message: 'Authentication required.' });
       }
-      let authedUser;
       try {
         const { verifyAuthToken } = require('../utils/verifyAuthToken');
         authedUser = await verifyAuthToken(token);
@@ -600,7 +650,17 @@ router.post(
       return res.status(400).json({ message: result.reason });
     }
 
-    res.json({ verified: true, message: 'Email verified successfully.' });
+    // Issue short-lived, single-use deletion authorization grant
+    let deletionGrant = null;
+    if (purpose === 'delete' && authedUser) {
+      deletionGrant = await createDeletionGrant(authedUser.id, authedUser.email);
+    }
+
+    res.json({
+      verified: true,
+      message: 'Email verified successfully.',
+      ...(deletionGrant ? { deletionGrant } : {})
+    });
   })
 );
 

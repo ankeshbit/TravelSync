@@ -152,6 +152,14 @@
             Don't have an account?
             <router-link to="/register">Create Account</router-link>
           </p>
+
+          <!-- Quick Demo Sign-In (Local Interview / Dev Only) -->
+          <component
+            :is="DemoLoginCard"
+            v-if="DemoLoginCard"
+            :loading="loading"
+            @login="handleDemoLogin"
+          />
         </div>
       </section>
     </div>
@@ -164,7 +172,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getFirebaseErrorMessage } from '../services/authService'
@@ -182,6 +190,23 @@ const loadingGoogle = ref(false)
 const error = ref('')
 const showPassword = ref(false)
 const stats = ref(null)
+const DemoLoginCard = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('../components/DemoLoginCard.vue'))
+  : null
+
+const handleDemoLogin = async (role) => {
+  if (!import.meta.env.DEV) return
+  error.value = ''
+  loading.value = true
+  try {
+    await authStore.loginDemoUser(role)
+    router.push(getRedirectTarget())
+  } catch (err) {
+    error.value = err.message || 'Demo login failed'
+  } finally {
+    loading.value = false
+  }
+}
 
 const getRedirectTarget = () => {
   return safeRedirect(route.query?.redirect, '/dashboard')
@@ -663,4 +688,5 @@ const handleGoogleLogin = async () => {
 /* Transitions */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
 </style>

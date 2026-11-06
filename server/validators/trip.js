@@ -51,6 +51,29 @@ const aiSuggestionsSchema = z.object({
   ]).optional().default('')
 });
 
+const aiPlaceSchema = z.object({
+  name: z.string().trim().min(1).default('Unnamed Place'),
+  type: z.string().trim().default('attraction'),
+  description: z.string().trim().default(''),
+  bestTime: z.string().trim().optional().default('morning'),
+  estimatedDuration: z.string().trim().optional().default('1-2 hours'),
+  lat: z.coerce.number().min(-90).max(90).optional().default(0),
+  lng: z.coerce.number().min(-180).max(180).optional().default(0),
+  address: z.string().trim().optional().default('')
+});
+
+const aiDaySchema = z.object({
+  day: z.coerce.number().int().min(1).default(1),
+  theme: z.string().trim().default('Explore destination'),
+  places: z.array(aiPlaceSchema).default([])
+});
+
+const aiItinerarySchema = z.object({
+  summary: z.string().trim().min(1).default('Customized travel itinerary'),
+  days: z.array(aiDaySchema).min(1, 'Itinerary must include at least one day'),
+  tips: z.array(z.string().trim()).optional().default([])
+});
+
 const offlineSyncItemSchema = z.object({
   id: z.string().trim().min(1, 'Change ID is required').max(200),
   type: z.string().trim().min(1, 'Operation type is required').max(50),
@@ -76,6 +99,7 @@ module.exports = {
   updateTripSchema,
   addMemberSchema,
   aiSuggestionsSchema,
+  aiItinerarySchema,
   offlineSyncSchema,
   offlineSyncItemSchema
 };

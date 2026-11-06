@@ -1,8 +1,13 @@
 const dotenv = require('dotenv');
+const path = require('path');
+const fs = require('fs');
 
 // Ensure environment variables are loaded once from disk
 if (!process.env._DOTENV_LOADED) {
-  dotenv.config();
+  const serverEnv = path.resolve(__dirname, '..', '.env');
+  const rootEnv = path.resolve(process.cwd(), '.env');
+  const chosenPath = fs.existsSync(serverEnv) ? serverEnv : rootEnv;
+  dotenv.config({ path: chosenPath });
   process.env._DOTENV_LOADED = 'true';
 }
 
@@ -103,13 +108,16 @@ function validateEnv(env = process.env) {
   }
 
   // Optional: Firebase credentials
+  // FIREBASE_PROJECT_ID enables client-token verification via Google public x509 certs.
+  // Service account credentials (EMAIL & PRIVATE_KEY) are optional for admin/revocation operations,
+  // but if either is provided, both must be provided together.
   const FIREBASE_PROJECT_ID = (env.FIREBASE_PROJECT_ID || '').trim();
   const FIREBASE_CLIENT_EMAIL = (env.FIREBASE_CLIENT_EMAIL || '').trim();
   const FIREBASE_PRIVATE_KEY = (env.FIREBASE_PRIVATE_KEY || '').trim();
-  const hasSomeFirebase = Boolean(FIREBASE_PROJECT_ID || FIREBASE_CLIENT_EMAIL || FIREBASE_PRIVATE_KEY);
-  const hasAllFirebase = Boolean(FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY);
-  if (hasSomeFirebase && !hasAllFirebase) {
-    errors.push('Firebase configuration incomplete: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY must all be provided together.');
+  const hasServiceAccountEmail = Boolean(FIREBASE_CLIENT_EMAIL);
+  const hasServiceAccountKey = Boolean(FIREBASE_PRIVATE_KEY);
+  if ((hasServiceAccountEmail && !hasServiceAccountKey) || (!hasServiceAccountEmail && hasServiceAccountKey)) {
+    errors.push('Firebase service account configuration incomplete: FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY must both be provided together.');
   }
 
   // Trust proxy configuration

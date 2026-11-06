@@ -423,9 +423,18 @@ const initiateDeleteAccount = async () => {
   }
 };
 
-const handleDeleteAccount = async (otp) => {
-  await api.delete('/auth/me', { data: { otp }, skipErrorToast: true });
+const handleDeleteAccount = async (otp, deletionGrant) => {
+  const currentUserId = authStore.currentUser?.id || authStore.firebaseUser?.uid;
+  const deleteData = { otp };
+  if (deletionGrant) deleteData.deletionGrant = deletionGrant;
+  await api.delete('/auth/me', { data: deleteData, skipErrorToast: true });
   showDeleteModal.value = false;
+  if (currentUserId) {
+    try {
+      const { clearAllUserOfflineData } = await import('../services/offlineStorage');
+      await clearAllUserOfflineData(currentUserId);
+    } catch {}
+  }
   const { signOut } = await import('firebase/auth');
   const { auth } = await import('../firebase');
   try {

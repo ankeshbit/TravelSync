@@ -12,10 +12,11 @@ const logActivity = require('../utils/logActivity');
 const { calculateBalances } = require('../utils/calculateBalances');
 const logger = require('../utils/logger');
 const cache = require('../services/cache');
+const idempotencyStore = require('../utils/idempotencyStore');
 const crypto = require('crypto');
-const { createTripSchema, updateTripSchema, addMemberSchema, aiSuggestionsSchema, offlineSyncSchema } = require('../validators/trip');
+const { createTripSchema, updateTripSchema, addMemberSchema, aiSuggestionsSchema, aiItinerarySchema, offlineSyncSchema } = require('../validators/trip');
 const { createPlaceSchema, updatePlaceNoteSchema, reorderPlacesSchema } = require('../validators/place');
-const { createExpenseSchema } = require('../validators/expense');
+const { createExpenseSchema, updateExpenseSchema } = require('../validators/expense');
 const { tripIdParamSchema, idParamSchema, tripAndPlaceParamSchema, tripAndExpenseParamSchema, tripAndMemberParamSchema } = require('../validators/common');
 
 // AI suggestion limiter: 5 requests per 10 minutes, backed by Redis with memory fallback
@@ -434,7 +435,7 @@ async function fetchAndAttachCoverImage(tripId, destination) {
  *       404:
  *         description: Trip not found
  */
-router.get('/:tripId/members', verifyToken, asyncHandler(async (req, res) => {
+router.get('/:tripId/members', verifyToken, validate({ params: tripIdParamSchema }), asyncHandler(async (req, res) => {
   const trip = await prisma.trip.findUnique({
     where: { id: req.params.tripId },
     include: {
@@ -551,6 +552,7 @@ router.post('/:tripId/members', verifyToken,
 
     const memberIds = [updatedTrip.ownerId, ...(updatedTrip.members || []).map(m => m.user?.id || m.userId)];
     cache.invalidateTrip(req.params.tripId, memberIds).catch(() => {});
+    cache.invalidateUserDashboard(memberIds).catch(() => {});
 
     res.status(200).json(formatTrip(updatedTrip));
   }));
@@ -727,7 +729,7 @@ router.delete('/:tripId/members/:userId', verifyToken, validate({ params: tripAn
  *       200:
  *         description: Array of places returned
  */
-router.get('/:tripId/places', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
+router.get('/:tripId/places', verifyToken, validate({ params: tripIdParamSchema }), checkTripMembership, asyncHandler(async (req, res) => {
   const places = await prisma.place.findMany({
     where: { tripId: req.params.tripId },
     orderBy: [{ dayNumber: 'asc' }, { orderIndex: 'asc' }]
@@ -943,7 +945,7 @@ router.patch('/:tripId/places/:placeId/note', verifyToken, checkTripMembership,
  *       200:
  *         description: Places reordered successfully
  */
-router.patch('/:tripId/places/reorder', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
+router.patch('/:tripId/places/reorder', verifyToken, validate({ params: tripIdParamSchema }), checkTripMembership, asyncHandler(async (req, res) => {
   const parseResult = reorderPlacesSchema.safeParse(req.body);
   if (!parseResult.success) {
     return res.status(400).json({
@@ -1012,7 +1014,7 @@ router.patch('/:tripId/places/reorder', verifyToken, checkTripMembership, asyncH
  *       200:
  *         description: Array of expenses returned
  */
-router.get('/:tripId/expenses', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
+router.get('/:tripId/expenses', verifyToken, validate({ params: tripIdParamSchema }), checkTripMembership, asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
   const skip = (page - 1) * limit;
@@ -1095,51 +1097,268 @@ router.post('/:tripId/expenses', verifyToken, checkTripMembership,
     const { title, amount, currency, category, receiptUrl, paidBy, splitAmong } = req.body;
     // All fields already validated by Zod
 
+    const idempotencyKey = req.headers['idempotency-key'] || req.headers['x-idempotency-key'];
+    let lockToken = null;
+    let requestHash = null;
+
+    if (idempotencyKey) {
+      requestHash = idempotencyStore.computePayloadHash(req.body);
+      const cached = await idempotencyStore.getCachedExpense(req.userId, req.params.tripId, idempotencyKey);
+      if (cached) {
+        if (cached.hash && cached.hash !== requestHash) {
+          return res.status(422).json({
+            message: 'Idempotency key has already been used with different request parameters.',
+            code: 'IDEMPOTENCY_PAYLOAD_MISMATCH'
+          });
+        }
+        res.setHeader('X-Idempotency-Replay', 'true');
+        return res.status(200).json(cached.data);
+      }
+
+      const lockResult = await idempotencyStore.acquireLock(req.userId, req.params.tripId, idempotencyKey);
+      if (!lockResult.acquired) {
+        return res.status(409).json({
+          message: 'Expense submission is already being processed.',
+          code: 'CONCURRENT_REQUEST'
+        });
+      }
+      lockToken = lockResult.lockToken;
+
+      // Check PostgreSQL database in case server crashed before caching in Redis on a previous attempt
+      try {
+        const existingExpense = await prisma.expense.findFirst({
+          where: {
+            tripId: req.params.tripId,
+            idempotencyKey
+          },
+          include: {
+            paidBy: { select: { id: true, name: true, email: true } },
+            splits: {
+              orderBy: { id: 'asc' },
+              include: { user: { select: { id: true, name: true, email: true } } }
+            }
+          }
+        });
+
+        if (existingExpense) {
+          if (existingExpense.requestHash && existingExpense.requestHash !== requestHash) {
+            await idempotencyStore.releaseLock(req.userId, req.params.tripId, idempotencyKey, lockToken);
+            return res.status(422).json({
+              message: 'Idempotency key has already been used with different request parameters.',
+              code: 'IDEMPOTENCY_PAYLOAD_MISMATCH'
+            });
+          }
+          const formatted = formatExpense(existingExpense);
+          await idempotencyStore.saveExpense(req.userId, req.params.tripId, idempotencyKey, formatted, requestHash, 86400, lockToken);
+          res.setHeader('X-Idempotency-Replay', 'true');
+          return res.status(200).json(formatted);
+        }
+      } catch (dbCheckErr) {
+        // If DB read fails with an error other than not found, log and proceed with caution
+        logger.warn({ err: dbCheckErr.message }, '[Trips] Idempotency pre-check query error');
+      }
+    }
+
+    try {
+      const trip = req.trip;
+      const allMemberIds = [trip.ownerId, ...trip.members.map(m => m.userId)];
+
+      if (!allMemberIds.includes(paidBy)) {
+        return res.status(400).json({ message: 'paidBy user is not a member of this trip' });
+      }
+
+      const rawSplits = splitAmong.map(u => (typeof u === 'object' && u ? (u._id || u.id) : u));
+      const normalizedSplits = Array.from(new Set(rawSplits));
+
+      const invalidMembers = normalizedSplits.filter(userId => !allMemberIds.includes(userId));
+      if (invalidMembers.length > 0) {
+        return res.status(400).json({ message: 'One or more split members are not trip members' });
+      }
+
+      let createdExpense;
+      try {
+        createdExpense = await prisma.expense.create({
+          data: {
+            tripId: req.params.tripId,
+            title: title.trim(),
+            amount: parseFloat(amount),
+            currency: currency || trip.currency || 'INR',
+            category: category || 'other',
+            receiptUrl: receiptUrl || '',
+            paidById: paidBy,
+            idempotencyKey: idempotencyKey || null,
+            requestHash: requestHash || null,
+            splits: {
+              create: normalizedSplits.map(userId => ({ userId }))
+            }
+          },
+          include: {
+            paidBy: { select: { id: true, name: true, email: true } },
+            splits: {
+              orderBy: { id: 'asc' },
+              include: { user: { select: { id: true, name: true, email: true } } }
+            }
+          }
+        });
+      } catch (createErr) {
+        // Handle race condition where another concurrent worker completed the insert (P2002 unique constraint)
+        if (createErr.code === 'P2002' && idempotencyKey) {
+          const conflictingExpense = await prisma.expense.findFirst({
+            where: {
+              tripId: req.params.tripId,
+              idempotencyKey
+            },
+            include: {
+              paidBy: { select: { id: true, name: true, email: true } },
+              splits: {
+                orderBy: { id: 'asc' },
+                include: { user: { select: { id: true, name: true, email: true } } }
+              }
+            }
+          });
+
+          if (conflictingExpense) {
+            if (conflictingExpense.requestHash && conflictingExpense.requestHash !== requestHash) {
+              return res.status(422).json({
+                message: 'Idempotency key has already been used with different request parameters.',
+                code: 'IDEMPOTENCY_PAYLOAD_MISMATCH'
+              });
+            }
+            const formattedConflict = formatExpense(conflictingExpense);
+            await idempotencyStore.saveExpense(req.userId, req.params.tripId, idempotencyKey, formattedConflict, requestHash, 86400, lockToken);
+            res.setHeader('X-Idempotency-Replay', 'true');
+            return res.status(200).json(formattedConflict);
+          }
+        }
+        throw createErr;
+      }
+
+      await logActivity(req.params.tripId, req.userId, 'added an expense', `${createdExpense.title} — ${createdExpense.currency} ${createdExpense.amount}`);
+
+      const formatted = formatExpense(createdExpense);
+      if (idempotencyKey) {
+        await idempotencyStore.saveExpense(req.userId, req.params.tripId, idempotencyKey, formatted, requestHash, 86400, lockToken);
+      }
+      getIO().to(`trip:${req.params.tripId}`).emit('expense:added', formatted);
+
+      cache.invalidateTrip(req.params.tripId, allMemberIds).catch(() => {});
+      cache.invalidateUserDashboard(allMemberIds).catch(() => {});
+
+      return res.status(201).json(formatted);
+    } finally {
+      if (idempotencyKey) {
+        await idempotencyStore.releaseLock(req.userId, req.params.tripId, idempotencyKey, lockToken).catch(() => {});
+      }
+    }
+  }));
+
+/**
+ * @swagger
+ * /api/trips/{tripId}/expenses/{expenseId}:
+ *   put:
+ *     summary: Update existing expense
+ *     tags: [Expenses]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tripId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: expenseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Expense updated successfully
+ *       400:
+ *         description: Bad request
+ *       403:
+ *         description: Forbidden (only creator or trip owner can edit)
+ *       404:
+ *         description: Expense not found
+ */
+router.put('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership,
+  validate({ params: tripAndExpenseParamSchema, body: updateExpenseSchema }),
+  asyncHandler(async (req, res) => {
+    const existingExpense = await prisma.expense.findUnique({
+      where: { id: req.params.expenseId },
+      include: { splits: true }
+    });
+
+    if (!existingExpense || existingExpense.tripId !== req.params.tripId) {
+      return res.status(404).json({ message: 'Expense not found' });
+    }
+
+    if (existingExpense.paidById !== req.userId && req.trip.ownerId !== req.userId) {
+      return res.status(403).json({ message: 'Only the expense creator or trip owner can edit' });
+    }
+
     const trip = req.trip;
     const allMemberIds = [trip.ownerId, ...trip.members.map(m => m.userId)];
 
-    if (!allMemberIds.includes(paidBy)) {
+    const { title, amount, currency, category, receiptUrl, paidBy, splitAmong } = req.body;
+
+    if (paidBy && !allMemberIds.includes(paidBy)) {
       return res.status(400).json({ message: 'paidBy user is not a member of this trip' });
     }
 
-    const rawSplits = splitAmong.map(u => (typeof u === 'object' && u ? (u._id || u.id) : u));
-    const normalizedSplits = Array.from(new Set(rawSplits));
-
-    const invalidMembers = normalizedSplits.filter(userId => !allMemberIds.includes(userId));
-    if (invalidMembers.length > 0) {
-      return res.status(400).json({ message: 'One or more split members are not trip members' });
+    let normalizedSplits;
+    if (splitAmong) {
+      const rawSplits = splitAmong.map(u => (typeof u === 'object' && u ? (u._id || u.id) : u));
+      normalizedSplits = Array.from(new Set(rawSplits));
+      const invalidMembers = normalizedSplits.filter(userId => !allMemberIds.includes(userId));
+      if (invalidMembers.length > 0) {
+        return res.status(400).json({ message: 'One or more split members are not trip members' });
+      }
     }
 
-    const createdExpense = await prisma.expense.create({
-      data: {
-        tripId: req.params.tripId,
-        title: title.trim(),
-        amount: parseFloat(amount),
-        currency: currency || trip.currency || 'INR',
-        category: category || 'other',
-        receiptUrl: receiptUrl || '',
-        paidById: paidBy,
-        splits: {
-          create: normalizedSplits.map(userId => ({ userId }))
-        }
-      },
-      include: {
-        paidBy: { select: { id: true, name: true, email: true } },
-        splits: {
-          orderBy: { id: 'asc' },
-          include: { user: { select: { id: true, name: true, email: true } } }
-        }
+    const updatedExpense = await prisma.$transaction(async (tx) => {
+      const updateData = {};
+      if (title !== undefined) updateData.title = title.trim();
+      if (amount !== undefined) updateData.amount = parseFloat(amount);
+      if (currency !== undefined) updateData.currency = currency;
+      if (category !== undefined) updateData.category = category;
+      if (receiptUrl !== undefined) updateData.receiptUrl = receiptUrl;
+      if (paidBy !== undefined) updateData.paidById = paidBy;
+
+      if (normalizedSplits) {
+        await tx.expenseSplit.deleteMany({
+          where: { expenseId: req.params.expenseId }
+        });
+        await tx.expenseSplit.createMany({
+          data: normalizedSplits.map(userId => ({
+            expenseId: req.params.expenseId,
+            userId
+          }))
+        });
       }
+
+      return tx.expense.update({
+        where: { id: req.params.expenseId },
+        data: updateData,
+        include: {
+          paidBy: { select: { id: true, name: true, email: true } },
+          splits: {
+            orderBy: { id: 'asc' },
+            include: { user: { select: { id: true, name: true, email: true } } }
+          }
+        }
+      });
     });
 
-    await logActivity(req.params.tripId, req.userId, 'added an expense', `${createdExpense.title} — ${createdExpense.currency} ${createdExpense.amount}`);
+    await logActivity(req.params.tripId, req.userId, 'updated an expense', `${updatedExpense.title} — ${updatedExpense.currency} ${updatedExpense.amount}`);
 
-    const formatted = formatExpense(createdExpense);
-    getIO().to(`trip:${req.params.tripId}`).emit('expense:added', formatted);
+    const formatted = formatExpense(updatedExpense);
+    getIO().to(`trip:${req.params.tripId}`).emit('expense:updated', formatted);
 
     cache.invalidateTrip(req.params.tripId, allMemberIds).catch(() => {});
+    cache.invalidateUserDashboard(allMemberIds).catch(() => {});
 
-    res.status(201).json(formatted);
+    res.json(formatted);
   }));
 
 /**
@@ -1212,7 +1431,7 @@ router.delete('/:tripId/expenses/:expenseId', verifyToken, checkTripMembership, 
  *       200:
  *         description: Balance summary returned
  */
-router.get('/:tripId/expenses/balances', verifyToken, checkTripMembership, asyncHandler(async (req, res) => {
+router.get('/:tripId/expenses/balances', verifyToken, validate({ params: tripIdParamSchema }), checkTripMembership, asyncHandler(async (req, res) => {
   const memberUserIds = [req.trip.ownerId, ...req.trip.members.map(m => m.userId)];
   const [expenses, users] = await Promise.all([
     prisma.expense.findMany({
@@ -1403,8 +1622,14 @@ Ensure each place includes realistic numerical latitude ("lat") and longitude ("
       }
     }
 
+    const validated = aiItinerarySchema.safeParse(suggestions);
+    if (!validated.success) {
+      logger.error({ errors: validated.error.format(), raw }, 'AI returned invalid schema');
+      return res.status(502).json({ message: 'AI returned an invalid response structure' });
+    }
+
     const responsePayload = {
-      suggestions,
+      suggestions: validated.data,
       tripContext: {
         destination: trip.destination,
         days: tripDays,
@@ -1439,7 +1664,7 @@ Ensure each place includes realistic numerical latitude ("lat") and longitude ("
  *       404:
  *         description: Trip not found
  */
-router.get('/:tripId/activity', verifyToken, asyncHandler(async (req, res) => {
+router.get('/:tripId/activity', verifyToken, validate({ params: tripIdParamSchema }), asyncHandler(async (req, res) => {
   const trip = await prisma.trip.findUnique({
     where: { id: req.params.tripId },
     include: { members: true }
@@ -1510,7 +1735,18 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
   const formattedTrip = formatTrip(trip);
   const formattedPlaces = (trip.places || []).map(formatPlace);
   const formattedExpenses = (trip.expenses || []).map(formatExpense);
-  const balances = calculateBalances(formattedExpenses);
+
+  const memberUsers = (trip.members || []).map(m => m.user).filter(Boolean);
+  const allUserMap = new Map();
+  if (trip.owner) allUserMap.set(trip.owner.id, trip.owner);
+  memberUsers.forEach(u => allUserMap.set(u.id, u));
+  const allMembers = Array.from(allUserMap.values()).map(formatUser);
+
+  const balances = calculateBalances(
+    formattedExpenses,
+    allMembers,
+    trip.currency || 'INR'
+  );
 
   // Derive accommodations and transport (grounded in user's saved records only)
   const staysAndTransport = [];
@@ -1663,6 +1899,7 @@ router.get('/:tripId/offline-pack', verifyToken, validate({ params: tripIdParamS
 router.post('/:tripId/offline-sync', verifyToken, validate({ params: tripIdParamSchema, body: offlineSyncSchema }), checkTripMembership, asyncHandler(async (req, res) => {
   const { changes } = req.body;
   const results = [];
+  const updatedPlaces = [];
   let syncedCount = 0;
   let failedCount = 0;
 
@@ -1717,12 +1954,13 @@ router.post('/:tripId/offline-sync', verifyToken, validate({ params: tripIdParam
           }
 
           const sanitizedNote = rawNote.trim().slice(0, 2000);
-          await prisma.place.update({
+          const updatedPlaceRec = await prisma.place.update({
             where: { id: targetPlaceId },
             data: { note: sanitizedNote }
           });
 
           syncedCount++;
+          updatedPlaces.push(formatPlace(updatedPlaceRec));
           results.push({
             id: changeId,
             type: changeType,
@@ -1742,12 +1980,13 @@ router.post('/:tripId/offline-sync', verifyToken, validate({ params: tripIdParam
           if (place) {
             const rawNote = change.note !== undefined ? change.note : (change.content !== undefined ? change.content : '');
             const sanitizedNote = String(rawNote).trim().slice(0, 2000);
-            await prisma.place.update({
+            const updatedPlaceRec = await prisma.place.update({
               where: { id: place.id },
               data: { note: sanitizedNote }
             });
 
             syncedCount++;
+            updatedPlaces.push(formatPlace(updatedPlaceRec));
             results.push({
               id: changeId,
               type: changeType,
@@ -1799,7 +2038,30 @@ router.post('/:tripId/offline-sync', verifyToken, validate({ params: tripIdParam
     }
 
     if (syncedCount > 0) {
-      logActivity(req.params.tripId, req.userId, 'synchronized offline items', `${syncedCount} offline change(s) persisted`).catch(() => {});
+      const memberIds = [req.trip.ownerId, ...(req.trip.members || []).map(m => m.userId)];
+
+      // Invalidate trip and dashboard caches
+      try {
+        await cache.invalidateTrip(req.params.tripId, memberIds);
+        await cache.invalidateUserDashboard(memberIds);
+      } catch (cacheErr) {
+        logger.warn({ err: cacheErr.message, tripId: req.params.tripId }, '[OfflineSync] Cache invalidation warning');
+      }
+
+      // Broadcast Socket.IO events for updated place notes
+      try {
+        let io;
+        try { io = req.io || getIO(); } catch { io = null; }
+        if (io) {
+          for (const place of updatedPlaces) {
+            io.to(`trip:${req.params.tripId}`).emit('place:note_updated', place);
+          }
+        }
+      } catch (socketErr) {
+        logger.warn({ err: socketErr.message, tripId: req.params.tripId }, '[OfflineSync] Socket broadcast warning');
+      }
+
+      await logActivity(req.params.tripId, req.userId, 'synchronized offline items', `${syncedCount} offline change(s) persisted`).catch(() => {});
     }
   }
 
@@ -1837,7 +2099,7 @@ router.post('/:tripId/offline-sync', verifyToken, validate({ params: tripIdParam
  *       404:
  *         description: Trip not found
  */
-router.get('/:id', verifyToken, asyncHandler(async (req, res) => {
+router.get('/:id', verifyToken, validate({ params: idParamSchema }), asyncHandler(async (req, res) => {
   const cacheKey = cache.keys.trip(req.params.id, req.userId);
   const cached = await cache.get(cacheKey);
   if (cached) {

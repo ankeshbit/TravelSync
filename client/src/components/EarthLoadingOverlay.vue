@@ -256,7 +256,7 @@ async function initThree() {
 
   try {
     if (!THREE) {
-      THREE = await import('three');
+      THREE = await import('../utils/threeGlobe.js');
     }
     if (disposed || !canvasRef.value || !containerRef.value) return;
 

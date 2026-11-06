@@ -183,6 +183,14 @@ const errors = ref({
 
 const loading = ref(false)
 
+const generateSubmissionId = () => {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `sub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+const submissionId = ref(generateSubmissionId())
+
+
 const allMembers = computed(() => {
   // Include owner and all members, ensuring no duplicates by id
   const membersMap = new Map()
@@ -209,6 +217,7 @@ const closeModal = () => {
 
 const resetForm = () => {
   loading.value = false
+  submissionId.value = generateSubmissionId()
   form.value = {
     title: '',
     amount: null,
@@ -264,7 +273,8 @@ const handleSubmit = () => {
     amount: form.value.amount,
     currency: form.value.currency,
     paidBy: form.value.paidBy,
-    splitAmong: form.value.splitAmong
+    splitAmong: form.value.splitAmong,
+    idempotencyKey: submissionId.value
   })
 }
 

@@ -81,15 +81,16 @@ app.use((req, res, next) => {
 });
 
 // ─── Static Uploads ───────────────────────────────────────────────────────────
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 const ALLOWED_UPLOAD_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 app.use('/uploads', (req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   const ext = path.extname(req.path).toLowerCase();
-  if (ALLOWED_UPLOAD_EXTS.has(ext)) {
-    res.setHeader('Content-Disposition', 'inline');
+  if (!ALLOWED_UPLOAD_EXTS.has(ext)) {
+    return res.status(403).json({ message: 'Forbidden: only image files are accessible' });
   }
+  res.setHeader('Content-Disposition', 'inline');
   next();
 }, express.static(uploadsDir));
 
@@ -173,7 +174,7 @@ if (!config.isTest) {
 
 // ─── Health Checks ───────────────────────────────────────────────────────────
 // Liveness probe (always cheap)
-app.get('/api/health', async (req, res) => {
+app.get(['/health', '/api/health'], async (req, res) => {
   let dbStatus = 'disconnected';
   if (config.DATABASE_URL) {
     try {

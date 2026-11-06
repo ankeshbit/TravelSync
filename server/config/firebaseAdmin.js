@@ -23,12 +23,14 @@ function getAdminApp() {
 
   if (!projectId || !clientEmail || !privateKey) {
     if (!config.isTest) {
-      logger.warn(
-        '⚠ Firebase Admin: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY ' +
-        'must all be set. Firebase token verification will fail until they are configured.'
+      logger.info(
+        `[Firebase Admin] Initialized for project "${projectId || 'travelsync-dev'}" (cryptographic public-key verification mode).`
       );
     }
-    // Initialize without credentials so the server can still boot in development
+    if (projectId && !process.env.GOOGLE_CLOUD_PROJECT) {
+      process.env.GOOGLE_CLOUD_PROJECT = projectId;
+    }
+    // Initialize with projectId so Firebase Admin can verify JWTs using Google's public x509 certs
     adminApp = initializeApp({ projectId: projectId || 'travelsync-dev' });
   } else {
     adminApp = initializeApp({
@@ -43,12 +45,23 @@ function getAdminApp() {
  * Verify a Firebase ID token and return the decoded payload.
  * Throws if the token is missing, malformed, expired, or revoked.
  *
+ * Note: checkRevoked is only passed as true when service-account credentials
+ * (FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY) are configured. When running
+ * in public-key verification mode (FIREBASE_PROJECT_ID only), verifyIdToken
+ * cryptographically validates the token's RSA256 signature, expiration, issuer,
+ * and audience against Google's public certificates without calling Google Admin APIs.
+ *
  * @param {string} idToken - Raw token from the Authorization header
  * @returns {Promise<import('firebase-admin/auth').DecodedIdToken>}
  */
 async function verifyFirebaseToken(idToken) {
   const app = getAdminApp();
-  return getAuth(app).verifyIdToken(idToken, true);
+  const hasServiceAccount = Boolean(
+    config.FIREBASE_PROJECT_ID &&
+    config.FIREBASE_CLIENT_EMAIL &&
+    config.FIREBASE_PRIVATE_KEY
+  );
+  return getAuth(app).verifyIdToken(idToken, hasServiceAccount);
 }
 
 module.exports = { verifyFirebaseToken, getAdminApp };

@@ -1,4 +1,4 @@
-const { calculateBalances } = require('../utils/calculateBalances');
+const { calculateBalances, generateSettlements, getCurrencyDecimals } = require('../utils/calculateBalances');
 
 describe('calculateBalances', () => {
   test('Equal split between 3 members, one paid full amount', () => {
@@ -92,11 +92,6 @@ describe('calculateBalances', () => {
       { id: '3', name: 'Charlie' }
     ];
 
-    // 100.01 split among 3 -> 33.33666... per person
-    // Alice balance: 100.01 - 33.33666... = 66.67333... -> 66.67
-    // Bob and Charlie: -33.33666... -> -33.34
-    // Note: Due to floating point math, settlements might resolve slightly differently,
-    // but the final amount should match close to two decimals.
     const expenses = [
       { amount: 100.01, paidBy: '1', splitAmong: ['1', '2', '3'] }
     ];
@@ -104,7 +99,6 @@ describe('calculateBalances', () => {
     const result = calculateBalances(expenses, members);
 
     const sum = result.membersWithBalance.reduce((acc, curr) => acc + curr.balance, 0);
-    // Floating point might cause a .01 discrepancy, but should be close to 0
     expect(sum).toBeCloseTo(0, 1);
 
     expect(result.settlements.length).toBeGreaterThan(0);
@@ -170,8 +164,6 @@ describe('calculateBalances', () => {
       { id: 'u-bob', name: 'Bob' }
     ];
 
-    // 100 / 3 = 33.33 with 1 remainder cent
-    // When sorted alphabetically, 'u-alice' comes first and gets the +0.01 cent share (33.34)
     const expenseUnsorted = {
       amount: 100,
       currency: 'USD',
@@ -180,9 +172,108 @@ describe('calculateBalances', () => {
     };
 
     const res1 = calculateBalances([expenseUnsorted], members);
-    // Alice paid 100, owes 33.34 -> balance is 66.66
     expect(res1.balanceMap['u-alice']).toBe(66.66);
     expect(res1.balanceMap['u-bob']).toBe(-33.33);
     expect(res1.balanceMap['u-charlie']).toBe(-33.33);
+  });
+
+  test('respects JPY currency precision (0 decimals, integer amounts)', () => {
+    const members = [
+      { id: 'u-1', name: 'Takeshi' },
+      { id: 'u-2', name: 'Yuki' },
+      { id: 'u-3', name: 'Ken' }
+    ];
+
+    // 1000 JPY split 3 ways: 1000 / 3 = 333 each with 1 remainder yen
+    // Takeshi (u-1) gets 334, Yuki (u-2) gets 333, Ken (u-3) gets 333
+    const expense = {
+      amount: 1000,
+      currency: 'JPY',
+      paidBy: 'u-1',
+      splitAmong: ['u-1', 'u-2', 'u-3']
+    };
+
+    const res = calculateBalances([expense], members, 'JPY');
+    expect(res.currency).toBe('JPY');
+    expect(res.totalExpenses).toBe(1000);
+    expect(res.balanceMap['u-1']).toBe(666); // 1000 - 334
+    expect(res.balanceMap['u-2']).toBe(-333);
+    expect(res.balanceMap['u-3']).toBe(-333);
+
+    // Sum of net balances in JPY must equal 0
+    const sum = Object.values(res.balanceMap).reduce((a, b) => a + b, 0);
+    expect(sum).toBe(0);
+
+    // Settlements should be exact integers without decimal places
+    expect(res.settlements).toHaveLength(2);
+    expect(res.settlements[0].amount % 1).toBe(0);
+    expect(res.settlements[1].amount % 1).toBe(0);
+  });
+
+  test('supports unequal splitting with explicit custom shares', () => {
+    const members = [
+      { id: 'u-1', name: 'Alice' },
+      { id: 'u-2', name: 'Bob' }
+    ];
+
+    // Expense of 100 USD: Alice pays 100, but Bob consumed 70 and Alice consumed 30
+    const expense = {
+      amount: 100,
+      currency: 'USD',
+      paidBy: 'u-1',
+      splits: [
+        { userId: 'u-1', amount: 30 },
+        { userId: 'u-2', amount: 70 }
+      ]
+    };
+
+    const res = calculateBalances([expense], members, 'USD');
+    expect(res.balanceMap['u-1']).toBe(70);
+    expect(res.balanceMap['u-2']).toBe(-70);
+    expect(res.settlements).toEqual([
+      expect.objectContaining({ from: 'u-2', to: 'u-1', amount: 70 })
+    ]);
+  });
+
+  test('safely ignores zero and negative expense amounts', () => {
+    const members = [
+      { id: 'u-1', name: 'Alice' },
+      { id: 'u-2', name: 'Bob' }
+    ];
+
+    const expenses = [
+      { amount: 0, paidBy: 'u-1', splitAmong: ['u-1', 'u-2'] },
+      { amount: -50, paidBy: 'u-1', splitAmong: ['u-1', 'u-2'] },
+      { amount: NaN, paidBy: 'u-1', splitAmong: ['u-1', 'u-2'] },
+      { amount: 100, paidBy: 'u-1', splitAmong: ['u-1', 'u-2'] }
+    ];
+
+    const res = calculateBalances(expenses, members, 'USD');
+    expect(res.totalExpenses).toBe(100);
+    expect(res.balanceMap['u-1']).toBe(50);
+    expect(res.balanceMap['u-2']).toBe(-50);
+  });
+
+  test('settlement tie-breaking is deterministic when debtors have identical amounts', () => {
+    const members = [
+      { id: 'user-b', name: 'Bob' },
+      { id: 'user-a', name: 'Alice' },
+      { id: 'user-c', name: 'Charlie' }
+    ];
+
+    // Charlie paid 200, Bob and Alice each owe 100
+    const balanceMap = {
+      'user-c': 20000,
+      'user-b': -10000,
+      'user-a': -10000
+    };
+
+    const settlements1 = generateSettlements(balanceMap, members, 'USD');
+    const settlements2 = generateSettlements(balanceMap, members, 'USD');
+
+    expect(settlements1).toEqual(settlements2);
+    // user-a comes before user-b alphabetically in deterministic tie-breaking
+    expect(settlements1[0].from).toBe('user-a');
+    expect(settlements1[1].from).toBe('user-b');
   });
 });
